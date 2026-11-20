@@ -551,30 +551,231 @@ def post_and_rail(a, b, h, color, r=0.06):
 
 def bench(at, yaw=0.0, color=0x9a7b55):
     """A park bench; whoever sits on it faces the piece's +Z turned by `yaw`."""
-    box((1.6, 0.08, 0.5), (at[0], at[1] + 0.5, at[2]), color, yaw=yaw)
-    box((1.6, 0.5, 0.08), (at[0] - 0.22 * math.sin(yaw), at[1] + 0.85, at[2] - 0.22 * math.cos(yaw)), color, yaw=yaw)
-    for s in (-0.65, 0.65):
-        box((0.08, 0.5, 0.5), (at[0] + s * math.cos(yaw), at[1] + 0.25, at[2] - s * math.sin(yaw)), 0x555b66, yaw=yaw)
+    bld_bench(at, yaw, color, seat=0.5, legs=0x555b66)
 
 def hut(w, h, d, at, wall, roof, yaw=0.0, t=1.0):
-    """A little gabled hut, door on +X, dressed as a car is: a grey plinth, a
-    dark door and windows standing proud in white frames, a chunky roof under
-    a grey ridge. `t` scales the dressing (plinth, frames, roof) for a hut at
-    real size beside a car, a fifth of the toy-scale one's."""
+    """A little gabled hut, its gable and door on +X, dressed as a car is: a
+    grey plinth, a dark door and a window in each eave wall in white frames
+    (bld_door, bld_window), its walls and roof one shell under a grey ridge
+    (bld_roofed). `t` scales the dressing (plinth, roof) for a hut at real
+    size beside a car, a fifth of the toy-scale one's."""
     x, y, z = at
-    c, s = math.cos(yaw), math.sin(yaw)
-    def part(dx, dy, dz, size, color, pitch=0.0):   # offset in the hut's own frame
-        box(size, (x + dx * c + dz * s, y + dy, z - dx * s + dz * c), color, yaw=yaw, pitch=pitch)
-    part(0, h / 2, 0, (w, h, d), wall)
-    part(0, 0.15 * t, 0, (w + 0.2 * t, 0.3 * t, d + 0.2 * t), 'grey')
-    dw = min(d * 0.4, 0.9 * t)
-    part(w / 2 + 0.04 * t, h * 0.36, 0, (0.1 * t, h * 0.72 + 0.12 * t, dw + 0.24 * t), 'white')
-    part(w / 2 + 0.1 * t, h * 0.33, 0, (0.1 * t, h * 0.66, dw), 'slate')
+    F = local(x, z, yaw)
+    G = local(x, z, yaw + math.pi / 2)                           # the roof's frame: its ridge along the hut's X
+    bld_roofed(G, yaw + math.pi / 2, y, d, w, h, 0.31 * (d + 0.5 * t), wall, roof, 0.25 * t, 0.24 * t, ridge='grey')
+    box((w + 0.2 * t, 0.3 * t, d + 0.2 * t), F(0, y + 0.15 * t, 0), 'grey', yaw=yaw)
+    bld_door(F(w / 2 + 0.1 * t, y, 0), yaw, 'slate', w=min(d * 0.4, 0.9 * t), h=h * 0.66)
     for k in (-1, 1):
-        part(0, h * 0.58, k * (d / 2 + 0.04 * t), (w * 0.42 + 0.2 * t, h * 0.3 + 0.2 * t, 0.1 * t), 'white')
-        part(0, h * 0.58, k * (d / 2 + 0.1 * t), (w * 0.42, h * 0.3, 0.1 * t), 'slate')
-        part(0, h + 0.3 * t, k * (d + 0.5 * t) / 4, (w + 0.5 * t, 0.24 * t, (d + 0.5 * t) * 0.55), roof, pitch=-k * 0.6)
-    part(0, h + 0.3 * t + 0.155 * (d + 0.5 * t) + 0.08 * t, 0, (w + 0.6 * t, 0.22 * t, 0.34 * t), 'grey')
+        bld_window(F(0, y + h * 0.58, k * d / 2), yaw - k * math.pi / 2, w=w * 0.42, h=h * 0.3)
+
+# ---- the built world's shared parts ----------------------------------------------
+# ONE construction for what a person uses, on every track: a door, a window,
+# a chimney, a roof's edge, a fence and its gate, a lamp, a bench, a hedge.
+# Each takes its SIZE from its caller, in build units: a landmark keeps the
+# size it reads at from the road (a toy world's door may be bigger than its
+# person), and the part's dressing (frame, sill, cap, rail) is cut in
+# proportion to it, so the same thing is built the same way at any size.
+# Left alone a size is the default below, in GAME units (a 0.50 u person's),
+# times bld_u(): a piece is authored at its own scale (GROW, times the
+# `scale` of its row in tracks.js, handed over by gen-set-prototypes.mjs as
+# TTP_SET_SCALE).
+SET_SCALE = json.loads(os.environ.get('TTP_SET_SCALE', '{}'))
+BLD_NOW = [None]            # the piece being built (PIECES sets it)
+BLD_DOOR_H, BLD_DOOR_W = 0.62, 0.30
+BLD_WINDOW = 0.26
+BLD_FENCE = {'garden': 0.32, 'field': 0.40, 'snow': 0.40}
+BLD_LAMP = 1.3
+BLD_HEDGE = 0.35
+BLD_SEAT = 0.16
+
+def bld_u():
+    """Build units to one game unit in the piece being built."""
+    name = BLD_NOW[0] or ''
+    return 1.0 / (GROW.get(name, 1.0) * SET_SCALE.get('set-' + name.removesuffix('-lite'), 1.0))
+
+def bld_open(verts, faces, color, inside):
+    """Flat faces from glTF `verts`, each turned away from the point `inside`:
+    a shell with the faces nobody sees left out (a wall's underside, a
+    plate's back)."""
+    me = bpy.data.meshes.new('bld')
+    me.from_pydata([tuple(P(*v)) for v in verts], [], faces)
+    me.update()
+    c = P(*inside)
+    for f in me.polygons:
+        if f.normal.dot(f.center - c) < 0:
+            f.flip()
+    o = bpy.data.objects.new('bld', me)
+    bpy.context.scene.collection.objects.link(o)
+    return paint(o, color)
+
+def bld_plate(at, face, out, up, along, color):
+    """A slab standing `out` proud of a wall, as a car's lamp does: `at` is
+    the middle of its foot ON the wall, `face` the yaw of the wall's outward
+    normal (0 is +X, box()'s sense), `up` by `along` its size. Five faces: its
+    back is the wall's."""
+    x, y, z = at
+    c, s = math.cos(face), math.sin(face)
+    def q(o, v, a):
+        return (x + o * c + a * s, y + v, z - o * s + a * c)
+    h = along / 2
+    verts = [q(o, v, a) for o in (-0.25 * out, out) for v, a in ((0, -h), (0, h), (up, h), (up, -h))]
+    return bld_open(verts, [(4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)], color,
+                    q(-out, up / 2, 0))
+
+def bld_door(at, face, color=0x339cf2, trim='white', w=None, h=None):
+    """THE door on a wall whose outward normal is `face`; `at` the middle of
+    its threshold on the wall, `w` by `h` its leaf. The leaf in `color`
+    stands proud of a frame in `trim` (no frame at `trim` None, or in the
+    lite build)."""
+    u = bld_u()
+    w, h = w or BLD_DOOR_W * u, h or BLD_DOOR_H * u
+    k = h / BLD_DOOR_H
+    x, y, z = at
+    if trim is not None and not LITE:                    # (its foot a hair under the leaf's: no two colours in one plane)
+        bld_plate((x, y - 0.012 * k, z), face, 0.03 * k, h + 0.057 * k, w + 0.09 * k, trim)
+    return bld_plate(at, face, 0.055 * k, h, w, color)
+
+def bld_window(at, face, w=None, h=None, glass='slate', trim='white'):
+    """THE window: `at` its middle on the wall, `w` by `h` its glass. The
+    glass stands proud of a frame in `trim` that is deeper under it, its
+    sill (no frame at `trim` None, or in the lite build)."""
+    u = bld_u()
+    w, h = w or BLD_WINDOW * u, h or BLD_WINDOW * u
+    k = min(w, h) / BLD_WINDOW
+    x, y, z = at
+    if trim is not None and not LITE:
+        bld_plate((x, y - h / 2 - 0.06 * k, z), face, 0.03 * k, h + 0.095 * k, w + 0.08 * k, trim)
+    return bld_plate((x, y - h / 2, z), face, 0.055 * k, h, w, glass)
+
+def bld_chimney(at, h=None, w=None, color=0xb06041, cap='slate', yaw=0.0, smoke=None):
+    """THE chimney: a stack `w` square from `at` (inside the roof) `h` up, a
+    dark cap wider than it; `smoke` names its smoke's marker."""
+    u = bld_u()
+    w, h = w or 0.2 * u, h or 0.42 * u
+    x, y, z = at
+    box((w, h, w), (x, y + h / 2, z), color, yaw=yaw)
+    box((w * 1.25, w * 0.28, w * 1.25), (x, y + h + w * 0.1, z), cap, yaw=yaw)
+    if smoke:
+        marker(smoke, (x, y + h + w * 1.1, z))
+
+def bld_walls(F, y0, w, d, h, rise, wall, sunk=0.0):
+    """Four walls and their two gables as ONE shell in the frame F (local()):
+    `w` across (X), `d` along the ridge (Z), `h` to the eaves, the gables
+    `rise` over them, running `sunk` under y0. Open where nobody sees:
+    underneath, and under the roof that lies on it."""
+    sec = ((-w / 2, -sunk), (w / 2, -sunk), (w / 2, h), (0.0, h + rise), (-w / 2, h))
+    verts = [F(x, y0 + y, -d / 2) for x, y in sec] + [F(x, y0 + y, d / 2) for x, y in sec]
+    return bld_open(verts, [(0, 1, 2, 3, 4), (5, 6, 7, 8, 9), (1, 6, 7, 2), (0, 5, 9, 4)], wall, F(0, y0 + h / 2, 0))
+
+def bld_roofed(F, yaw, y0, w, d, h, rise, wall, roof, ov, t, ridge=None, sunk=0.0, cap=True, walls=True, ovz=None):
+    """THE gabled house's walls and roof, in build units, the frame F turned
+    by `yaw`: bld_walls() under a roof of two slabs `t` thick lying on the
+    gables, oversailing the eaves by `ov` and the gables by `ovz` (`ov`
+    unless given), closed by a ridge board (`cap`; in `ridge`, the roof's
+    colour unless given). No seam under a gable: wall and gable are one
+    face. Without `walls` (a roof on posts) the gables are a prism closed
+    underneath. Returns the ridge's height."""
+    ovz = ov if ovz is None else ovz
+    if walls:
+        bld_walls(F, y0, w, d, h, rise, wall, sunk)
+    else:
+        sec = ((-w / 2, h), (w / 2, h), (0.0, h + rise))
+        verts = [F(x, y0 + y, -d / 2) for x, y in sec] + [F(x, y0 + y, d / 2) for x, y in sec]
+        bld_open(verts, [(0, 1, 2), (3, 4, 5), (0, 1, 4, 3)], wall, F(0, y0 + h + rise / 3, 0))
+    a = math.atan2(rise, w / 2)
+    sl = math.hypot(w / 2, rise) + ov
+    for s in (-1, 1):
+        cx = s * (sl / 2 * math.cos(a) + t / 2 * math.sin(a))    # its underside on the gables' slope
+        cy = h + rise - sl / 2 * math.sin(a) + t / 2 * math.cos(a)
+        box((sl, t, d + 2 * ovz), F(cx, y0 + cy, 0), roof, yaw=yaw, roll=s * a)   # box()'s roll tips +X DOWN
+    if cap:
+        box((t * 1.8, t * 1.3, d + 2 * ovz + 0.3 * t), F(0, y0 + h + rise + t * 0.9, 0), roof if ridge is None else ridge, yaw=yaw)
+    return y0 + h + rise
+
+def bld_run(pts, step):
+    """Stops along the (x, z) points, one every `step` or so, the corners kept."""
+    stops = [pts[0]]
+    for (ax, az), (bx, bz) in zip(pts, pts[1:]):
+        if math.hypot(bx - ax, bz - az) < 1e-6:
+            continue                                              # (a ring's closing point, given twice)
+        n = max(1, round(math.hypot(bx - ax, bz - az) / step))
+        stops += [(ax + (bx - ax) * k / n, az + (bz - az) * k / n) for k in range(1, n + 1)]
+    return stops
+
+def bld_fence(pts, kind='field', h=None, ground=None, post=None, rail=None, step=None, rails=None, sunk=None, y0=0.0, lean=None,
+              span=False):
+    """THE fence, through the (x, z) points, in one build for its three
+    kinds: `garden` (white, two rails), `field` (timber, two rails) and
+    `snow` (weathered, three slats); `h` its height. Square posts a `step`
+    apart, `sunk` into the ground, the rails let into them. `ground(x, z)`
+    stands each post on the land; without it the fence is built on `y0`
+    (for a drape, each rail a post-to-post length so it rides the land;
+    `span` on level ground runs one rail the length of each straight).
+    `rails` is how many, or their heights; left alone, the lite build has
+    one rail and half the posts. `lean(k)` tips post k (radians)."""
+    u = bld_u()
+    h = h or BLD_FENCE[kind] * u
+    k = h / BLD_FENCE[kind]
+    gap = step or {'garden': 0.6, 'field': 1.2, 'snow': 1.0}[kind] * k * (2 if LITE else 1)
+    sunk = 0.1 * k if sunk is None else sunk
+    post = post if post is not None else {'garden': 'white', 'field': 0x8a6a46, 'snow': 0x8a6a46}[kind]
+    rail = rail if rail is not None else {'garden': 'white', 'field': 0x9a7b55, 'snow': 0x9a7b55}[kind]
+    n = rails or (1 if LITE else 3 if kind == 'snow' else 2)
+    ys = n if isinstance(n, tuple) else [f * h for f in {1: (0.8,), 2: (0.42, 0.82), 3: (0.3, 0.58, 0.86)}[n]]
+    g = ground or (lambda x, z: y0)
+    stops = bld_run(pts, gap)
+    pw = (0.07 if kind == 'garden' else 0.09) * k
+    with plain_parts():
+        for i, (x, z) in enumerate(stops):
+            box((pw, h + sunk, pw), (x, g(x, z) + (h - sunk) / 2, z), post, roll=lean(i) if lean else 0.0)
+        for (ax, az), (bx, bz) in zip(pts, pts[1:]) if span else zip(stops, stops[1:]):
+            for y in ys:
+                beam((ax, g(ax, az) + y, az), (bx, g(bx, bz) + y, bz), 0.045 * k, rail, d=(0.085 if kind == 'snow' else 0.07) * k)
+    return stops
+
+def bld_gate(a, b, kind='field', h=None, color=0xf8f8fb, post=0x8a6a46, y0=0.0):
+    """THE gate in a fence `h` high, between (x, z) a and b: bars and a brace
+    on two posts a head taller than the fence's."""
+    h = h or BLD_FENCE[kind] * bld_u()
+    k = h / BLD_FENCE[kind]
+    with plain_parts():
+        for q in (a, b):
+            box((0.11 * k, h + 0.25 * k, 0.11 * k), (q[0], y0 + (h + 0.05 * k) / 2, q[1]), post)
+        for f in (0.25, 0.58, 0.9):
+            beam((a[0], y0 + f * h, a[1]), (b[0], y0 + f * h, b[1]), 0.045 * k, color, d=0.065 * k)
+        beam((a[0], y0 + 0.25 * h, a[1]), (b[0], y0 + 0.9 * h, b[1]), 0.045 * k, color, d=0.06 * k)
+
+def bld_lamp(at, h=None, color='slate', glow=0xfde4c7):
+    """THE street lamp, `h` tall: a square post on a foot, a lantern and its cap."""
+    h = h or BLD_LAMP * bld_u()
+    k = h / BLD_LAMP
+    x, y, z = at
+    with plain_parts():
+        box((0.13 * k, 0.14 * k, 0.13 * k), (x, y + 0.07 * k, z), color)
+        box((0.07 * k, h - 0.3 * k, 0.07 * k), (x, y + (h - 0.3 * k) / 2 + 0.1 * k, z), color)
+    rowed(box((0.17 * k, 0.17 * k, 0.17 * k), (x, y + h - 0.165 * k, z), glow), 0)
+    box((0.23 * k, 0.06 * k, 0.23 * k), (x, y + h - 0.03 * k, z), color)
+
+def bld_bench(at, yaw=0.0, color=0x9a7b55, seat=None, legs=0x4f5260):
+    """THE bench, its seat `seat` up and three times that long, a back to
+    twice it; whoever sits on it faces +Z turned by `yaw`."""
+    seat = seat or BLD_SEAT * bld_u()
+    k = seat / BLD_SEAT
+    F = local(at[0], at[2], yaw)
+    y = at[1]
+    with plain_parts():
+        box((0.5 * k, 0.04 * k, 0.17 * k), F(0, y + seat - 0.02 * k, 0), color, yaw=yaw)
+        box((0.5 * k, 0.17 * k, 0.04 * k), F(0, y + seat + 0.085 * k, -0.105 * k), color, yaw=yaw)
+        for s in (-1, 1):
+            box((0.045 * k, seat - 0.04 * k, 0.15 * k), F(s * 0.19 * k, y + (seat - 0.04 * k) / 2, 0), legs, yaw=yaw)
+
+def bld_hedge(a, b, h=None, t=None, y0=0.0, color=0x4f9a48, sunk=0.0):
+    """THE clipped hedge, `h` high and `t` thick, from (x, z) a to b."""
+    u = bld_u()
+    h, t = h or BLD_HEDGE * u, t or 0.28 * u
+    L = math.dist(a, b)
+    return box((t, h + sunk, L + t), ((a[0] + b[0]) / 2, y0 + (h - sunk) / 2, (a[1] + b[1]) / 2), color,
+               yaw=math.atan2(b[0] - a[0], b[1] - a[1]))
 
 def boulder(at, k=1.0, yaw=0.0, color='grey', squash=0.7):
     """A shore boulder, the Pirate Kit's grey rock: one faceted lump, wider
@@ -636,7 +837,19 @@ def dead_tree(at, h=6.0, color=0x8a6a46, r=0.45):
 
 # ---- the pieces ----------------------------------------------------------------
 
-PIECES = {}
+class Pieces(dict):
+    """name -> builder; each runs with its name in BLD_NOW, for bld_u()."""
+    def __setitem__(self, name, fn):
+        def build():
+            was = BLD_NOW[0]
+            BLD_NOW[0] = was or name          # the outermost name is the piece's (a lite build wraps the full one)
+            try:
+                fn()
+            finally:
+                BLD_NOW[0] = was
+        super().__setitem__(name, build)
+
+PIECES = Pieces()
 GROW = {}
 def piece(grow=1.0):
     def wrap(fn):
@@ -925,16 +1138,7 @@ def gabled_house(cx, cz, w, d, h, rh, wall, roof, eave=0.16):
     its ridge along Z `rh` over the eaves, two slabs that meet at the ridge
     and oversail the walls by `eave`; the gables filled in the wall's own
     colour up to the roof. Nothing of the wall stands through the roof."""
-    # (walls and gables ONE solid, gabled(): a chamfered box under two flat
-    # triangles showed its top edge as a line across each gable end)
-    gabled(lambda x, y, z: (cx + x, y, cz + z), -0.5, w, d, h + 0.5, rh, wall)
-    a = math.atan2(rh, w / 2)
-    run = (w / 2 + eave) / math.cos(a)
-    for sx in (-1, 1):
-        mx = cx + sx * (w / 2 + eave) / 2
-        my = h + rh - 0.5 * (w / 2 + eave) * math.tan(a) + 0.05
-        box((run, 0.1, d + 2 * eave), (mx, my, cz), roof, roll=sx * a)
-    box((0.2, 0.1, d + 2 * eave + 0.04), (cx, h + rh + 0.06, cz), roof)
+    bld_roofed(lambda x, y, z: (cx + x, y, cz + z), 0.0, 0.0, w, d, h, rh, wall, roof, eave, 0.1, sunk=0.5)
 
 def crab_pot(at, yaw=0.0):
     """A crab pot as the fishers stack them: a half barrel of netting on a
@@ -1109,9 +1313,8 @@ def crab_pots():
     # a net drying on two poles. No one about: a small standing figure reads
     # uncanny from the seat.
     gabled_house(-0.8, 0.0, 1.5, 1.7, 1.0, 0.6, 0x6794d9, 0xcf534f)
-    box((0.06, 0.74, 0.5), (-0.03, 0.37, 0.0), 0xfff6eb)                       # the door, in its white frame
-    box((0.06, 0.66, 0.4), (-0.01, 0.34, 0.0), 0x4f5260)
-    box((0.06, 0.3, 0.36), (-0.03, 0.62, -0.55), 0x8ecae6)                     # a window
+    bld_door((-0.05, 0.0, 0.0), 0.0, 0x4f5260, trim=0xfff6eb, w=0.4, h=0.66)   # the door, in its white frame
+    bld_window((-0.05, 0.62, -0.55), 0.0, w=0.36, h=0.3, glass=0x8ecae6, trim=None)   # a window
     for z in (-0.45, -0.1, 0.25):
         box((0.13, 0.13, 0.07), (-0.8 + z, 0.55, 0.84), 0xff7e44)            # floats on the wall
     # The dinghy sits up on its launching trolley, as a boat kept up the beach
@@ -1544,10 +1747,8 @@ def lifeboat_station():
             box((0.06, 0.2, 0.2 if k % 3 else 0.12), (RX + 0.09, H - 0.4, BZ - 1.2 + 0.3 * k), red if k == 3 else navy)
         # the crew's door and a window
         DZ = BZ + 1.25
-        box((0.07, 1.16, 0.74), (RX + 0.03, 0.58, DZ), white)
-        box((0.07, 1.06, 0.6), (RX + 0.05, 0.55, DZ), 0x339cf2)
-        box((0.07, 0.56, 0.7), (RX + 0.03, 1.0, BZ - 1.45), white)
-        box((0.07, 0.44, 0.58), (RX + 0.05, 1.0, BZ - 1.45), 'slate')
+        bld_door((RX + 0.05, 0.0, DZ), 0.0, 0x339cf2, trim=white, w=0.6, h=1.06)      # (on the plinth's face)
+        bld_window((RX, 1.0, BZ - 1.45), 0.0, w=0.58, h=0.44, trim=white)
     # lifebuoys: over the great doors, and two on the road wall
     for (at, axis) in (((BX, H + 0.55, GZ - 0.1), 'along'), ((RX + 0.1, 0.95, BZ - 0.35), 'across'),
                        ((RX + 0.1, 0.95, BZ + 0.4), 'across'))[:2 if LITE else 3]:
@@ -1598,15 +1799,10 @@ def tidepool_cottages():
                                           (0.4, 2.4, 3.4, 1.5, 1.0), (4.1, 2.0, 2.8, 1.3, 0.9))):
         cx = -1.4 - 0.3 * (k % 2)
         gabled_house(cx, z, w, d, h, rh, white, slate_roof)
-        box((0.07, 0.8, 0.5), (cx + w / 2 + 0.03, 0.4, z - 0.4), white)              # the door in its frame
-        box((0.07, 0.72, 0.4), (cx + w / 2 + 0.05, 0.36, z - 0.4), doors[k])
-        box((0.07, 0.5, 0.6), (cx + w / 2 + 0.03, 0.85, z + 0.65), white)            # a window
-        box((0.07, 0.4, 0.5), (cx + w / 2 + 0.05, 0.85, z + 0.65), 'slate')
-        CH = h + rh * 0.7
-        box((0.38, 0.9, 0.38), (cx, CH + 0.1, z + d / 2 - 0.3), 'grey')                # the chimney on the gable
-        box((0.46, 0.1, 0.46), (cx, CH + 0.58, z + d / 2 - 0.3), 'slate')
-        if k == 2:                                                               # one smokes (one chimney a track)
-            marker('anim_smoke', (cx, CH + 0.75, z + d / 2 - 0.3))
+        bld_door((cx + w / 2 + 0.04, 0.0, z - 0.4), 0.0, doors[k], trim=white, w=0.4, h=0.72)   # the door in its frame (on the plinth's face)
+        bld_window((cx + w / 2, 0.85, z + 0.65), 0.0, w=0.5, h=0.4, trim=white)      # a window
+        bld_chimney((cx, h + rh * 0.4, z + d / 2 - 0.3), h=0.82, w=0.38, color='grey',
+                    smoke='anim_smoke' if k == 2 else None)                          # on the gable; one smokes (one chimney a track)
         # the backs (-X), which the start straight passes a few strides off
         # and the grid looks at (round 16: four blank walls): a tarred
         # plinth all round, a back door in the house's colour, a window
@@ -1614,15 +1810,12 @@ def tidepool_cottages():
         with plain_parts():                                                      # small and flat: no chamfer to pay for
             box((w + 0.08, 0.34, d + 0.08), (cx, 0.17, z), 'slate')
             bx = cx - w / 2
-            box((0.07, 0.8, 0.5), (bx - 0.03, 0.4, z + 0.55), white)
-            box((0.07, 0.72, 0.4), (bx - 0.05, 0.36, z + 0.55), doors[k])
-            box((0.07, 0.5, 0.6), (bx - 0.03, 0.85, z - 0.6), white)
-            box((0.07, 0.4, 0.5), (bx - 0.05, 0.85, z - 0.6), 'slate')
+            bld_door((bx - 0.04, 0.0, z + 0.55), math.pi, doors[k], trim=white, w=0.4, h=0.72)
+            bld_window((bx, 0.85, z - 0.6), math.pi, w=0.5, h=0.4, trim=white)
+            for sz in (-1, 1):                                                   # its shutters
+                bld_plate((bx, 0.62, z - 0.6 + sz * 0.42), math.pi, 0.05, 0.46, 0.2, doors[k])
             for sz in (-1, 1):
-                box((0.07, 0.46, 0.2), (bx - 0.05, 0.85, z - 0.6 + sz * 0.42), doors[k])
-            for sz in (-1, 1):
-                box((0.5, 0.42, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.03)), white)
-                box((0.38, 0.3, 0.07), (cx, h + 0.1, z + sz * (d / 2 + 0.05)), doors[(k + 2) % 4])
+                bld_window((cx, h + 0.1, z + sz * d / 2), -sz * math.pi / 2, w=0.38, h=0.3, glass=doors[(k + 2) % 4], trim=white)
     # the dry-stone wall along the gardens: ONE wall the length of the row,
     # its coping stepping a hand up and down as the stones come, a wicket
     # gate in it before each door between two taller gateposts (round 25:
@@ -1808,13 +2001,8 @@ def jetty():
     # the store shed on the quay's near end: plank walls, a red roof pitched
     # along the quay, its dark door to the road
     SZ, SW, SD, SH = Z0 + 1.6, 1.6, 2.6, 1.4
-    box((SW, SH, SD), (-QW / 2, D + SH / 2, SZ), 0x9a7b55)
-    for sx in (-1, 1):
-        box((SW / 2 + 0.35, 0.12, SD + 0.3), (-QW / 2 + sx * SW / 4, D + SH + 0.28, SZ), 0xcf534f, roll=sx * 0.6)
-    for sz in (-1, 1):
-        poly([(-QW / 2 - SW / 2, D + SH, SZ + sz * SD / 2), (-QW / 2 + SW / 2, D + SH, SZ + sz * SD / 2),
-              (-QW / 2, D + SH + 0.55, SZ + sz * SD / 2)], [(0, 1, 2)], 0x9a7b55)
-    box((0.08, 1.0, 0.8), (-QW / 2 + SW / 2 + 0.02, D + 0.5, SZ), 0x38383d)
+    bld_roofed(lambda x, y, z: (-QW / 2 + x, y, SZ + z), 0.0, D, SW, SD, SH, 0.55, 0x9a7b55, 0xcf534f, 0.2, 0.12, ovz=0.15)
+    bld_door((-QW / 2 + SW / 2, D, SZ), 0.0, 0x38383d, trim=None, w=0.8, h=1.0)
     # the cargo crane at the finger's root: a stout post, its jib out over
     # the water, a crate slung from it
     CX, CZ = -QW + 0.3, FZ - 1.2
@@ -1999,15 +2187,11 @@ def lifeguard_tower():
     box((S + 0.7, 0.14, S + 0.5), (0.15, top + 0.07, 0), wood)                  # the deck, its lookout end proud
     W, D, H, hx = 1.2, 1.3, 1.0, -0.1
     y0 = top + 0.14
-    box((W, H, D), (hx, y0 + H / 2, 0), white)
+    bld_roofed(local(hx, 0, math.pi / 2), math.pi / 2, y0, D, W, H, D / 2 * math.tan(0.5), white, red, 0.25, 0.12, ridge=white)
     box((W + 0.04, 0.16, D + 0.04), (hx, y0 + 0.14, 0), red)                    # the red band
     box((0.08, 0.38, D * 0.74), (hx + W / 2 + 0.02, y0 + H * 0.62, 0), 0x8ecae6)  # the lookout window
     for sz in (-1, 1):
         box((W * 0.56, 0.32, 0.08), (hx + 0.12, y0 + H * 0.62, sz * (D / 2 + 0.02)), 0x8ecae6)
-    for sz in (-1, 1):                         # the roof, peaked along the hut, deep eaves
-        box((W + 0.5, 0.12, 0.5 * (D + 0.5) / math.cos(0.5)), (hx, y0 + H + 0.2, sz * (D + 0.5) / 4), red,
-            pitch=-sz * 0.5)
-    box((W + 0.56, 0.14, 0.18), (hx, y0 + H + 0.33 + 0.12, 0), white)            # its ridge
     # the cross on a white board to the road (-X), the size of a car's side
     box((0.08, 0.9, 0.9), (hx - W / 2 - 0.05, y0 + H * 0.52, 0), white)
     box((0.08, 0.64, 0.2), (hx - W / 2 - 0.1, y0 + H * 0.52, 0), red)
@@ -2075,13 +2259,13 @@ def beach_hut(x, y, z, yaw, body, trim=0xfff6eb):
     if LITE:                                              # the box's hut: a block under a roof
         with plain_parts():
             box((w, h, d), (x, y + h / 2, z), body, yaw=yaw)
-            box((0.05, h * 0.74, d * 0.42), T(w / 2 + 0.015, y + h * 0.37, 0.0), trim, yaw=yaw)
+            bld_door(T(w / 2, y, 0.0), yaw, trim, trim=None, w=d * 0.42, h=h * 0.74)
         e, o = w / 2 + 0.06, d / 2 + 0.07
         poly([T(e, y + h, -o), T(e, y + h, o), T(e, y + h + peak, 0.0), T(-e, y + h, -o), T(-e, y + h, o), T(-e, y + h + peak, 0.0)],
              [(0, 1, 2), (3, 5, 4), (0, 2, 5, 3), (1, 4, 5, 2)], body)
         return
     box((w, h, d), (x, y + h / 2, z), body, yaw=yaw)
-    box((0.05, h * 0.74, d * 0.42), T(w / 2 + 0.015, y + h * 0.37, 0.0), trim, yaw=yaw)       # the door
+    bld_door(T(w / 2, y, 0.0), yaw, trim, trim=None, w=d * 0.42, h=h * 0.74)                  # the door
     e, o = w / 2 + 0.06, d / 2 + 0.07
     verts = [T(e, y + h, -o), T(e, y + h, o), T(e, y + h + peak, 0.0),
              T(-e, y + h, -o), T(-e, y + h, o), T(-e, y + h + peak, 0.0)]
@@ -2731,29 +2915,14 @@ def riptide_along(road, z0, z1, d0, d1, y0, y1, color, step=2.0, row=None, dy=0.
     return out
 
 def riptide_lamp(road, z, d, color=0x339cf2):
-    """A seafront lamp `d` off the centreline on the walk: a stout post on
-    its base, a lantern and its cap, as tall as a car is long twice over."""
-    with plain_parts():
-        x, zz = road.at(z, d)
-        y = road.y(z) + 0.05
-        box((0.26, 0.3, 0.26), (x, y + 0.15, zz), color)
-        box((0.13, 1.6, 0.13), (x, y + 1.0, zz), color)
-        box((0.34, 0.36, 0.34), (x, y + 1.95, zz), 0xfde4c7)
-        cyl(0.3, 0.26, (x, y + 2.13, zz), color, r2=0.04, segs=4, yaw=math.pi / 4)
+    """A seafront lamp (bld_lamp) `d` off the centreline on the walk."""
+    x, zz = road.at(z, d)
+    bld_lamp((x, road.y(z) + 0.05, zz), 2.3, color=color)
 
 def riptide_seat(road, z, d):
-    """A seafront bench on the walk, its back to the road, facing the sea."""
-    with plain_parts():
-        x, zz = road.at(z, d)
-        a = road.yaw(z)
-        y = road.y(z) + 0.05
-        c, s = math.cos(a), math.sin(a)
-        def T(lx, ly, lz):
-            return (x + lx * c + lz * s, y + ly, zz - lx * s + lz * c)
-        box((0.42, 0.1, 1.3), T(0.0, 0.36, 0.0), 0x9a7b55, yaw=a)
-        box((0.1, 0.42, 1.3), T(0.2, 0.62, 0.0), 0x9a7b55, yaw=a)
-        for e in (-0.55, 0.55):
-            box((0.36, 0.36, 0.1), T(0.0, 0.18, e), 0x38383d, yaw=a)       # (in from the seat's edges: flush, their faces fought)
+    """A seafront bench (bld_bench) on the walk, its back to the road, facing the sea."""
+    x, zz = road.at(z, d)
+    bld_bench((x, road.y(z) + 0.05, zz), road.yaw(z) - math.pi / 2, seat=0.41, legs=0x38383d)
 
 def riptide_sea_wall(road, z0, z1, gap=None):
     """The sea wall from z0 to z1: the walk (paving) from just past the
@@ -2937,18 +3106,11 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
     # gables are one solid in one colour (a chamfered box under two flat
     # triangles showed its top edge as a line across each gable end)
     rh = 0.75
-    gabled(T, -1.0, dep, w, H + 1.0, rh, wall)
-    ang = math.atan2(rh, dep / 2)
-    run = (dep / 2 + 0.2) / math.cos(ang)
-    for side in (-1, 1):
-        box((run, 0.12, w + 0.24), T(side * (dep / 2 + 0.2) / 2, H + rh - 0.5 * (dep / 2 + 0.2) * math.tan(ang) + 0.06, 0.0),
-            roof, yaw=a, roll=side * ang)
-    box((0.3, 0.6, 0.3), T(0.0, H + rh + 0.1, w / 2 - 0.35), wall, yaw=a)            # the chimney
-    box((0.36, 0.08, 0.36), T(0.0, H + rh + 0.42, w / 2 - 0.35), 'grey', yaw=a)
+    bld_roofed(T, a, 0.0, dep, w, H, rh, wall, roof, 0.2, 0.12, sunk=1.0, ovz=0.12)
+    bld_chimney(T(0.0, H + rh - 0.2, w / 2 - 0.35), h=0.6, w=0.3, color=wall, cap='grey', yaw=a)
     with plain_parts():   # its dressing square-edged: the frame keeps the chamfer
         # the front
-        box((0.08, 0.66, 0.42), T(fx + 0.02, 0.35, -w / 4), 0xfff6eb, yaw=a)            # the door in its frame
-        box((0.08, 0.6, 0.34), T(fx + 0.05, 0.32, -w / 4), door, yaw=a)
+        bld_door(T(fx, 0.02, -w / 4), a, door, trim=0xfff6eb, w=0.34, h=0.6)            # the door in its frame
         cols = (-w / 4, w / 4) if w < 2.0 else (-w / 3, 0.0, w / 3)
         for f in range(floors):
             wy = 0.2 + 0.78 * f + 0.42
@@ -2957,9 +3119,7 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
                     continue
                 if bay and f < 2 and cz == cols[-1]:
                     continue
-                if not LITE:                                                            # (the box's windows: no frames)
-                    box((0.08, 0.48, 0.42), T(fx + 0.02, wy, cz), 0xfff6eb, yaw=a)
-                box((0.08, 0.38, 0.32), T(fx + 0.05, wy, cz), 0x4f5260, yaw=a)
+                bld_window(T(fx, wy, cz), a, w=0.32, h=0.38, glass=0x4f5260, trim=0xfff6eb)   # (the box's windows: no frames)
         if bay:                                                                         # a bay window, two floors
             bz = cols[-1]
             box((0.42, 1.5, 0.78), T(fx + 0.2, 0.2 + 0.75, bz), wall, yaw=a)
@@ -2976,19 +3136,17 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
                     if LITE:
                         riptide_pane(T, -fx, 0.32, cz, 0.34, 0.6, 'back', door)
                     else:
-                        box((0.08, 0.6, 0.34), T(-fx - 0.03, 0.32, cz), door, yaw=a)    # the yard door
+                        bld_door(T(-fx, 0.02, cz), a + math.pi, door, trim=None, w=0.34, h=0.6)   # the yard door
                     continue
                 if LITE:                                                                # (the box's: flat panes)
                     riptide_pane(T, -fx, wy, cz, 0.32, 0.38, 'back')
                     continue
-                box((0.08, 0.48, 0.42), T(-fx - 0.02, wy, cz), 0xfff6eb, yaw=a)
-                box((0.08, 0.38, 0.32), T(-fx - 0.05, wy, cz), 0x4f5260, yaw=a)
+                bld_window(T(-fx, wy, cz), a + math.pi, w=0.32, h=0.38, glass=0x4f5260, trim=0xfff6eb)
         for e in (-1, 1):                                                               # the gables' windows
             if LITE:
                 riptide_pane(T, 0.0, H + 0.24, e * w / 2, 0.3, 0.3, e)
                 continue
-            box((0.4, 0.4, 0.08), T(0.0, H + 0.24, e * (w / 2 + 0.0)), 0xfff6eb, yaw=a)
-            box((0.3, 0.3, 0.08), T(0.0, H + 0.24, e * (w / 2 + 0.03)), 0x4f5260, yaw=a)
+            bld_window(T(0.0, H + 0.24, e * w / 2), a - e * math.pi / 2, w=0.3, h=0.3, glass=0x4f5260, trim=0xfff6eb)
         if side:                                                                        # the row's end wall
             for f in range(floors):
                 wy = 0.2 + 0.78 * f + 0.42
@@ -2996,8 +3154,7 @@ def riptide_house(road, zc, w, floors, wall, roof, bay=False, balcony=False, fro
                     if LITE:
                         riptide_pane(T, lx, wy, side * w / 2, 0.32, 0.38, side)
                         continue
-                    box((0.42, 0.48, 0.08), T(lx, wy, side * (w / 2 + 0.0)), 0xfff6eb, yaw=a)
-                    box((0.32, 0.38, 0.08), T(lx, wy, side * (w / 2 + 0.03)), 0x4f5260, yaw=a)
+                    bld_window(T(lx, wy, side * w / 2), a - side * math.pi / 2, w=0.32, h=0.38, glass=0x4f5260, trim=0xfff6eb)
 
 RIP_PAVE = 0.36   # the town pavement's top over the road's: a step over the racing kerb's
 
@@ -3178,18 +3335,14 @@ def drift_light_station():
     # end, and a low stone wall round its yard with the gate to the road
     CX, CZ = TX - 0.3, TZ + 3.6
     gabled_house(CX, CZ, 1.9, 3.4, 1.15, 0.75, white, red)
-    box((0.06, 0.86, 0.56), (CX + 0.97, 0.43, CZ), white)                        # the door, in its frame
-    box((0.06, 0.78, 0.46), (CX + 0.99, 0.39, CZ), 0x339cf2)
     fx = CX + 0.95
+    bld_door((fx, 0.0, CZ), 0.0, 0x339cf2, trim=white, w=0.46, h=0.78)             # the door, in its frame
     for dz in (-1.05, 1.05):                                                       # the windows either side of the door
-        box((0.08, 0.5, 0.56), (fx + 0.02, 0.68, CZ + dz), white)
-        box((0.08, 0.4, 0.46), (fx + 0.05, 0.68, CZ + dz), 'slate')
+        bld_window((fx, 0.68, CZ + dz), 0.0, w=0.46, h=0.4, trim=white)
     box((0.5, 0.08, 0.9), (fx + 0.22, 0.98, CZ), red, roll=-0.25)                  # the porch
     for dz in (-0.38, 0.38):
         box((0.07, 0.95, 0.07), (fx + 0.44, 0.47, CZ + dz), white)
-    box((0.34, 1.1, 0.34), (CX, 1.75, CZ + 1.0), 'grey')                             # the chimney, on the ridge
-    box((0.42, 0.1, 0.42), (CX, 2.33, CZ + 1.0), dark)
-    marker('anim_smoke', (CX, 2.5, CZ + 1.0))
+    bld_chimney((CX, 1.3, CZ + 1.0), h=1.0, w=0.34, color='grey', cap=dark, smoke='anim_smoke')   # the chimney, on the ridge
     box((1.3, 1.1, 0.9), (CX - 0.2, 0.25, CZ - 2.1), white)                        # the lean-to store
     box((1.5, 0.1, 1.1), (CX - 0.2, 0.86, CZ - 2.15), red, pitch=0.2)
     with plain_parts():                                                            # the yard wall, the gate's gap to the road
@@ -3231,9 +3384,8 @@ def net_hut(x, z, w, d, h, door, trim):
     prism([(z - d / 2 - 0.1, h), (z + d / 2 + 0.1, h), (z, h + 0.42 * d)], x, w + 0.16, 'grey')
     for sgn in (-1, 1):                                                   # white barge boards on the road gable
         beam((x + w / 2 + 0.09, h - 0.02, z + sgn * (d / 2 + 0.1)), (x + w / 2 + 0.09, h + 0.42 * d, z), 0.07, 0xfde4c7)
-    box((0.06, 0.66, d * 0.5 + 0.1), (x + w / 2 + 0.01, 0.35, z), trim)
-    box((0.06, 0.6, d * 0.5), (x + w / 2 + 0.03, 0.32, z), door)
-    box((0.06, 0.34, d * 0.42), (x + w / 2 + 0.03, h * 0.7, z), door)
+    bld_door((x + w / 2, 0.02, z), 0.0, door, trim=trim, w=d * 0.5, h=0.6)
+    bld_plate((x + w / 2, h * 0.7 - 0.17, z), 0.0, 0.05, 0.34, d * 0.42, door)     # the loft door
     box((0.36, 0.09, 0.09), (x + w / 2 + 0.16, h * 0.7 + 0.27, z), 0x8a6a46)
 
 @piece(1.0)
@@ -4739,7 +4891,7 @@ def surf_club():
     for z in (0.5, 2.0):
         box((0.06, 0.92, 1.2), (fx + 0.02, 0.14 + 0.46, z), 0x4f5260)               # the boat doors
     for z in (-2.2, -1.3):
-        box((0.06, 0.36, 0.56), (fx + 0.02, 0.8, z), 0x8ecae6)
+        bld_window((fx, 0.8, z), 0.0, w=0.56, h=0.36, glass=0x8ecae6, trim=None)
     box((0.08, 0.2, 1.7), (fx + 0.04, 1.14, -1.75), yellow)                           # the club's name board
     box((0.1, 0.07, 2.0), (fx + 0.12, 0.62, -1.75), wood)                             # the board rack
     for k, (col, st) in enumerate(((red, white), (yellow, red), (0x339cf2, white), (red, yellow), (white, 0x339cf2))):
@@ -4754,14 +4906,12 @@ def surf_club():
             box((0.06, 0.36, 0.06), (fx + 0.15, RY + 0.18, -HD / 2 - 0.15 + k * (HD + 0.3) / 6), white)
     # the watch room on the roof, at the hall's far end from the stair
     WZ, WW, WH = -1.5, 1.7, 0.9
-    box((WW, WH, WW + 0.2), (HX, RY + WH / 2, WZ), white)
+    bld_roofed(local(HX, WZ, math.pi / 2), math.pi / 2, RY, WW + 0.2, WW, WH, (WW + 0.2) / 2 * math.tan(0.5), white, red,
+               0.25, 0.1, ridge=0x9aa1b4)
     box((WW + 0.04, 0.34, WW + 0.24), (HX, RY + 0.52, WZ), 0x8ecae6)                  # glazed all round
     for sx in (-1, 1):
         for sz in (-1, 1):
             box((0.12, WH, 0.12), (HX + sx * WW / 2, RY + WH / 2, WZ + sz * (WW + 0.2) / 2), white)
-    for sz in (-1, 1):
-        box((WW + 0.5, 0.1, 0.72 * (WW + 0.7)), (HX, RY + WH + 0.24, WZ + sz * (WW + 0.7) / 4), red, pitch=-sz * 0.5)
-    box((WW + 0.56, 0.12, 0.2), (HX, RY + WH + 0.52, WZ), 0x9aa1b4)
     # the stair up the hall's end to the terrace
     for i in range(8):
         t = (i + 0.5) / 8
@@ -5207,10 +5357,8 @@ def coastguard_lookout():
     box((W, H + 1.6, D), (0.0, (H - 1.6) / 2, 0.0), white)
     box((W + 0.12, 0.14, D + 0.12), (0.0, H, 0.0), 0xfde4c7)                 # the cornice
     for dz in (-0.7, 0.7):                                                 # windows to the road
-        box((0.08, 0.5, 0.5), (W / 2 + 0.02, 0.95, dz), 0xfde4c7)
-        box((0.08, 0.4, 0.4), (W / 2 + 0.05, 0.95, dz), 0x4f5260)
-    box((0.08, 0.7, 0.5), (W / 2 + 0.02, 0.35, 0.0), 0xfde4c7)              # the door
-    box((0.08, 0.62, 0.4), (W / 2 + 0.05, 0.32, 0.0), blue)
+        bld_window((W / 2, 0.95, dz), 0.0, w=0.4, h=0.4, glass=0x4f5260, trim=0xfde4c7)
+    bld_door((W / 2, 0.01, 0.0), 0.0, blue, trim=0xfde4c7, w=0.4, h=0.62)   # the door
     # the lookout room: glazed all round, a white frame, the red roof
     LW, LD, LH = 1.5, 1.8, 0.9
     box((LW, 0.16, LD), (0.0, H + 0.15, 0.0), white)
@@ -5246,19 +5394,12 @@ def sailing_club():
     white, blue, red, yellow, wood = 0xfff6eb, 0x339cf2, 0xff5040, 0xffc044, 0x9a7b55
     # the boathouse: a long white shed under a grey roof, ridge along Z
     bx, bz, W, D, H = -2.4, 0.0, 2.6, 4.2, 1.7
-    box((W, H + 0.6, D), (bx, (H - 0.6) / 2, bz), white)
     for k in range(4):                                                    # its weatherboards' laps
         box((W + 0.04, 0.05, D + 0.04), (bx, 0.35 + 0.35 * k, bz), 0xfde4c7)
-    ang = math.atan2(0.9, W / 2)
-    run = (W / 2 + 0.25) / math.cos(ang)
-    for sx in (-1, 1):
-        box((run, 0.12, D + 0.4), (bx + sx * (W / 2 + 0.25) / 2, H + 0.9 - 0.5 * (W / 2 + 0.25) * math.tan(ang) + 0.06, bz),
-            0x4f5260, roll=sx * ang)
-    for e in (-1, 1):
-        poly([(bx - W / 2, H, bz + e * D / 2), (bx + W / 2, H, bz + e * D / 2), (bx, H + 0.9, bz + e * D / 2)], [(0, 1, 2)], white)
-    for dz in (-1.0, 1.0):                                                # the two big doors to the road
-        box((0.08, 1.3, 1.5), (bx + W / 2 + 0.02, 0.65, bz + dz), white)
-        box((0.08, 1.2, 1.36), (bx + W / 2 + 0.05, 0.6, bz + dz), blue)
+    bld_roofed(lambda x, y, z: (bx + x, y, bz + z), 0.0, 0.0, W, D, H, 0.9, white, 0x4f5260, 0.25, 0.12, sunk=0.6, ovz=0.2)
+    for dz in (-1.0, 1.0):                                                # the two boat doors to the road
+        bld_plate((bx + W / 2, 0.0, bz + dz), 0.0, 0.05, 1.3, 1.5, white)
+        bld_plate((bx + W / 2, 0.0, bz + dz), 0.0, 0.08, 1.2, 1.36, blue)
     box((0.1, 0.42, 2.6), (bx + W / 2 + 0.06, H - 0.12, bz), red)          # the club's red board over them
     # the club's mast: a white pole, its yard, a gaff, signal flags strung
     # from the yard's ends and the burgee at the head, all flying
@@ -5573,7 +5714,10 @@ def dune_fence(name, seed, half, breaks):
         # round 10: thin slats a stride apart read as hairlines at speed, so
         # thick posts twice a person's height, every couple of strides, and
         # two heavy rails between them
+        # round 27: 0.65 tall, a person's chest (its 1.5 stood over the doors of
+        # the net huts and the smokehouse down the same beach, 0.6 tall)
         n = int(2 * half / 1.5)
+        H = 0.65
         with plain_parts(), bleached():
             prev = None
             for i in range(n + 1):
@@ -5583,12 +5727,12 @@ def dune_fence(name, seed, half, breaks):
                 if any(abs(f - b) < 0.05 for b in breaks):
                     prev = None
                     continue
-                sunk = 0.25 * max(0.0, wobble(z, seed + 1, 6.0))
+                sunk = 0.12 * max(0.0, wobble(z, seed + 1, 6.0))
                 lean = 0.18 * wobble(z, seed + 2, 4.0)
-                box((0.2, 1.5, 0.2), (x, 0.55 - sunk, z), ('brown', 'tan')[i % 2], roll=lean)
+                box((0.15, H + 0.25, 0.15), (x, H / 2 - 0.125 - sunk, z), ('brown', 'tan')[i % 2], roll=lean)
                 if prev:
-                    for y in (0.42, 0.95):
-                        beam((prev[0] + 0.1, y - prev[1], prev[2]), (x + 0.1, y - sunk, z), 0.12, 'tan')
+                    for fr in (0.4, 0.82):
+                        beam((prev[0] + 0.08, fr * H - prev[1], prev[2]), (x + 0.08, fr * H - sunk, z), 0.08, 'tan', d=0.12)
                 prev = (x, sunk, z)
         with plain_parts():
             patches = int(half / 2.2)
@@ -6354,8 +6498,8 @@ def drift_boat_hut(cz, L, W, H, door, seed):
     box((0.16, 0.14, L * 0.92), (0.0, H - 0.02, cz - 0.03 * L), 'tan')    # the keel, up top
     zs = cz - 0.5 * L
     box((W * 0.95, H * 0.95, 0.12), (0.0, H * 0.45, zs), 0xfde4c7)         # the sawn-off stern, walled
-    box((0.12, H * 0.62, W * 0.34), (0.5 * W * 0.55, H * 0.31, zs + 0.2), door)   # its door to the road
-    box((0.5, 0.9, 0.14), (0.25 * W, H * 0.33, zs - 0.03), door)
+    box((0.12, BLD_DOOR_H, 0.32), (0.5 * W * 0.55, BLD_DOOR_H / 2, zs + 0.2), door)   # its door to the road
+    box((0.32, BLD_DOOR_H, 0.14), (0.2 * W, BLD_DOOR_H / 2, zs - 0.03), door)
     cyl(0.1, 0.9, (-0.1, H - 0.1, cz + 0.15 * L), 'grey', segs=6, stem=True)   # the stove pipe
     box((0.28, 0.08, 0.28), (-0.1, H + 0.82, cz + 0.15 * L), 'slate')
 
@@ -6401,9 +6545,13 @@ def smokehouse():
     box((0.95, 0.12, 2.9), (-1.8, 4.7, 0.0), 'grey')
     for k in range(4):
         box((0.76, 0.08, 0.1), (-1.8, 4.45, -0.9 + 0.6 * k), 'slate')
-    box((0.07, 1.3, 1.0), (-0.47, 0.65, -0.6), trim)                         # the door to the road
-    box((0.07, 1.2, 0.86), (-0.45, 0.6, -0.6), 0xcf534f)
-    box((0.07, 0.5, 0.6), (-0.47, 2.2, 0.8), 'slate')
+    # (round 27: its door a person's, as the net huts' down the beach are: 1.3
+    # tall beside their 0.6 it read as another world's; the fish go in by the
+    # loading hatch over it, under its hoist beam)
+    bld_door((-0.5, 0.0, -0.6), 0.0, 0xcf534f, trim=trim, w=0.5, h=0.66)     # the door to the road
+    bld_plate((-0.47, 1.12, -0.6), 0.0, 0.05, 0.44, 0.5, 0xcf534f)           # the loading hatch over it
+    box((0.3, 0.08, 0.08), (-0.34, 1.66, -0.6), 0x8a6a46)                     # its hoist beam
+    bld_window((-0.47, 2.2, 0.8), 0.0, w=0.6, h=0.5, trim=None)
     # the log store against its end
     for k in range(3):
         for j in range(3 - k):
@@ -6715,7 +6863,7 @@ def shellfish_shack():
         box((0.34, 0.07, 1.7), (fx + 0.15, 0.54, 0.0), wood)                    # its counter
         for i in range(6):                                                      # the awning
             box((0.75, 0.05, 0.3), (fx + 0.33, 1.22, -0.75 + 0.3 * i), (red, white)[i % 2], roll=-0.32)
-        box((0.07, 0.8, 0.44), (HX - 0.3, 0.4, HD / 2 + 0.01), 0x339cf2, yaw=math.pi / 2)   # the door in its end
+        bld_door((HX - 0.3, 0.0, HD / 2), -math.pi / 2, 0x339cf2, trim=None, w=0.44, h=0.8)   # the door in its end
         # the crab on the ridge: body, claws, eyes, legs
         RY = HH + RH
         for z in (-0.5, 0.5):
@@ -7837,7 +7985,7 @@ def cabin_hut(w, h, d, at, wall, roof, yaw=0.0, sunk=0.3, chimney=False):
     gy = yaw + math.pi / 2                       # the roof's frame: its ridge along Z
     G = local(x, z, gy)
     rise = 0.3 * d
-    gabled(G, y - sunk, d, w, h + sunk, rise, wall)
+    bld_walls(G, y, d, w, h, rise, wall, sunk)
     a = math.atan2(rise, d / 2)
     ov = min(0.2, max(0.08, 0.07 * d))
     tb, ts = 0.06, 0.08 + 0.025 * d
@@ -7851,12 +7999,9 @@ def cabin_hut(w, h, d, at, wall, roof, yaw=0.0, sunk=0.3, chimney=False):
                 snowy(o, 0.5)
     up = (tb + ts) * math.cos(a)                 # the snow closed over the ridge
     snowy(box((2 * (tb + ts) * math.sin(a) + 0.02, up, w + 2 * ov - 0.08), G(0, y + h + rise + up / 2 + 0.01, 0), roof, yaw=gy), 0.5)
-    dw = d * 0.34
-    part(w / 2 + 0.02, h * 0.37, 0, (0.06, h * 0.74 + 0.06, dw + 0.08), 'white')
-    part(w / 2 + 0.045, h * 0.34, 0, (0.06, h * 0.68, dw), 'slate')
+    bld_door(spot(w / 2, 0, 0), yaw, 'slate', w=d * 0.34, h=h * 0.68)
     for k in (-1, 1):
-        part(0, h * 0.58, k * (d / 2 + 0.02), (w * 0.4 + 0.08, h * 0.3 + 0.08, 0.06), 'white')
-        part(0, h * 0.58, k * (d / 2 + 0.045), (w * 0.4, h * 0.3, 0.06), 'slate')
+        bld_window(spot(0, h * 0.58, k * d / 2), yaw - k * math.pi / 2, w=w * 0.4, h=h * 0.3)
     if not chimney:
         return None
     cw = max(0.2, 0.1 * d)
@@ -8028,22 +8173,13 @@ def powder_drift(x, z, rx, rz, h, yaw=0.0, subdiv=2):
     return snowy(paint(o, 0xf3f7fb), 0.35)
 
 def drift_fence(x, z, yaw, panels=3, seed=0, drifts=True):
-    """A snow fence along +Z turned by `yaw` from (x, z): weathered posts and
-    three slats a panel, leaning a little from the wind, a drift piled in
-    its lee. Built on y = 0 for a drape, a post every three units so it
-    follows the land."""
+    """A snow fence (bld_fence) along +Z turned by `yaw` from (x, z), three
+    units a panel, leaning a little from the wind, a drift piled in its lee.
+    Built on y = 0 for a drape."""
     at = local(x, z, yaw)
-    W = 0x8a6a46
-    for k in range(panels + 1):
-        px, _, pz = at(0.0, 0.0, 3.0 * k)
-        box((0.16, 1.5, 0.16), (px, 0.55, pz), W, yaw=yaw, roll=0.08)
+    ends = [at(0.0, 0.0, 3.0 * k) for k in (0, panels)]
+    bld_fence([(p[0], p[2]) for p in ends], 'snow', h=1.3, step=3.0, rails=(0.4, 0.75, 1.1), sunk=0.2, lean=lambda k: 0.08)
     for k in range(panels):
-        mx, _, mz = at(0.0, 0.0, 3.0 * k + 1.5)
-        for j, yy in enumerate((0.4, 0.75, 1.1)):
-            if (k * 3 + j + seed) % 7 == 5:
-                continue                                          # a slat gone
-            box((0.08, 0.22, 3.0), (mx + 0.08 * (yy - 0.7) * math.cos(yaw), yy, mz - 0.08 * (yy - 0.7) * math.sin(yaw)),
-                0x9a7b55, yaw=yaw)
         if not drifts and k != 1:
             continue
         hx, _, hz = at(-0.9, 0.0, 3.0 * k + 1.3)
@@ -8153,9 +8289,7 @@ def powder_resort(lite=False):
         if lite:
             return
         for (x, z) in ((19.2, -30.2), (23.8, -33.9), (30.0, -33.6), (33.9, -36.2), (28.6, -40.4)):
-            box((0.1, 1.6, 0.1), (x, 0.8, z), 0x38383d)
-            box((0.44, 0.08, 0.08), (x - 0.18, 1.6, z), 0x38383d)
-            box((0.22, 0.22, 0.22), (x - 0.38, 1.47, z), 0xffc044)
+            bld_lamp((x, 0.0, z), 1.6, color=0x38383d, glow=0xffc044)
     draped('lanes', lanes)
     if top:
         marker('anim_smoke#lodge', top)
@@ -8554,9 +8688,7 @@ def powder_chairlift(lite=False):
         # lamps along the fence
         for z in (-15.0, -9.0, -3.5, 3.5, 9.0, 15.0):
             lx = lane_x(z) + 1.25
-            box((0.09, 1.5, 0.09), (lx, 0.75, z), 0x38383d)
-            box((0.4, 0.07, 0.07), (lx - 0.18, 1.5, z), 0x38383d)
-            box((0.2, 0.2, 0.2), (lx - 0.36, 1.38, z), 0xffc044)
+            bld_lamp((lx, 0.0, z), 1.5, color=0x38383d, glow=0xffc044)
         # what stands in the gardens
         woodpile(-13.6, -10.5, 0.26)
         woodpile(-13.8, 6.8, 0.26)
@@ -9240,10 +9372,8 @@ def log_cabin_at(cx, cz, k=1.0, smoke=False):
         name = 'anim_smoke' if smoke is True else 'anim_smoke:s=%g' % smoke
         # each cabin's marker its own name: Blender would suffix a repeat
         marker('%s#%d' % (name, round(cz * 10)), (cx - 1.1 * k, ridge + 0.7 * k, cz - 0.75 * k))
-    box((0.1 * k, 1.55 * k, 1.1 * k), (cx + W / 2 + 0.06 * k, 0.9 * k, cz - 0.55 * k), 0xfff6eb)
-    box((0.1 * k, 1.35 * k, 0.85 * k), (cx + W / 2 + 0.12 * k, 0.82 * k, cz - 0.55 * k), 0x38383d)
-    box((0.1 * k, 0.8 * k, 0.8 * k), (cx + W / 2 + 0.06 * k, 1.3 * k, cz + 0.95 * k), 0xfff6eb)
-    box((0.1 * k, 0.6 * k, 0.6 * k), (cx + W / 2 + 0.12 * k, 1.3 * k, cz + 0.95 * k), 0xffc044)
+    bld_door((cx + W / 2 + 0.02 * k, 0.145 * k, cz - 0.55 * k), 0.0, 0x38383d, trim=0xfff6eb, w=0.85 * k, h=1.35 * k)
+    bld_window((cx + W / 2 + 0.02 * k, 1.3 * k, cz + 0.95 * k), 0.0, w=0.6 * k, h=0.6 * k, glass=0xffc044, trim=0xfff6eb)
 
 @piece(1.0)
 def log_cabin():
@@ -9333,9 +9463,8 @@ def flurry_ice_hut(color, pipe=False, window=0xffc044):
         o = box((1.2 - trim, t, 1.08 - trim), (-up * math.sin(a), (yb + yf) / 2 + up * math.cos(a), 0.0), c, roll=-a)
         if trim:
             snowy(o, 0.5)
-    box((0.06, 0.62, 0.36), (0.48, 0.5, -0.12), 0x38383d)
-    box((0.3, 0.3, 0.06), (-0.05, 0.62, 0.43), 0xfff6eb)
-    box((0.2, 0.2, 0.06), (-0.05, 0.62, 0.45), window)
+    bld_door((0.475, 0.19, -0.12), 0.0, 0x38383d, trim=None, w=0.36, h=0.62)
+    bld_window((-0.05, 0.62, 0.425), -math.pi / 2, w=0.2, h=0.2, glass=window, trim=0xfff6eb)
     if pipe:
         box((0.12, 0.42, 0.12), (-0.25, 1.25, -0.2), 0x555b66)
 
@@ -9509,17 +9638,9 @@ def flurry_hamlet_build(lite):
 # ---- Flurry's farms and the stream, the hamlet's fields on round the lap --------
 
 def rail_fence(pts, step=3.2):
-    """A post-and-rail fence through the (x, z) points, a post every `step`
-    or so and two rails between, built on y = 0 for a drape."""
-    stops = [pts[0]]
-    for (ax, az), (bx, bz) in zip(pts, pts[1:]):
-        n = max(1, int(math.hypot(bx - ax, bz - az) / step + 0.5))
-        stops += [(ax + (bx - ax) * k / n, az + (bz - az) * k / n) for k in range(1, n + 1)]
-    for (ax, az), (bx, bz) in zip(stops, stops[1:]):
-        for yy in (0.32, 0.66):
-            strut((ax, yy, az), (bx, yy, bz), 0.1, 0x9a7b55)
-    for x, z in stops:
-        box((0.17, 1.0, 0.17), (x, 0.4, z), 0x8a6a46)
+    """A post-and-rail field fence (bld_fence) through the (x, z) points,
+    built on y = 0 for a drape (`step` 9: one length, a gate swung open)."""
+    for x, z in bld_fence(pts, 'field', h=0.9, step=step, rails=(0.32, 0.66), sunk=0.1):
         snowy(box((0.24, 0.08, 0.24), (x, 0.93, z), 0xf3f7fb), 0.5)
 
 def lane_sheet(pts, w=1.3, fork=None):
@@ -13212,12 +13333,10 @@ def road_keeper():
     snowy(box((rl - 0.05, 0.42, D + 0.67), (sx - 0.33 * math.sin(ra), 2.55 + 0.33 * math.cos(ra), szc), 0xeef4f9, roll=-ra), 0.6)
     for k in range(5):
         box((0.36, 0.12, 0.12), (x0 - 0.18, 2.08, szc - 1.5 + 0.75 * k), 0x6e4a32)
-    box((0.08, 1.5, 0.8), (x0, 0.75, 2.2), 0x6e4a32)
-    box((0.1, 0.1, 1.0), (x0 - 0.01, 1.56, 2.2), 0xfff6eb)
-    box((0.08, 0.08, 0.08), (x0 - 0.05, 0.8, 1.95), 0x2a2735)
-    box((0.08, 0.6, 0.9), (x0, 1.35, 0.8), 'slate')
+    bld_door((x0, 0.0, 2.2), math.pi, 0x6e4a32, trim=0xfff6eb, w=0.8, h=1.5)
+    bld_window((x0, 1.35, 0.8), math.pi, w=0.9, h=0.6, trim=None)
     for s in (-1, 1):
-        box((0.09, 0.6, 0.22), (x0 - 0.01, 1.35, 0.8 + s * 0.57), RED)
+        bld_plate((x0, 1.05, 0.8 + s * 0.57), math.pi, 0.055, 0.6, 0.22, RED)
     for k in range(2):
         for j in range(5):
             box((0.12, 0.36, 0.12), (x0 - 0.5 + 0.09 * j, 0.2 + 0.36 * j, 3.0 + 0.24 * k), 0xff5040 if j % 2 == 0 else 0xfff6eb,
@@ -13307,30 +13426,18 @@ def person(at, yaw, shirt, k=1.0, hair=0, legs=0x4f5260, sit=False, arm=0.0, kic
     box((0.4 * k, 0.4 * k, 0.38 * k), L(0, b + 0.84 * k, 0), SKIN, yaw=yaw)
     box((0.44 * k, 0.14 * k, 0.42 * k), L(-0.03 * k, b + 1.08 * k, 0), HAIR[hair % 4], yaw=yaw)
 
-def gable_roof(F, yaw, y0, D, L, H, roof, wall, pitch_deg=45.0, t=0.4, over=0.5, cap=True):
-    """A pitched roof over walls D across (X) and L along (Z), H tall, its
-    ridge along Z: the gable ends a square beam turned along the ridge (its
-    upper half stands over the walls as the end walls' triangles), two slabs
-    and a ridge cap (unless `cap` is off). Returns the ridge height."""
-    a = math.radians(pitch_deg)
-    rise = D / 2 * math.tan(a)
-    g = D / math.sqrt(2)
-    box((g, g, L - 0.04), F(0, y0 + H, 0), wall, yaw=yaw, roll=math.pi / 4)
-    if pitch_deg != 45.0:   # the beam's triangle only fits 45: a steeper roof stands a wall block under it
-        box((D * 0.7, rise - D / 2, L - 0.04), F(0, y0 + H + (rise - D / 2) / 2 + D / 4, 0), wall, yaw=yaw)
-    w = (D / 2 + over) / math.cos(a)
-    for k in (-1, 1):
-        cx = k * (w / 2 * math.cos(a) + math.sin(a) * t / 2)
-        cy = y0 + H + rise - w / 2 * math.sin(a) + math.cos(a) * t / 2
-        box((w, t, L + 2 * over * 0.8), F(cx, cy, 0), roof, yaw=yaw, roll=k * a)
-    if cap:
-        box((t * 1.3, t * 1.3, L + 2 * over * 0.8 + 0.1), F(0, y0 + H + rise + t * 0.55, 0), roof, yaw=yaw)
-    return y0 + H + rise
+def gable_roof(F, yaw, y0, D, L, H, roof, wall, pitch_deg=45.0, t=0.4, over=0.5, cap=True, walls=True, sunk=0.0):
+    """A gabled house's shell (bld_roofed): walls D across (X) and L along
+    (Z), H tall (running `sunk` under y0), and the pitched roof over them,
+    its ridge along Z, with a ridge cap (unless `cap` is off). Without
+    `walls` it is the roof alone, on whatever posts the caller stands under
+    it. Returns the ridge height."""
+    rise = D / 2 * math.tan(math.radians(pitch_deg))
+    return bld_roofed(F, yaw, y0, D, L, H, rise, wall, roof, over, t, cap=cap, walls=walls, ovz=over * 0.8, sunk=sunk)
 
 def window(F, yaw, x, y, z, w=1.3, h=1.3, glass='slate'):
-    """A window on a +X wall at x: a white frame standing proud, the glass in it."""
-    box((0.14, h + 0.3, w + 0.3), F(x + 0.05, y, z), 'white', yaw=yaw)
-    box((0.14, h, w), F(x + 0.11, y, z), glass, yaw=yaw)
+    """A window (bld_window) on a +X wall at x."""
+    bld_window(F(x, y, z), yaw, w, h, glass)
 
 def cottage(at, yaw, wall, roof, door=0x339cf2, L=8.0, D=5.5, H=4.2, smoke=False, chimney=1, cap=True):
     """A cottage, its front on +X turned by `yaw`: a steep pitched roof (ridge
@@ -13338,15 +13445,13 @@ def cottage(at, yaw, wall, roof, door=0x339cf2, L=8.0, D=5.5, H=4.2, smoke=False
     and two windows in white frames standing proud as a car's lamps do."""
     F = local(at[0], at[2], yaw)
     y0 = at[1]
-    box((D, H, L), F(0, y0 + H / 2, 0), wall, yaw=yaw)
     ridge = gable_roof(F, yaw, y0, D, L, H, roof, wall, cap=cap)
     cz = chimney * (L / 2 - 1.1)
     if chimney:
-        box((1.1, 2.6, 1.1), F(-0.6, ridge - 0.6, cz), 0xb06041, yaw=yaw)
+        bld_chimney(F(-0.6, ridge - 1.9, cz), h=2.5, w=1.1, yaw=yaw)
     if smoke:
         marker('anim_smoke', F(-0.6, ridge + 0.8, cz))
-    box((0.14, 2.4, 1.5), F(D / 2 + 0.05, 1.2 + y0, 0), 'white', yaw=yaw)
-    box((0.14, 2.1, 1.1), F(D / 2 + 0.11, 1.05 + y0, 0), door, yaw=yaw)
+    bld_door(F(D / 2, y0, 0), yaw, door, w=1.1, h=2.1)
     for s in (-1, 1):
         window(F, yaw, D / 2, y0 + H * 0.55, s * L * 0.3)
 
@@ -13370,11 +13475,9 @@ def washing(at, yaw, n, seed):
             box((0.08, h, w), F(0.35, y0 + LH - h / 2 + 0.02, z), col, yaw=yaw)
 
 def hedge(F, yaw, y0, a, b, h=1.1, t=0.9):
-    """A clipped garden hedge from local (x, z) a to b."""
-    dx, dz = b[0] - a[0], b[1] - a[1]
-    ln = math.hypot(dx, dz)
-    # along the hedge in the frame: its yaw there is atan2(dx, dz)
-    box((t, h, ln + t), F((a[0] + b[0]) / 2, y0 + h / 2, (a[1] + b[1]) / 2), 0x4f9a48, yaw=yaw + math.atan2(dx, dz))
+    """A clipped garden hedge (bld_hedge) from local (x, z) a to b."""
+    pa, pb = F(a[0], 0, a[1]), F(b[0], 0, b[1])
+    bld_hedge((pa[0], pa[2]), (pb[0], pb[2]), h, t, y0=y0)
 
 def round_tree(at, h=5.0, r=2.0, color=0x5f9f4a):
     """A small garden tree: a trunk and one faceted crown."""
@@ -13385,9 +13488,8 @@ def kennel(at, yaw):
     """A dog's kennel, its door on +X, and the dog sitting at it."""
     F = local(at[0], at[2], yaw)
     y0 = at[1]
-    box((1.1, 0.8, 1.0), F(0, y0 + 0.4, 0), 0xd94f3d, yaw=yaw)
     gable_roof(F, yaw, y0, 1.1, 1.0, 0.8, 0x7a5a3a, 0xd94f3d, t=0.12, over=0.12)
-    box((0.12, 0.5, 0.4), F(0.56, y0 + 0.27, 0), 0x2a2735, yaw=yaw)
+    bld_plate(F(0.55, y0, 0), yaw, 0.05, 0.52, 0.4, 0x2a2735)
     # the dog, sat up before its door in the farm animals' faceted build:
     # haunches on the grass, the chest up over straight forelegs, a cream
     # bib and muzzle, drop ears, a blue collar, the tail out behind
@@ -13536,7 +13638,6 @@ def village_church():
     STONE, SLATE = 0xfde4c7, 0x4f5260
     F = local(0, 0, 0)
     D, L, H = 8.0, 16.0, 6.5
-    box((D, H, L), (0, H / 2, 0), STONE)
     gable_roof(F, 0.0, 0.0, D, L, H, SLATE, STONE, pitch_deg=45.0)
     TZ = -L / 2 - 2.6
     T = 5.6
@@ -13548,13 +13649,13 @@ def village_church():
     cyl(1.3, 0.2, (T / 2, 10.4, TZ), 'white', segs=12, axis='across')  # the clock
     box((0.12, 0.9, 0.16), (T / 2 + 0.22, 10.7, TZ), 0x2a2735)
     box((0.12, 0.16, 0.7), (T / 2 + 0.22, 10.4, TZ + 0.3), 0x2a2735)
-    box((0.14, 3.0, 1.6), (T / 2 + 0.06, 1.5, TZ), 0x7a5a3a)              # the tower door
+    bld_door((T / 2, 0, TZ), 0.0, 0x7a5a3a, trim=None, w=1.6, h=3.0)       # the tower door
     for z in (-5.0, -1.0, 5.0):                                           # tall windows
         window(F, 0.0, D / 2, 3.6, z, w=1.0, h=2.8, glass=0x6794d9)
     # the porch on the road side
     PF = local(D / 2 + 1.5, 2.6, 0.0)
     box((3.0, 3.0, 3.0), PF(0, 1.5, 0), STONE)
-    box((0.14, 2.3, 1.3), PF(1.55, 1.15, 0), 0x7a5a3a)
+    bld_door(PF(1.5, 0, 0), 0.0, 0x7a5a3a, trim=None, w=1.3, h=2.3)
     box((3.4, 0.4, 3.8), PF(-0.1, 3.2, 0), SLATE)
     # the churchyard behind: two yews, headstones
     for z in (-6.0, 6.0):                                 # (a yew's dark green snapped to slate: a second spire)
@@ -13589,7 +13690,7 @@ def village_church():
     wall((WX1, GZ + GW / 2 + 0.4), (WX1, WZ))
     for sz in (-1, 1):
         box((0.6, 3.6, 0.6), (WX1, 1.8, GZ + sz * (GW / 2 + 0.4)), 0x7a5a3a)
-    gable_roof(local(WX1, GZ, math.pi / 2), math.pi / 2, 0.0, 2.6, GW + 2.2, 3.4, SLATE, 0x7a5a3a, pitch_deg=45.0, t=0.3, over=0.3)
+    gable_roof(local(WX1, GZ, math.pi / 2), math.pi / 2, 0.0, 2.6, GW + 2.2, 3.4, SLATE, 0x7a5a3a, pitch_deg=45.0, t=0.3, over=0.3, walls=False)
     # the path: gravel from the gate to the porch, a hand over the yard (flat
     # on it, the levelled lawn comes through), a bench beside it
     box((WX1 - D / 2 - 2.6, 0.24, 1.9), ((WX1 + D / 2 + 3.0) / 2, 0.1, GZ), 'cream')
@@ -13607,7 +13708,7 @@ def windmill():
     cyl(3.4, 2.8, (0, H, 0), 0xcf534f, r2=1.6, segs=8)
     box((1.6, 0.8, 4.4), (0.4, H + 1.2, 0), 0xcf534f)
     cyl(4.9, 0.35, (0, 3.4, 0), 0x9a7b55, segs=8, yaw=math.pi / 8)      # the stage, under the sails' sweep
-    box((0.3, 2.6, 1.6), (3.92, 1.3, 0), 0x7a5a3a)                       # the door
+    box((0.3, 2.6, 1.6), (3.92, 1.3, 0), 0x7a5a3a)                       # the door (a block: the wall leans back from it)
     for y in (8.5, 12.0):
         r = (4.2 - 1.2 * y / H) * math.cos(math.pi / 8)
         window(local(0, 0, 0), 0.0, r - 0.1, y, 0, w=0.9, h=1.1)
@@ -14047,26 +14148,20 @@ def hay_meadow():
 def red_barn(x, z):
     RED, ROOF = 0xcf534f, 0x4f5260
     F = local(x, z, 0.0)
-    box((1.5, 0.95, 2.4), (x, 0.475, z), RED)
     gable_roof(F, 0.0, 0.0, 1.5, 2.4, 0.95, ROOF, RED, t=0.08, over=0.12)
     box((0.04, 0.72, 0.84), (x + 0.77, 0.36, z), 'white')                  # the doors' frame
     box((0.04, 0.64, 0.76), (x + 0.79, 0.34, z), 0x7a5a3a)
     with plain_parts():
         strut((x + 0.82, 0.04, z - 0.36), (x + 0.82, 0.64, z + 0.36), 0.05, 'white')
         strut((x + 0.82, 0.04, z + 0.36), (x + 0.82, 0.64, z - 0.36), 0.05, 'white')
-        box((0.04, 0.24, 0.3), (x + 0.77, 1.15, z), 'white')               # the loft door
-        box((0.04, 0.18, 0.22), (x + 0.79, 1.15, z), 0x2a2735)
+        bld_window((x + 0.75, 1.15, z), 0.0, w=0.22, h=0.18, glass=0x2a2735)   # the loft door
         # the walls the lap's other roads see: a small door and two windows
         # in the back, a window in the gable away from the silo
-        box((0.04, 0.5, 0.3), (x - 0.77, 0.25, z + 0.7), 'white')
-        box((0.04, 0.44, 0.24), (x - 0.79, 0.24, z + 0.7), 0x7a5a3a)
+        bld_door((x - 0.75, 0.02, z + 0.7), math.pi, 0x7a5a3a, w=0.24, h=0.44)
         for dz in (-0.55, 0.1):
-            box((0.04, 0.26, 0.3), (x - 0.77, 0.56, z + dz), 'white')
-            box((0.04, 0.2, 0.24), (x - 0.79, 0.56, z + dz), 0x2a2735)
-        box((0.04, 0.24, 0.3), (x - 0.77, 1.15, z), 'white')                # a loft hatch over them
-        box((0.04, 0.18, 0.22), (x - 0.79, 1.15, z), 0x2a2735)
-        box((0.3, 0.26, 0.04), (x, 0.55, z + 1.22), 'white')
-        box((0.24, 0.2, 0.04), (x, 0.55, z + 1.24), 0x2a2735)
+            bld_window((x - 0.75, 0.56, z + dz), math.pi, w=0.24, h=0.2, glass=0x2a2735)
+        bld_window((x - 0.75, 1.15, z), math.pi, w=0.22, h=0.18, glass=0x2a2735)   # a loft hatch over them
+        bld_window((x, 0.55, z + 1.2), -math.pi / 2, w=0.24, h=0.2, glass=0x2a2735)
     cyl(0.4, 1.9, (x - 0.2, 0, z - 1.75), 'white', segs=10)                 # the silo
     sphere(0.42, (x - 0.2, 1.9, z - 1.75), 0x6794d9, scale=(1.0, 0.7, 1.0))
 
@@ -14201,9 +14296,9 @@ def sheep_meadow_build(lite):
                     cyl(0.16, 0.06, (HX + sx * 0.34, 0.16, HZ + sz * 0.42 - (0.06 if sz > 0 else 0)), 0x2a2735, segs=8, axis='along')
         box((0.74, 0.5, 1.1), (HX, 0.55, HZ), 0x22c46e)     # (inside the roof's flat sides: flush with them the two flickered)
         cyl(0.42, 1.16, (HX, 0.8, HZ - 0.58), 0xcf534f, segs=10, axis='along')
-        box((0.04, 0.36, 0.26), (HX + 0.38, 0.56, HZ), 0xcf534f)
+        bld_door((HX + 0.37, 0.38, HZ), 0.0, 0xcf534f, trim=None, w=0.26, h=0.36)
         box((0.24, 0.2, 0.26), (HX + 0.55, 0.1, HZ), 0x9a7b55)
-        box((0.04, 0.16, 0.18), (HX + 0.41, 0.62, HZ - 0.36), 'sky')
+        bld_window((HX + 0.37, 0.62, HZ - 0.36), 0.0, w=0.18, h=0.16, glass='sky', trim=None)
         # the old apple tree beside it, the orchard's make: round smooth lobes
         cyl(0.16, 1.0, (HX - 0.4, 0, HZ - 1.7), 0x7a5a3a, r2=0.11, segs=7, stem=True)
         sphere(0.95, (HX - 0.4, 1.6, HZ - 1.7), 0x6cae55, subdiv=1 if lite else 2, flat=False, scale=(1.0, 0.84, 1.0))
@@ -14254,26 +14349,12 @@ def sheep_flock_lite():
 RIBBON_POST, RIBBON_RAIL = 0x7a5a3a, 0xc9a877
 
 def ribbon_fence(pts, h=0.62, rails=(0.24, 0.48), step=1.0):
-    """A post-and-rail fence along the (x, z) points."""
-    posts = []
-    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
-        n = max(1, round(math.hypot(x1 - x0, z1 - z0) / step))
-        posts += [(x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n) for i in range(n)]
-    posts.append(pts[-1])
-    with plain_parts():                      # square timber: no chamfer on a bar this slim
-        for x, z in posts:
-            box((0.14, h + 0.2, 0.14), (x, h / 2 - 0.1, z), RIBBON_POST)
-        for (x0, z0), (x1, z1) in zip(posts, posts[1:]):
-            for y in rails:
-                strut((x0, y, z0), (x1, y, z1), 0.09, RIBBON_RAIL)
+    """A post-and-rail field fence (bld_fence) along the (x, z) points."""
+    bld_fence(pts, 'field', h=h, post=RIBBON_POST, rail=RIBBON_RAIL, rails=rails, step=step, sunk=0.2)
 
 def ribbon_gate(a, b, h=0.62):
-    """A five-bar field gate between two points, braced, on taller posts."""
-    for q in (a, b):
-        box((0.18, h + 0.4, 0.18), (q[0], (h + 0.4) / 2 - 0.1, q[1]), RIBBON_POST)
-    for y in (0.14, 0.3, 0.46, 0.6):
-        strut((a[0], y, a[1]), (b[0], y, b[1]), 0.09, 0xf8f8fb)
-    strut((a[0], 0.14, a[1]), (b[0], 0.6, b[1]), 0.09, 0xf8f8fb)
+    """A field gate (bld_gate) between two points."""
+    bld_gate(a, b, h=h, post=RIBBON_POST)
 
 def sheepfold_build(lite):
     # lite (the Android TV's build): the fold's hurdles two rails, the field
@@ -14422,7 +14503,6 @@ def fete(lite):
     box((1.8, 0.5, 4.2), (BX + 4.2, 0.25, BZ), BLUE)['round'] = 0.25                          # the step in
     # ---- the tea tent, along the green behind
     MX, MZ, MW, ML, MH = -3.0, -6.0, 6.0, 12.0, 2.8
-    box((MW, MH, ML), (MX, MH / 2, MZ), WHITE)
     gable_roof(local(MX, MZ, 0.0), 0.0, 0.0, MW, ML, MH, RED, WHITE, pitch_deg=35.0, t=0.2, over=0.4, cap=False)
     for k in range(3):
         box((0.14, 2.2, 1.6), (MX + MW / 2 + 0.05, 1.1, MZ - 4.0 + 4.0 * k), 0x2a2735)  # the open doorways
@@ -14627,9 +14707,8 @@ def treehouse():
     box((0.18, 0.18, 6.6), (-3.1, PY + 1.0, 0), WOOD)
     # the hut on the platform's road side (+X), clear of the trunk
     HF = local(2.9, 0.0, 0.0)
-    box((3.0, 2.5, 4.0), HF(0, PY + 1.42, 0), 0xd94f3d)
     gable_roof(HF, 0.0, PY + 0.17, 3.0, 4.0, 2.5, 0x7a5a3a, 0xd94f3d, t=0.25, over=0.3)
-    box((0.12, 1.7, 0.9), HF(1.56, PY + 1.05, -0.8), 0x5a3a2a)
+    bld_door(HF(1.5, PY + 0.2, -0.8), 0.0, 0x5a3a2a, trim=None, w=0.9, h=1.7)
     window(HF, 0.0, 1.5, PY + 1.6, 0.9, w=0.8, h=0.7, glass=0x8ecae6)
     flagpole((-3.1, PY + 1.0, -3.1), 2.6, 0x22c46e, w=1.4, fh=0.8, pole=WOOD, wave='anim_flutter:p=1.5')
     # the ladder up the front, its foot out on the lawn
@@ -14772,12 +14851,11 @@ def football_pitch_build(lite):
     D, L, H = 4.4, 10.0, 3.4
     PY = math.pi
     PF = local(PW / 2 + 3.2 + D / 2, PZ, PY)
-    box((D, H, L), PF(0, H / 2, 0), 'white', yaw=PY)
     ridge = gable_roof(PF, PY, 0.0, D, L, H, 0xcf534f, 'white')
     box((1.8, 0.2, L), PF(D / 2 + 0.9, H - 0.4, 0), 0x9a7b55, yaw=PY)     # the veranda roof
     for z in (-L / 2 + 0.3, 0.0, L / 2 - 0.3):
         box((0.2, H - 0.4, 0.2), PF(D / 2 + 1.7, (H - 0.4) / 2, z), 0x9a7b55, yaw=PY)
-    box((0.14, 2.1, 1.2), PF(D / 2 + 0.06, 1.05, 0), 0x339cf2, yaw=PY)
+    bld_door(PF(D / 2, 0, 0), PY, 0x339cf2, trim=None, w=1.2, h=2.1)
     for z in (-3.0, 3.0):
         window(PF, PY, D / 2, 2.0, z, w=1.4, h=1.0)
     flagpole(PF(0, ridge - 0.3, 0), 4.2, 0x339cf2, w=1.6, fh=0.9, pole='white',
@@ -15235,10 +15313,9 @@ def watermill():
     # the house
     F = local(0, 0, 0)
     D, L, H = 9.0, 11.0, 7.0
-    box((D, H, L), (0, H / 2, 0), STONE)
     gable_roof(F, 0.0, 0.0, D, L, H, TILE, STONE)
-    box((1.2, 3.0, 1.2), (-1.5, H + 4.0, -3.5), 0xb06041)
-    box((0.14, 2.6, 1.6), (-0.1, 1.3, L / 2 + 0.05), 0x7a5a3a, yaw=math.pi / 2)   # its door on the downstream gable
+    bld_chimney((-1.5, H + 2.5, -3.5), h=3.0, w=1.2)
+    bld_door((-0.1, 0, L / 2), -math.pi / 2, 0x7a5a3a, trim=None, w=1.6, h=2.6)   # its door on the downstream gable
     for z in (-3.0, 3.0):
         window(F, 0.0, D / 2, 4.6, z, w=1.2, h=1.2)
     box((1.2, 1.0, 1.0), (2.0, 0.5, L / 2 + 1.2), 0xfde4c7)                       # sacks at the door
@@ -15358,7 +15435,6 @@ def pond_ducks_build(lite):
     DX, DZ, DY = -14.5, -7.0, 2.6            # the duck house, out on the water, clear of the ducks' round
     box((0.5, DY + 0.6, 0.5), (DX, DY / 2 - 0.3, DZ), 0x7a5a3a)
     box((3.0, 0.2, 3.0), (DX, DY, DZ), 0x9a7b55)
-    box((2.0, 1.4, 2.0), (DX, DY + 0.8, DZ), 'white')
     gable_roof(local(DX, DZ, 0.0), 0.0, DY + 0.1, 2.0, 2.0, 1.4, 0xcf534f, 'white', t=0.2, over=0.3, cap=False)
     box((0.1, 0.8, 0.7), (DX + 1.02, DY + 0.55, DZ), 0x2a2735)
     strut((DX + 1.4, DY, DZ), (DX + 4.2, WY, DZ), 0.5, 0x9a7b55)
@@ -15525,7 +15601,6 @@ def boathouse():
     F = local(0.0, 0.0, 0.0)
     D, L, H = 5.0, 7.0, 3.0
     box((D + 0.6, 2.4, L + 0.6), (0.0, -0.9, 0.0), 'grey')                    # the stone footing, deep into the bank (its landward corner hung over the lawn, the lawn lower than the lake's lip there)
-    box((D, H, L), (0.0, 0.3 + H / 2, 0.0), BOARD)
     ridge = gable_roof(F, 0.0, 0.3, D, L, H, RED, BOARD, t=0.3, over=0.45)
     for sx in (-1, 1):
         for sz in (-1, 1):
@@ -15533,7 +15608,7 @@ def boathouse():
     box((0.12, 1.2, 2.2), (D / 2 + 0.03, 2.0, 1.2), 0x2a2735)                 # the hire hatch
     box((0.5, 0.14, 2.4), (D / 2 + 0.25, 1.36, 1.2), WHITE)                   # its sill
     box((1.3, 0.12, 2.8), (D / 2 + 0.6, 2.85, 1.2), WHITE, roll=-0.2)         # its canopy
-    box((0.12, 2.1, 1.0), (D / 2 + 0.03, 1.35, -2.0), 0x339cf2)               # the door
+    bld_door((D / 2, 0.3, -2.0), 0.0, 0x339cf2, trim=None, w=1.0, h=2.1)      # the door
     with plain_parts():
         for sz in (-1, 1):                                                   # a lifebuoy each side of the hatch
             for j in range(8):
@@ -15793,7 +15868,7 @@ def mill_yard_build(lite):
             for sz in (-1, 0, 1):
                 box((0.45, H + 0.6, 0.45), F(sx * (D / 2 - 0.3), H / 2 - 0.3, sz * (L / 2 - 0.4)), POST)
         box((D, 0.35, L), F(0, H - 0.1, 0), POST)                                   # the wall plate and ties, one slab
-        gable_roof(F, 0.0, 0.0, D, L, H, TILE, POST, t=0.35, over=0.6)
+        gable_roof(F, 0.0, 0.0, D, L, H, TILE, POST, t=0.35, over=0.6, walls=False)
         box((1.6, 1.0, 6.5), F(0, 0.5, 0), 0x9a7b55)                                 # the saw bench
         cyl(0.6, 6.0, F(0, 1.6, -3.0), 0x7a5a3a, segs=7, axis='along', stem=True)    # a log on it
         cyl(1.5, 0.14, F(-0.07, 1.3, 1.6), 'grey', segs=12, axis='across')           # the saw
@@ -16185,11 +16260,10 @@ def springhouse():
     def lot():
         F = local(HX, 0.0, 0.0)
         # the walls, into the ground, a plinth of bigger stones along the front's foot
-        box((D, H + 0.6, L), (HX, (H - 0.6) / 2, 0.0), STONE)
         rowed(box((0.5, 0.6, L + 0.4), (HX + D / 2 + 0.05, 0.3, 0.0), 'grey'), SLATE_ROW)
-        gable_roof(F, 0.0, 0.0, D, L, H, ROOF, STONE, t=0.35, over=0.45)
+        gable_roof(F, 0.0, 0.0, D, L, H, ROOF, STONE, t=0.35, over=0.45, sunk=0.6)
         # the front: a plank door, a slatted vent high in it, the arch the spring runs out of
-        box((0.14, 2.1, 1.3), (HX + D / 2 + 0.05, 1.65, -1.7), WOOD)
+        bld_door((HX + D / 2, 0.6, -1.7), 0.0, WOOD, trim=None, w=1.3, h=2.1)
         for k in range(3):
             box((0.1, 0.12, 1.0), (HX + D / 2 + 0.08, 2.75 - 0.24 * k, AZ), 0x2a2735)
         box((0.12, 0.9, 1.5), (HX + D / 2 + 0.08, 0.75, AZ), 0x2a2735)
@@ -16655,11 +16729,9 @@ def park_platform(side):
     box((0.3, 0.1, 1.1), (PX + side * 0.18, T + 0.3, CZ), WOOD)                # the seat
     for sz in (-1, 1):
         box((0.26, 0.3, 0.1), (PX + side * 0.18, T + 0.15, CZ + sz * 0.45), WOOD)
-    for k in range(6):                                                         # the fence along the open end's back
-        box((0.09, 0.5, 0.09), (PX + side * 0.48, T + 0.25, 0.75 + 0.3 * k), 'white')
-    box((0.09, 0.09, 1.6), (PX + side * 0.48, T + 0.42, 1.5), 'white')
-    box((0.1, 1.1, 0.1), (PX + side * 0.3, T + 0.55, 1.9), 'dark')             # the lamp
-    box((0.18, 0.18, 0.18), (PX + side * 0.3, T + 1.15, 1.9), 'white')
+    bld_fence([(PX + side * 0.48, 0.75), (PX + side * 0.48, 2.25)], 'garden', h=0.5, step=0.3, rails=(0.42,), y0=T, sunk=0.0,
+              span=True)                                                       # along the open end's back
+    bld_lamp((PX + side * 0.3, T, 1.9), 1.24, color='dark', glow='white')       # the lamp
     SZ = 3.1                                                                   # the signal, past the platform's end
     box((0.14, 2.3 + D, 0.14), (PX, (2.3 - D) / 2, SZ), 'white')
     box((0.26, 0.12, 0.26), (PX, 2.34, SZ), 'dark')
@@ -16841,35 +16913,21 @@ def playground_blob(x, z, r, seed, color, row, y, n=10, stretch=1.0):
     return rowed(ground_poly([(x, y, z)] + rim, [(0, 1 + (q + 1) % n, 1 + q) for q in range(n)], color), row)
 
 def playground_lamp(x, z, yaw=0.0):
-    """The lake shore's lamp (lake_shore), two white globes on a dark post,
-    at this piece's size; its arm along X turned by `yaw`."""
-    F = local(x, z, yaw)
-    with plain_parts():
-        box((0.22, 3.4, 0.22), (x, 1.5, z), 'dark', yaw=yaw)
-        box((0.7, 0.15, 0.22), (x, 3.1, z), 'dark', yaw=yaw)
-    for s in (-1, 1):
-        box((0.42, 0.42, 0.42), F(s * 0.35, 3.38, 0.0), 'white', yaw=yaw)
+    """The park's lamp (bld_lamp), dark with a white lantern."""
+    bld_lamp((x, -0.2, z), 3.8, color='dark', glow='white')
 
 def playground_bin(x, z):
     box((0.7, 1.0, 0.7), (x, 0.5, z), PLAY_GREEN)
 
 def playground_fence(runs, lite):
     """The park's low fence along each run ((x, z), (x, z)): a timber edge
-    board, white rails on white posts (lite: one rail, fewer posts)."""
-    posts = {}
+    board and the garden fence on it (bld_fence; lite: one rail, fewer posts)."""
     with plain_parts():
         for (ax, az), (bx, bz) in runs:
             L = math.dist((ax, az), (bx, bz))
-            # (a hand short of the end posts' faces: flush with them the two fought for the pixel)
             box((0.34, 0.5, L + 0.2), ((ax + bx) / 2, 0.1, (az + bz) / 2), PLAY_TIMBER, yaw=math.atan2(bx - ax, bz - az))
-            for y, t in (((0.95, 0.22),) if lite else ((0.6, 0.16), (1.05, 0.16))):
-                strut((ax, y, az), (bx, y, bz), t, 'white')
-            n = max(1, round(L / (6.0 if lite else 3.0)))
-            for q in range(n + 1):
-                f = q / n
-                posts[(round(ax + (bx - ax) * f, 2), round(az + (bz - az) * f, 2))] = 1
-        for x, z in posts:
-            box((0.3, 1.3, 0.3), (x, 0.6, z), 'white')
+    for run in runs:
+        bld_fence(run, 'garden', h=1.25, rails=(0.95,) if lite else (0.6, 1.05), step=6.0 if lite else 3.0, sunk=0.05, span=True)
 
 def playground_yard(lite):
     """What stands round the yard: the timber edge, the fence (lite: one rail,
@@ -17133,15 +17191,15 @@ def playground_table(x, z, yaw):
             box((0.16, 0.9, 1.9), F(s * 0.8, 0.42, 0.0), 0x7a5a3a, yaw=yaw)
 
 def playground_hedge(a, b, lite, h=2.1, t=1.6):
-    """A clipped hedge from (x, z) a to b, in lengths short enough to drape,
-    a darker green than the lawn it stands on (the lawn's own green, it was
-    lost against it)."""
+    """A clipped hedge (bld_hedge) from (x, z) a to b, in lengths short
+    enough to drape, a darker green than the lawn it stands on (the lawn's
+    own green, it was lost against it)."""
     L = math.dist(a, b)
     n = max(1, math.ceil(L / (8.0 if lite else 5.0)))
-    yaw = math.atan2(b[0] - a[0], b[1] - a[1])
     for q in range(n):
-        f = (q + 0.5) / n
-        o = box((t, h + 0.5, L / n), (a[0] + (b[0] - a[0]) * f, (h - 0.5) / 2, a[1] + (b[1] - a[1]) * f), 0x4f9a48, yaw=yaw)
+        p0 = [a[i] + (b[i] - a[i]) * q / n for i in (0, 1)]
+        p1 = [a[i] + (b[i] - a[i]) * (q + 1) / n for i in (0, 1)]
+        o = bld_hedge(p0, p1, h, t, sunk=0.5)
         if lite:
             o['chamfer'] = 0
 
@@ -18161,7 +18219,7 @@ def powder_magazine():
         rowed(box((X1 - X0, WALL, 2 * HZ), ((X0 + X1) / 2, WALL / 2, 0), 'cream'), 12)   # the stone house, pale (grey, a black box)
         # the vault, its axis door to back: the top of a drum sunk in the house
         VR, VY = 2.4, -0.2
-        rowed(cyl(VR, X1 - X0 - 0.2, (X0 + 0.05, VY, 0), 'cream', segs=20, axis='across'), 16)
+        rowed(cyl(VR, X1 - X0 - 0.2, (X0 + 0.05, VY, 0), 'cream', segs=10, axis='across'), 16)
         # the front wall and its stepped parapet, coped
         FT = 0.34
         rowed(box((FT, WALL + 0.3, 2 * HZ + 1.7), (X1 + 0.02, (WALL + 0.3) / 2, 0), 'cream'), 12)   # its wings hold the bank
@@ -18169,7 +18227,7 @@ def powder_magazine():
         for w_, y_ in ((2 * HZ + 1.82, WALL + 0.3), (2.42, WALL + 0.8)):
             rowed(box((FT + 0.1, 0.1, w_), (X1 + 0.02, y_ + 0.05, 0), 'cream'), 20)
         DX = X1 + 0.02 + FT / 2
-        box((0.1, 1.15, 0.9), (DX + 0.02, 0.6, 0), 'red')                         # the iron door
+        bld_door((DX, 0.02, 0), 0.0, 'red', trim=None, w=0.9, h=1.15)             # the iron door
         for z in (-0.56, 0.56):
             box((0.16, 1.3, 0.2), (DX + 0.04, 0.65, z), TIMBER)
         box((0.18, 0.2, 1.36), (DX + 0.04, 1.38, 0), TIMBER)
@@ -19412,15 +19470,6 @@ def solid(verts, faces, color):
     bpy.context.scene.collection.objects.link(o)
     return paint(o, color)
 
-def gabled(F, y0, w, d, h, rise, color):
-    """Four walls and their two gables as ONE solid in the frame F: w across
-    (X), d along the ridge (Z), h to the eaves, the gables `rise` over them.
-    The roof lies on it: no wall stands through a roof."""
-    sec = ((-w / 2, 0.0), (w / 2, 0.0), (w / 2, h), (0.0, h + rise), (-w / 2, h))
-    verts = [F(x, y0 + y, -d / 2) for x, y in sec] + [F(x, y0 + y, d / 2) for x, y in sec]
-    faces = [(0, 1, 2, 3, 4), (9, 8, 7, 6, 5)] + [(i, 5 + i, 5 + (i + 1) % 5, (i + 1) % 5) for i in range(5)]
-    return solid(verts, faces, color)
-
 def frame_house(at, yaw, w, d, h, rise, wall, roof, k=1.0, door=None, windows=(), sill=0x8a5f3e, trim=0xfde4c7,
                 battens=0, pipe=None, over=None, corners=None):
     """A frame house at its own size beside a car, its ridge along its own Z
@@ -19437,24 +19486,14 @@ def frame_house(at, yaw, w, d, h, rise, wall, roof, k=1.0, door=None, windows=()
     in world units)."""
     F = local(at[0], at[2], yaw)
     y0 = at[1]
-    gabled(F, y0, w, d, h, rise, wall)
-    a = math.atan2(rise, w / 2)
-    ov = 0.14 * k if over is None else over
-    t = 0.07 * k
-    sl = math.hypot(w / 2, rise) + ov
-    for s in (-1, 1):
-        cx = s * (sl / 2 * math.cos(a) + t / 2 * math.sin(a))    # its underside on the gables' slope
-        cy = h + rise - sl / 2 * math.sin(a) + t / 2 * math.cos(a)
-        box((sl, t, d + 2 * ov), F(cx, y0 + cy, 0), roof, yaw=yaw, roll=s * a)   # box()'s roll tips +X DOWN
-    box((t * 1.8, t * 1.3, d + 2 * ov + 0.02 * k), F(0, y0 + h + rise + t * 0.9, 0), roof, yaw=yaw)
+    bld_roofed(F, yaw, y0, w, d, h, rise, wall, roof, 0.14 * k if over is None else over, 0.07 * k)
     def on(side, off, y, wd, ht, proud, color):
-        e = proud * k
         if side in ('+x', '-x'):
             sx = 1 if side == '+x' else -1
-            box((2 * e, ht, wd), F(sx * w / 2, y0 + y, off), color, yaw=yaw)
+            bld_plate(F(sx * w / 2, y0 + y - ht / 2, off), yaw + (0 if sx > 0 else math.pi), proud * k, ht, wd, color)
         else:
             sz = 1 if side == '+z' else -1
-            box((wd, ht, 2 * e), F(off, y0 + y, sz * d / 2), color, yaw=yaw)
+            bld_plate(F(off, y0 + y - ht / 2, sz * d / 2), yaw - sz * math.pi / 2, proud * k, ht, wd, color)
     with plain_parts():
         box((w + 0.08 * k, 0.1 * k, d + 0.08 * k), F(0, y0 + 0.05 * k, 0), sill, yaw=yaw)
         for sx in (-1, 1):                                       # the corner boards
@@ -19681,12 +19720,12 @@ def false_front(z, w, d, h, body, front, kind='store', yaw=0.0):
         box((0.7, 0.06, w), (0.4, h * 0.62, z), 0x8a5f3e)                          # the porch roof
         for sz in (-1, 1):
             box((0.07, h * 0.62, 0.07), (0.72, h * 0.31, z + sz * (w / 2 - 0.1)), 0x8a5f3e)
-        box((0.06, h * 0.5, 0.34), (0.07, h * 0.25, z), 0x2a2735)                   # the door
+        bld_door((0.06, 0.0, z), 0.0, 0x2a2735, trim=0xfde4c7, w=0.34, h=h * 0.5)   # the door
         for sz in (-1, 1):
-            box((0.06, 0.3, 0.3), (0.07, h * 0.42, z + sz * w * 0.3), 0x8ecae6)
+            bld_window((0.06, h * 0.42, z + sz * w * 0.3), 0.0, w=0.3, h=0.3, glass=0x8ecae6, trim=0xfde4c7)
         if kind == 'saloon':
             for sz in (-0.09, 0.09):
-                box((0.05, 0.22, 0.16), (0.12, h * 0.25, z + sz), 0xfde4c7)       # the batwings
+                box((0.05, 0.22, 0.16), (0.14, h * 0.25, z + sz), 0xfde4c7)       # the batwings
             box((0.05, 0.1, 0.05), (0.62, h * 0.62 - 0.08, z + w / 2 - 0.4), 0x2a2735)
             with animated('anim_sway:a=x:d=10:p=3.1#sign', (0.62, h * 0.62 - 0.12, z + w / 2 - 0.4)):
                 box((0.05, 0.3, 0.5), (0.62, h * 0.62 - 0.32, z + w / 2 - 0.4), 0xc0392b)
@@ -19768,8 +19807,7 @@ def boomtown_south():
         for a in range(4):                                                        # the belfry's louvres
             dx, dz = math.cos(a * math.pi / 2), math.sin(a * math.pi / 2)
             box((0.06 + 0.3 * abs(dz), 0.5, 0.06 + 0.3 * abs(dx)), (-0.14 + dx * 0.41, 2.12, CZ + dz * 0.41), 0x4f5260)
-        box((0.06, 0.84, 0.48), (0.28, 0.44, CZ), 0x868ba1)                       # the door in its frame
-        box((0.06, 0.74, 0.36), (0.3, 0.37, CZ), 0x6e5b3a)
+        bld_door((0.28, 0.0, CZ), 0.0, 0x6e5b3a, trim=0x868ba1, w=0.36, h=0.74)    # the door in its frame
         box((0.24, 0.06, 0.6), (0.4, 0.03, CZ), 0x868ba1)                         # its step
         box((0.05, 0.34, 0.05), (-0.14, 4.07, CZ), 0xfdf4de)                      # the cross
         box((0.05, 0.05, 0.2), (-0.14, 4.12, CZ), 0xfdf4de)

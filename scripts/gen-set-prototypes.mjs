@@ -37,7 +37,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { encodeGlb, readGlb } from './lib/glb-compose.mjs';
-import { SET_GROUND } from '../public/shared/tracks.js';
+import { SET_GROUND, TRACKS } from '../public/shared/tracks.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'public/assets/toycar');
@@ -58,8 +58,15 @@ if (!fs.existsSync(KIT_CACHE)) throw new Error('no kit cache — run `npm run fe
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ttp-set-protos-'));
 // A piece modelled on terrain (SET_GROUND) is built against the very numbers
 // the renderer lays as the track's ground, so the two cannot drift.
+// A row's `scale` grows everything in the piece, so what is built to a person's
+// size (set_prototypes.py, bld_u) divides by it: the scale every row of a
+// model shares. A model placed at several has no one size to build to.
+const SET_SCALE = {};
+for (const t of Object.values(TRACKS)) for (const r of t.set || []) (SET_SCALE[r.model] ||= new Set()).add(r.scale ?? 1);
+for (const [m, s] of Object.entries(SET_SCALE)) { if (s.size === 1 && !s.has(1)) SET_SCALE[m] = [...s][0]; else delete SET_SCALE[m]; }
+if (process.argv.includes('--scales')) { console.log(SET_SCALE); process.exit(0); }
 execFileSync(BLENDER, ['-b', '--python-exit-code', '1', '-P', SCRIPT, '--', KIT_CACHE, tmp, ...process.argv.slice(2)],
-  { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND) } });
+  { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, TTP_SET_GROUND: JSON.stringify(SET_GROUND), TTP_SET_SCALE: JSON.stringify(SET_SCALE) } });
 
 const sources = JSON.parse(fs.readFileSync(SOURCES, 'utf8'));
 for (const file of fs.readdirSync(tmp).filter((f) => f.endsWith('.glb')).sort()) {
