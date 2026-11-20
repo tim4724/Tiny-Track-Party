@@ -27506,6 +27506,8 @@ def own_fir_faces(kind, lite):
                 out += band(S, (r2 + 0.03, y2, 16), (rt, yt, 10), g + 'tip')
             else:
                 out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
+        elif kind == 'c' and lite:
+            out += band(S, (rl, yl, 26), (rt, yt, 6), g + 'snow')                # (the box's: no edge band, a third more faces on every far stand)
         elif kind == 'c':
             (rc, yc) = at(0.05)                                                  # a dark green edge at the rim, the rest snow
             out += band(G, (rl, yl, 27), (rc, yc, 25), g + 'edge')
