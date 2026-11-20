@@ -1139,9 +1139,9 @@ lite (a lite build, `lite: false`), move it off the vista (what every cell
 sees down the straight), or merge it. Never a per-fragment term, a blended
 material or a new material.
 A biome PROP is capped per model in the lite tier (`tests/display-abi.test.js`):
-it is stamped many times a lap. Over the cap, it gets a lite build
-(`scripts/bake-lite.mjs`) or a slimmer original (`scripts/slim-kit-models.mjs`
-decimates a kit model from the ratio SOURCES.json records for it).
+it is stamped many times a lap. Over the cap, it gets a lite build: authored
+in its builder (`lite_too`, an `own-<file>-lite` piece) or decimated
+(`scripts/bake-lite.mjs`).
 
 ## The detail tier
 

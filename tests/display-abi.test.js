@@ -300,8 +300,8 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
 // The full tier (the web, the Apple TV) is uncapped; the cap holds the LITE tier
 // (the Android TV box), which draws a model's lite build where it has one
 // (<model>-lite.glb, ttp/theme.h lite_models). So a prop over the cap gets a
-// lite build (scripts/bake-lite.mjs) or a slimmer original
-// (scripts/slim-kit-models.mjs). The toy train set is the one exception: an
+// lite build (its builder's, or scripts/bake-lite.mjs). The toy train set is
+// the one exception: an
 // animated ring of track, sparse by design, whose spin subtree a decimation
 // would break.
 const PROP_VERTEX_CAP = 400;

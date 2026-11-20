@@ -72,69 +72,15 @@ export function licenseInfo(id) {
 // files: root-absolute would 404 anywhere the tree is hosted under a prefix,
 // and this is the one link on the page that has to work.
 export const ASSET_CREDITS = [
+  // No Kenney model ships any more: every model is built by this repo's own
+  // scripts (public/assets/toycar/SOURCES.json). The credit stays for what they
+  // are built AFTER, so it covers no path.
   {
     section: '3D models',
-    title: 'Toy Car Kit 1.2',
+    title: 'Kenney game asset kits (the models follow their style and palette)',
     author: 'Kenney',
     license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/toy-car-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Nature Kit 2.3',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/nature-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Holiday Kit 1.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/holiday-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Pirate Kit 2.1',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/pirate-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Survival Kit 2.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/survival-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Mini Forest 1.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/mini-forest',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Mini Skate 2.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/mini-skate',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'City Kit (Roads) 2.2',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/city-kit-roads',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
+    url: 'https://kenney.nl/assets',
   },
   {
     section: 'Sound effects',

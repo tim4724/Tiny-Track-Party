@@ -1,4 +1,4 @@
-# Headless Blender half of scripts/slim-kit-models.mjs: import a GLB, weld,
+# Headless Blender half of scripts/bake-lite.mjs: import a GLB, weld,
 # collapse-decimate to a ratio, export the GEOMETRY. The caller grafts the
 # original materials back, so nothing Blender writes about materials or images
 # ships.
