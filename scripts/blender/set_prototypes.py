@@ -414,15 +414,15 @@ class animated:
                     o.matrix_world = lean @ o.matrix_world
         return False
 
-def skull_mark(at, h, yaw):
+def skull_mark(at, h, yaw, t=None):
     """The skull and crossed bones in white on a black flag `h` high whose
     middle is `at` and which flies along (sin yaw, cos yaw): blocks standing
-    through the cloth, `t` thick, so both faces carry it. The parts, for the
-    cloth's own moving part."""
+    through the cloth, `t` thick (a flag's own by default), so both faces
+    carry it. The parts, for the cloth's own moving part."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
     white, black = 0xfff6eb, 0x38383d
-    t = max(0.07, 0.12 * h)
+    t = t or max(0.07, 0.12 * h)
     def b(w, hh, du, dv, color, thick=t, pitch=0.0):
         o = box((thick, hh * h, w * h), (x + s * du * h, y + dv * h, z + c * du * h), color, yaw=yaw, pitch=pitch)
         o['chamfer'] = 0
@@ -1380,36 +1380,47 @@ def umbrella(at, r, h, colors, gores=8):
 
 def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
     """THE palm, the scatter's (palm-tall, palm-bend) and every piece's: one
-    make at any size. A trunk leaning over in three tapering lengths, shaded
-    round, dark at its foot; a crown of six fronds, each a leaf folded along
+    make at any size. A sand-tan trunk leaning over in three lengths, each
+    widening to a ring where the next begins and shaded light at that ring,
+    dark at its foot; a crown of six fronds, each a leaf folded along
     its rib, out from the head and up a little, then drooping to a point,
     darker underneath; two coconuts. It carries its own shade (own_shell),
     so a palm is the same palm in a tall piece and a low one. `reach` is a
     frond's length; `sink` carries the trunk on that far under its foot, for
     a palm set rigidly on a slope (its downhill side shows trunk, not air).
-    LITE (the box's): the trunk in two lengths of five sides, five fronds,
-    no coconuts, and the crown ONE surface, the fronds joined by a web at
-    the head. Lite's far form keeps no small shape whole
-    (TtpRenderer::farForm, kFarWhole is the full tier's): it folded each
-    separate blade of a short palm away along its own width, and a stand
-    stood as bare trunks from eighty units off."""
+    LITE (the box's): the trunk in two lengths of five sides (one ring),
+    five fronds, no coconuts, and the crown ONE surface, the fronds joined
+    by a web at the head, its light rounded frond by frond (rounded over
+    the whole crown, it turned to the underside's and the crown went
+    dark). Lite's far form keeps no small shape whole (TtpRenderer::farForm,
+    kFarWhole is the full tier's): it folded each separate blade of a
+    short palm away along its own width, and a stand stood as bare trunks
+    from eighty units off."""
     x, y, z = at
     k = h / 4.2
-    reach = reach or 0.46 * h
+    reach = 1.1 * (reach or 0.46 * h)
     dx, dz = math.cos(yaw), math.sin(yaw)
     ts, sides, n = ((0, 0.5, 1.0), 5, 5) if LITE else ((0, 0.36, 0.7, 1.0), 6, 6)
-    line = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t, (0.3 - 0.17 * t) * k, 17 - 13 * t) for t in ts]
+    line = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t, (0.3 - 0.17 * t) * k) for t in ts]
     if sink:
-        line.insert(0, (x, y - sink, z, 0.3 * k, 19))
+        line.insert(0, (x, y - sink, z, 0.3 * k))
     faces = []
-    for i, ((xa, ya, za, ra, wa), (xb, yb, zb, rb, wb)) in enumerate(zip(line, line[1:])):
-        lo, hi = own_ring(ra, ya, sides, at=(xa, za)), own_ring(rb, yb, sides, at=(xb, zb))
+    DARK, LIGHT, RING = 30, 9, 1.22                           # a length's rows of the tan ramp, and how far its ring stands out
+    for i, ((xa, ya, za, ra), (xb, yb, zb, rb)) in enumerate(zip(line, line[1:])):
+        last = i == len(line) - 2
+        ring = not last and not (sink and i == 0)             # (none at the ground, on the length sunk under it)
+        lo, hi = own_ring(ra, ya, sides, at=(xa, za)), own_ring(rb * (RING if ring else 1.0), yb, sides, at=(xb, zb))
+        up = own_ring(rb, yb, sides, at=(xb, zb)) if ring else []
         for j in range(sides):
-            q = [lo[j] + (wa,), lo[(j + 1) % sides] + (wa,), hi[(j + 1) % sides] + (wb,), hi[j] + (wb,)]
-            faces.append(('brown', own_facing(q, (lo[j][0] + lo[(j + 1) % sides][0] - 2 * xa, 0.0, lo[j][2] + lo[(j + 1) % sides][2] - 2 * za)), 'trunk'))
+            jj = (j + 1) % sides
+            out = (lo[j][0] + lo[jj][0] - 2 * xa, 0.0, lo[j][2] + lo[jj][2] - 2 * za)
+            top = LIGHT if ring or last else DARK
+            faces.append(('tan', own_facing([lo[j] + (DARK,), lo[jj] + (DARK,), hi[jj] + (top,), hi[j] + (top,)], out), 'trunk'))
+            if up:                                            # the ring's top, in to the next length's foot
+                faces.append(('tan', own_facing([hi[j] + (LIGHT,), hi[jj] + (LIGHT,), up[jj] + (DARK,), up[j] + (DARK,)], (0.0, 1.0, 0.0)), 'trunk'))
     own_shell('palm', faces, smooth=True)
     tx, ty, tz = line[-1][:3]
-    w = 0.17 * reach
+    w = 0.18 * reach
     head = (tx, ty + 0.04 * reach, tz)
     ribs = []
     for i in range(n):
@@ -1427,17 +1438,16 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
         for i, (ca, sa, mid, tip) in enumerate(ribs):
             a0, a1 = yaw + (i - 0.5) * 2 * math.pi / n + 0.3, yaw + (i + 0.5) * 2 * math.pi / n + 0.3
             v0, v1 = [(tx + math.cos(b) * 0.3 * reach, ty - 0.04 * reach, tz + math.sin(b) * 0.3 * reach) for b in (a0, a1)]
-            leaf([head + (2,), v0 + (7,), mid + (4,)], 'crown')
-            leaf([head + (2,), mid + (4,), v1 + (7,)], 'crown')
-            leaf([v0 + (7,), tip + (12,), mid + (4,)], 'crown')
-            leaf([mid + (4,), tip + (12,), v1 + (7,)], 'crown')
+            for q in ([head + (0,), v0 + (4,), mid + (2,)], [head + (0,), mid + (2,), v1 + (4,)],
+                      [v0 + (4,), tip + (8,), mid + (2,)], [mid + (2,), tip + (8,), v1 + (4,)]):
+                leaf(q, 'crown%d' % i)
         own_shell('palm', leaves, smooth=True)
         return
     for ca, sa, mid, tip in ribs:
         edge = lambda p, sd, drop: (p[0] - sa * sd * w, p[1] - drop, p[2] + ca * sd * w)
         for sd in (-1, 1):
             e0, e1 = edge(head, sd, 0.05 * reach), edge(mid, sd, 0.14 * reach)
-            for q in ([head + (2,), mid + (4,), e1 + (10,), e0 + (7,)], [mid + (4,), tip + (13,), e1 + (10,)]):
+            for q in ([head + (0,), mid + (2,), e1 + (6,), e0 + (4,)], [mid + (2,), tip + (9,), e1 + (6,)]):
                 leaf(q, 'leaf')
     own_shell('palm', leaves)
     with plain_parts():
@@ -1784,8 +1794,8 @@ def crab_pots():
     for i in range(6):
         (_, y0, z0), (_, y1, z1) = line[i], line[i + 1]
         drop = 0.95 + 0.25 * (1 - abs(i - 2.5) / 2.5)
-        box((0.03, drop, z1 - z0 + 0.02), (-0.2, (y0 + y1) / 2 - drop / 2, (z0 + z1) / 2), 'green' if i % 2 else 'sky')
-        beam(line[i], line[i + 1], 0.04, 0x9a7b55)
+        box((0.03, drop, z1 - z0), (-0.2, (y0 + y1) / 2 - drop / 2, (z0 + z1) / 2), 'green' if i % 2 else 'sky')   # (edge to edge: lapped, two colours lay in one plane)
+        beam(line[i], line[i + 1], 0.08, 0x9a7b55)                             # (proud of the net, not in its faces' planes)
         box((0.1, 0.1, 0.1), (-0.2, (y0 + y1) / 2 - 0.02, (z0 + z1) / 2), 0xff7e44)
     join_still('landing')
     lie_on_land()
@@ -2641,7 +2651,7 @@ def lifeguard_tower():
     # the patrol's flag on its own mast off the deck's corner, high over the
     # roof: what shows first over the crest
     mx, mz = ex - 0.1, -(S + 0.5) / 2 + 0.12
-    box((0.13, 5.1 - top, 0.13), (mx, top + (5.1 - top) / 2, mz), white)
+    box((0.13, 4.96 - top, 0.13), (mx, top + 0.14 + (4.96 - top) / 2, mz), white)   # (on the deck, its foot not in the deck's underside)
     box((0.22, 0.22, 0.22), (mx, 5.16, mz), red)
     wind = rip_wind('lifeguard-tower')
     wind_cloth((mx, 5.0, mz), 0.86, 0.5, (red, yellow), 'anim_flutter:p=1.9#patrol', wind)
@@ -4572,7 +4582,7 @@ def camper(x, z, yaw, lower, upper=0xfff6eb, boards=(), pop=False, y=0.0):
     b((0.68, 0.16, 1.0), 0, 0.73, -0.12, 'sky')                      # the window band
     b((0.56, 0.22, 0.06), 0, 0.66, 0.62, 'sky', pitch=-0.25)         # the windscreen
     for sz in (-0.77, 0.77):
-        b((0.66, 0.08, 0.06), 0, 0.22, sz, 'grey')                   # the bumpers
+        b((0.66, 0.08, 0.06), 0, 0.225, sz, 'grey')                  # the bumpers (their feet over the body's)
     b((0.6, 0.06, 1.24), 0, 0.91, -0.08, upper)                      # the roof
     if pop:
         b((0.58, 0.24, 0.9), 0, 1.06, -0.2, 0xfde4c7)                # the pop-top's tent
@@ -4595,8 +4605,8 @@ def kiosk(x, z, yaw):
         box(size, (x + dx * c + dz * s, dy, z - dx * s + dz * c), color, yaw=yaw, roll=roll)
     b((0.9, 0.8, 1.2), 0, 0.4, 0, 0xfff6eb)
     b((1.0, 0.08, 1.3), 0, 0.84, 0, 0x339cf2)
-    for i in range(4):
-        b((0.5, 0.05, 1.3 / 4), 0.62, 0.74, -0.49 + i * 0.325, 0xff5040 if i % 2 == 0 else 0xfff6eb, roll=0.35)
+    for i in range(4):                                               # (inside the roof's ends, not in their planes)
+        b((0.5, 0.05, 1.24 / 4), 0.62, 0.74, -0.465 + i * 0.31, 0xff5040 if i % 2 == 0 else 0xfff6eb, roll=0.35)
     b((0.06, 0.06, 1.1), 0.8, 0.58, 0, 0x9a6a46)                     # the rail under the awning
     for k, col in enumerate((0xffc044, 0x339cf2, 0xff5040, 0x22c46e)):
         b((0.1, 0.12, 0.1), 0.8, 0.44, -0.4 + k * 0.27, col)         # buckets hung on it
@@ -5329,7 +5339,7 @@ def surf_club():
     box((HW + 0.5, 0.12, HD + 0.5), (HX, 0.14 + HH + 0.06, 0.0), 0x9aa1b4)           # the flat roof, a terrace
     fx = HX + HW / 2
     for z in (0.5, 2.0):
-        box((0.06, 0.92, 1.2), (fx + 0.02, 0.14 + 0.46, z), 0x4f5260)               # the boat doors
+        box((0.06, 0.91, 1.2), (fx + 0.02, 0.15 + 0.455, z), 0x4f5260)              # the boat doors (their feet over the hall's)
     for z in (-2.2, -1.3):
         bld_window((fx, 0.8, z), 0.0, w=0.56, h=0.36, glass=0x8ecae6, trim=None)
     box((0.08, 0.2, 1.7), (fx + 0.04, 1.14, -1.75), yellow)                           # the club's name board
@@ -5773,7 +5783,7 @@ def channel_beacon():
     for (dx, dz, yaw) in ((-0.82, 0.0, 0.0), (0.0, -0.82, math.pi / 2)):
         box((0.1, 1.5, 1.5), (dx * 0.88, H + 0.88, dz * 0.88), white, yaw=yaw)
         box((0.16, 1.14, 1.14), (dx * 0.9, H + 0.88, dz * 0.9), red, yaw=yaw)
-    box((0.2, 2.3, 0.2), (0.0, H + 1.15, 0.0), white)                         # the lamp's mast
+    box((0.2, 2.14, 0.2), (0.0, H + 1.23, 0.0), white)                        # the lamp's mast, on the deck
     box((0.5, 0.1, 0.5), (0.0, H + 2.3, 0.0), 0x38383d)
     rowed(box((0.36, 0.4, 0.36), (0.0, H + 2.55, 0.0), 'yellow'), 0)          # the lamp
     cyl(0.4, 0.5, (0.0, H + 2.75, 0.0), red, r2=0.05, segs=8)                 # its cap
@@ -6128,7 +6138,7 @@ def fish_racks():
                         if frac(j * 0.37 + r * 0.21 + t) < 0.18:
                             continue
                         fz = z0 + (j + 0.5) * n * span / m
-                        box((0.06, 0.5, 0.32 if LITE else 0.2), (rx, ry - 0.3, fz), fish[(j + c + r) % 3])
+                        box((0.06, 0.5, 0.3 if LITE else 0.2), (rx, ry - 0.3, fz), fish[(j + c + r) % 3])   # (0.32 ended in a frame's face)
     # the handcart and the baskets
     box((1.3, 0.14, 0.8), (1.6, 0.5, 0.2), wood)
     for sz in (-1, 1):
@@ -6154,10 +6164,10 @@ def dune_fence(name, seed, half, breaks):
         # round 10: thin slats a stride apart read as hairlines at speed, so
         # thick posts twice a person's height, every couple of strides, and
         # two heavy rails between them
-        # round 27: 0.65 tall, a person's chest (its 1.5 stood over the doors of
-        # the net huts and the smokehouse down the same beach, 0.6 tall)
+        # (round 27: a unit tall. At a person's chest, 0.65, with thinner
+        # timber it was a hairline again and stood under its own marram)
         n = int(2 * half / 1.5)
-        H = 0.65
+        H = 1.0
         with plain_parts(), bleached():
             prev = None
             for i in range(n + 1):
@@ -6167,12 +6177,12 @@ def dune_fence(name, seed, half, breaks):
                 if any(abs(f - b) < 0.05 for b in breaks):
                     prev = None
                     continue
-                sunk = 0.12 * max(0.0, wobble(z, seed + 1, 6.0))
+                sunk = 0.15 * max(0.0, wobble(z, seed + 1, 6.0))
                 lean = 0.18 * wobble(z, seed + 2, 4.0)
-                box((0.15, H + 0.25, 0.15), (x, H / 2 - 0.125 - sunk, z), ('brown', 'tan')[i % 2], roll=lean)
+                box((0.2, H + 0.3, 0.2), (x, H / 2 - 0.15 - sunk, z), ('brown', 'tan')[i % 2], roll=lean)
                 if prev:
-                    for fr in (0.4, 0.82):
-                        beam((prev[0] + 0.08, fr * H - prev[1], prev[2]), (x + 0.08, fr * H - sunk, z), 0.08, 'tan', d=0.12)
+                    for fr in (0.4, 0.8):
+                        beam((prev[0] + 0.1, fr * H - prev[1], prev[2]), (x + 0.1, fr * H - sunk, z), 0.12, 'tan')
                 prev = (x, sunk, z)
         with plain_parts():
             patches = int(half / 2.2)
@@ -6938,8 +6948,8 @@ def drift_boat_hut(cz, L, W, H, door, seed):
     box((0.16, 0.14, L * 0.92), (0.0, H - 0.02, cz - 0.03 * L), 'tan')    # the keel, up top
     zs = cz - 0.5 * L
     box((W * 0.95, H * 0.95, 0.12), (0.0, H * 0.45, zs), 0xfde4c7)         # the sawn-off stern, walled
-    box((0.12, BLD_DOOR_H, 0.32), (0.5 * W * 0.55, BLD_DOOR_H / 2, zs + 0.2), door)   # its door to the road
-    box((0.32, BLD_DOOR_H, 0.14), (0.2 * W, BLD_DOOR_H / 2, zs - 0.03), door)
+    box((0.12, H * 0.62, W * 0.34), (0.5 * W * 0.55, H * 0.31, zs + 0.2), door)   # its door to the road
+    box((0.5, 0.9, 0.14), (0.25 * W, H * 0.33, zs - 0.03), door)
     cyl(0.1, 0.9, (-0.1, H - 0.1, cz + 0.15 * L), 'grey', segs=6, stem=True)   # the stove pipe
     box((0.28, 0.08, 0.28), (-0.1, H + 0.82, cz + 0.15 * L), 'slate')
 
@@ -6985,12 +6995,10 @@ def smokehouse():
     box((0.95, 0.12, 2.9), (-1.8, 4.7, 0.0), 'grey')
     for k in range(4):
         box((0.76, 0.08, 0.1), (-1.8, 4.45, -0.9 + 0.6 * k), 'slate')
-    # (round 27: its door a person's, as the net huts' down the beach are: 1.3
-    # tall beside their 0.6 it read as another world's; the fish go in by the
-    # loading hatch over it, under its hoist beam)
-    bld_door((-0.5, 0.0, -0.6), 0.0, 0xcf534f, trim=trim, w=0.5, h=0.66)     # the door to the road
-    bld_plate((-0.47, 1.12, -0.6), 0.0, 0.05, 0.44, 0.5, 0xcf534f)           # the loading hatch over it
-    box((0.3, 0.08, 0.08), (-0.34, 1.66, -0.6), 0x8a6a46)                     # its hoist beam
+    # the door to the road: a barn's, the height of two people, for the racks
+    # of fish carried in (a person's door on these walls read as a cat flap)
+    box((0.07, 1.3, 1.0), (-0.47, 0.65, -0.6), trim)
+    box((0.07, 1.2, 0.86), (-0.45, 0.6, -0.6), 0xcf534f)
     bld_window((-0.47, 2.2, 0.8), 0.0, w=0.6, h=0.5, trim=None)
     # the log store against its end
     for k in range(3):
@@ -7678,10 +7686,11 @@ def ship_can(at, color, yaw=0.0, roll=0.0, pitch=0.0, L=2.7):
         rowed(part((0.05, 1.05, 0.05), (0.0, 0.0, -L / 2 - 0.005), color), 30)   # the doors' seam
     return part
 
-def toy_duck(x, y, z, yaw):
+def toy_duck(x, y, z, yaw, k=1.0):
     """A yellow bath duck, a ship's lost cargo, its bill to +Z turned by
-    `yaw` (fig_bird's bath toy), one size wherever its piece is placed."""
-    fig_bird('bathduck', (x, y + 0.01, z), yaw - math.pi / 2, 'swim', k=0.36 * row_k())
+    `yaw` (fig_bird's bath toy), one size wherever its piece is placed;
+    `k` over that for the raft out on the water, a speck from the road."""
+    fig_bird('bathduck', (x, y + 0.01, z), yaw - math.pi / 2, 'swim', k=0.36 * k * row_k())
 
 def storm_wrack(rows):
     """Kelp and planks the sea left against something: flat dark lengths,
@@ -19247,7 +19256,7 @@ def storm_adrift():
             ship_can(at, color, yaw, roll=roll, pitch=pitch)
     with animated('anim_drape+bob:h=0.06:p=2.3#ducks', (2.6, SEA, 0.6)):
         for k in range(4 if LITE else 7):
-            toy_duck(2.6 + 1.3 * math.sin(2.3 * k), SEA - 0.04, 0.6 + 1.6 * math.cos(1.7 * k + 0.4), 0.9 * k)
+            toy_duck(2.6 + 1.3 * math.sin(2.3 * k), SEA - 0.04, 0.6 + 1.6 * math.cos(1.7 * k + 0.4), 0.9 * k, k=1.4)
     def foot():
         with plain_parts():
             box((0.3, 0.3, 0.3), (0.0, -0.8, 0.0), 'slate')
@@ -19322,8 +19331,8 @@ def cove_chest(at, yaw=0.0, k=1.0, lid='shut'):
         b((0.92, 0.12, 0.58), 0.0, 0.48, 0.0, wood)
         b((0.92, 0.09, 0.4), 0.0, 0.58, 0.0, wood)
         with plain_parts():
-            for lx in (-0.29, 0.29):
-                b((0.09, 0.12 + 2 * p, 0.58 + 2 * p), lx, 0.48 + p, 0.0, iron)
+            for lx in (-0.29, 0.29):                          # (their feet a hair over the lid's, not in its underside)
+                b((0.09, 0.12 + p, 0.58 + 2 * p), lx, 0.48 + 1.5 * p, 0.0, iron)
                 b((0.09, 0.09 + p, 0.4 + 2 * p), lx, 0.58 + p, 0.0, iron)
         return
     # the lid stood back past upright on its hinges
@@ -19463,6 +19472,7 @@ def prize_at_anchor():
                 gx = -w + 0.6 + i * (2 * w - 1.2) / 3
                 rod(K(gx - 0.07, y - 0.36, z + 0.1), K(gx + 0.07, y - 0.36, z + 0.1), 0.33 * S, 0x38383d, segs=6)
         flag_on_pole(K(0.0, 9.6, 0.68), 0.7, (0xcf534f, 0xfff6eb, 0xcf534f, 0xfff6eb), 'anim_flutter:p=2.3#pennant', w=1.1, fh=0.5)
+        poly([K(0.0, 4.5, 5.15), K(0.0, 3.5, 1.5), K(0.0, 8.6, 0.85)], [(0, 1, 2)], 0xfff6eb)   # her jib, left set
         beam(K(0.3, 2.5, 5.0), K(1.3, -0.6, 8.8), 0.07, cream)                     # her cable, from the bow
     # her boat, bow to local +X (the way its path faces it), under her sail
     for i, (x, z) in enumerate(COVE_TENDER):
@@ -27791,11 +27801,14 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
     """A two-masted ship, bare-poled, bow to local +Z turned by `yaw`, `S`
     her scale and `stretch` her length over the plain hull's: a dark bottom
     and topsides in two strakes (heeled_hull) with a wale along their seam
-    and a rail along her sheer, a planked deck with its hatch, a
-    quarterdeck aft with lit stern windows and a door, a forecastle, a
-    rudder, a bowsprit, two masts with their tops and shrouds. `ports` cuts
-    three gun ports a side. Returns her frame K(x, y, z): the rig is the
-    piece's own (sails set or furled, her colours)."""
+    and a rail along her sheer, a planked deck with its coamed hatch, a
+    quarterdeck aft with lit stern windows in their frame, a framed door
+    under a railed break and her wheel on it, a forecastle, a rudder, a
+    bowsprit, two masts with their tops and shrouds: two thin bars a side
+    with ratlines between them (a solid plate there read as a tent pitched
+    on deck). `ports` cuts three gun ports a side. Returns her frame
+    K(x, y, z): the rig is the piece's own (sails set or furled, her
+    colours). LITE: no wale, ratlines, wheel or break rail."""
     x0, y0, z0 = at
     wood, plank, dark = 'brown', 'tan', 0x38383d
     def K(x, y, z):
@@ -27829,15 +27842,24 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
                 beam(K(sx * s0[5], s0[6] + 0.1, s0[0]), K(sx * s1[5], s1[6] + 0.1, s1[0]), 0.24 * S, trim)
     beam(K(-1.7, 4.32, -4.8), K(1.7, 4.32, -4.8), 0.24 * S, trim)                      # the taffrail
     with plain_parts():
-        for x in (-0.9, 0.0, 0.9):                        # the stern windows, lit
-            b((0.5, 0.55, 0.12), x, 3.6, -4.82, 'yellow')
-        b((0.6, 0.85, 0.1), 0.0, 3.4, -2.27, dark)        # the cabin's door
+        b((2.9, 0.85, 0.1), 0.0, 3.6, -4.8, trim)         # the stern windows, lit, in their frame
+        for x in (-0.9, 0.0, 0.9):
+            b((0.6, 0.55, 0.12), x, 3.6, -4.86, 'yellow')
+        b((0.9, 1.05, 0.1), 0.0, 3.42, -2.28, trim)       # the cabin's door in its frame
+        b((0.6, 0.85, 0.1), 0.0, 3.36, -2.23, dark)
         for sx in (-1, 1):                                # ...a light either side of her quarter, the steps up to the quarterdeck
             b((0.12, 0.5, 0.6), sx * 2.0, 3.55, -3.6, 'yellow')
             if not LITE:
                 box((0.7 * S, 0.14 * S, 1.5 * S), K(sx * 1.4, 3.5, -1.75), wood, yaw=yaw, pitch=0.72)
         b((0.16, 2.0, 0.7), 0.0, 1.9, -5.05, wood)        # the rudder
-        b((1.1, 0.16, 1.0), 0.0, 2.95, -0.9, wood)        # the hatch
+        b((1.1, 0.2, 1.0), 0.0, 2.97, -0.9, wood)         # the hatch: its coaming, the dark of the hold
+        b((0.8, 0.06, 0.7), 0.0, 3.06, -0.9, dark)
+        if not LITE:
+            b((0.14, 0.7, 0.14), 0.0, 4.5, -3.3, wood)                                   # her wheel on its post
+            cyl(0.42 * S, 0.12 * S, K(0.0, 4.85, -3.25), wood, segs=8, axis='along', yaw=yaw)
+            beam(K(-2.0, 4.75, -2.36), K(2.0, 4.75, -2.36), 0.14 * S, trim)              # the rail at the quarterdeck's break
+            for x in (-1.9, -0.7, 0.7, 1.9):
+                b((0.14, 0.6, 0.14), x, 4.42, -2.36, trim)
         if ports:
             for z in (-1.5, -0.2, 1.1):
                 for sx in (-1, 1):
@@ -27846,48 +27868,69 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
             top = foot + (head - foot) * 0.6
             b((0.9, 0.16, 0.9), 0.0, top, z, wood)                                       # the top
             hb = 2.25 if z > -2.3 else 1.9
-            for sx in () if LITE else (-1, 1):                                           # the shrouds
-                poly([K(sx * 0.3, top, z), K(sx * hb, foot + 0.1, z - 0.7), K(sx * hb, foot + 0.1, z + 0.2)], [(0, 1, 2)], 'bark')
+            for sx in (-1, 1):                                                           # the shrouds, and their ratlines
+                head, legs = K(sx * 0.2, top, z), [K(sx * hb, foot + 0.1, z + dz) for dz in ((-0.95, 0.35) if z > -2.3 else (-0.6, 0.6))]
+                for leg in legs:
+                    beam(leg, head, 0.11 * S, 'bark')
+                for t in () if LITE else (0.3, 0.58):
+                    beam(*[tuple(a + (c - a) * t for a, c in zip(leg, head)) for leg in legs], 0.09 * S, 'bark')
     for (z, foot, head) in OWN_SHIP_MASTS:
         b((0.3, head - foot + 0.4, 0.3), 0.0, (head + foot - 0.4) / 2, z, wood)
     beam(K(0.0, 3.75, 3.7), K(0.0, 4.6, 5.3), 0.24 * S, wood)                           # the bowsprit
     return K
 
-def own_sail(K, S, yaw, z, y0, y1, w, color, belly=0.55, mark=False):
-    """A square sail set and drawing on its yard at ship's z: `w` half its
-    width, y0 to y1, bellied forward; `mark` the skull and bones on it."""
-    cols, rows = (-1.0, -0.4, 0.4, 1.0), (0.0, 0.5, 1.0)
+def own_sail(K, S, yaw, z, y0, y1, w, color, belly=0.55, mark=False, brace=0.0, stretch=1.0, aback=False):
+    """A square sail set on its yard at ship's z: `w` half its width, y0 to
+    y1, bellied forward (`aback`: hung abaft the mast and pressed aft, as a
+    ship lying head to wind at anchor has it), a spar along its foot, the
+    yard braced round the mast by `brace` (a sail square across her is edge
+    on to whoever looks at her side, the road's view; `stretch` is her
+    hull's, which the turn must not shear); `mark` the camp flag's skull
+    and bones on it (skull_mark), filling the cloth and standing through
+    its flat middle cloths, so both faces carry them."""
+    cols, rows = (-1.0, -0.5, 0.5, 1.0), (0.0, 0.5, 1.0)
+    K0, cb, sb = K, math.cos(brace), math.sin(brace)
+    def K(x, y, lz):                                      # the sail's own frame, turned about the mast
+        return K0(x * cb + (lz - z) * sb, y, z + (-x * sb + (lz - z) * cb) / stretch)
+    yaw += brace
+    f = -1.0 if aback else 1.0                            # the side of the mast it hangs
     def at(i, j):
         bx = belly * (1 - cols[i] ** 2) * (0.35 + 0.65 * math.sin(math.pi * (0.15 + 0.7 * rows[j])))
-        return K(cols[i] * w * (1 - 0.06 * (1 - rows[j])), y0 + (y1 - y0) * rows[j], z + 0.08 + bx)
+        return K(cols[i] * w * (1 - 0.06 * (1 - rows[j])), y0 + (y1 - y0) * rows[j], z + f * (0.08 + bx))
     verts = [at(i, j) for j in range(3) for i in range(4)]
     faces = [(j * 4 + i, j * 4 + i + 1, (j + 1) * 4 + i + 1, (j + 1) * 4 + i) for j in range(2) for i in range(3)]
     parts = [poly(verts, faces, color)]
     parts.append(rod(K(-w - 0.15, y1, z), K(w + 0.15, y1, z), 0.11 * S, 'brown', segs=6))
-    if mark:
-        parts += skull_mark(K(0.0, y0 + (y1 - y0) * 0.5, z + 0.08 + belly * 0.9), (y1 - y0) * S * 0.62, yaw + math.pi / 2)
+    parts.append(rod(K(-w, y0, z + f * (0.08 + belly * 0.3)), K(w, y0, z + f * (0.08 + belly * 0.3)), 0.09 * S, 'brown', segs=6))
+    if mark:                                              # (the middle cloths lie at 0.64 to 1.0 of the belly, 0.75 across)
+        parts += skull_mark(K(0.0, (y0 + y1) / 2, z + f * (0.08 + belly * 0.7)), 1.4 * (y1 - y0) * S, yaw + math.pi / 2, t=0.22 * S)
     return parts
 
 @piece(1.0)
 def pirate_ship():
     # Cove: the crew's own ship at anchor in the shallows, bare timber under
-    # black sails, the skull on her main course and at her masthead, three
-    # gun ports a side; her longboat alongside. She stands in the sea, so
-    # nothing that belongs on land rides with her. Her hull runs along +Z,
+    # black sails, the skull on her main course, at both mastheads and on
+    # the staff at her stern, three gun ports a side; her longboat
+    # alongside. She stands in the sea, so nothing that belongs on land
+    # rides with her. Her hull runs along +Z,
     # parallel to the road at a placement yaw of 0 or 180 (180 on the
     # track's right turns the longboat to the open sea). Both ride the
     # swell (set_motion.h): a cove is an anchorage because it is sheltered,
     # so she rolls a few degrees on a slow period, which still swings the
     # masthead a unit, and heaves a little; the longboat bobs out of step.
     S, YAW, black = 0.65, 0.12, 0x38383d
+    LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; the main's aback, its mast behind it there
     with animated('anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2', (0.0, 0.0, 0.0), yaw=YAW):
-        K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'brown', 'salmon', stretch=1.24, ports=True)
-        own_sail(K, S, YAW, 0.67, 3.5, 7.7, 2.2, black, mark=True)
-        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.3)
-        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45)
+        K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True)
+        own_sail(K, S, YAW, 0.67, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG, aback=True)   # (under her top: braced, a yard swings clear of it)
+        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.3, brace=BRACE, stretch=LONG, aback=True)
+        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=BRACE, stretch=LONG)
         poly([K(0.0, 4.5, 5.15), K(0.0, 3.3, 1.3), K(0.0, 8.6, 0.85)], [(0, 1, 2)], black)   # her jib
-        fx, fy, fz = K(0.0, 9.9, 0.67)
-        own_jolly_roger((fx, fy - 0.3, fz), YAW + math.pi / 2, 0.42, 'anim_flutter:p=2.2#mast')
+        for (z, _, head), k, p in zip(OWN_SHIP_MASTS, (0.55, 0.45), ('2.2#mast', '2.4#mizzen')):   # her colours at each masthead
+            fx, fy, fz = K(0.0, head, z)
+            own_jolly_roger((fx, fy - 0.3, fz), YAW + math.pi / 2, k, 'anim_flutter:p=' + p)
+        if not LITE:
+            own_jolly_roger(K(0.0, 4.25, -4.6), YAW + math.pi / 2, 0.5, 'anim_flutter:p=2.6#stern')
     bx, bz = 3.4, -2.9
     with animated('anim_bob:h=0.08:p=3.4', (bx, 0.0, bz)):
         own_rowboat((bx, 0.0, bz), yaw=0.9, scale=0.34, large=True)
