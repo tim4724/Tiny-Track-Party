@@ -14195,12 +14195,12 @@ def lawn_alder(x, z, k=1.0, turn=0.0):
 
 def lawn_poplar(x, z, k=1.0):
     """Ribbon's poplar: the tall shape among its orchards, a slim column of
-    lobes stepped up a bare trunk, the apple trees' make."""
-    trees_trunk((x, -0.3, z), 0.4 * k, 5.0 * k, 0.26 * k)
-    trees_lobe(2.0 * k, (x, 6.6 * k, z), 0x6cae55, scale=(1.0, 1.9, 1.0))
-    trees_lobe(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, scale=(1.0, 2.0, 1.0))
+    round-shaded lobes stepped up a bare trunk, the apple trees' make."""
+    rprop_round(trees_trunk((x, -0.3, z), 0.4 * k, 5.0 * k, 0.26 * k))
+    rprop_lobe(2.0 * k, (x, 6.6 * k, z), 0x6cae55, scale=(1.0, 1.9, 1.0))
+    rprop_lobe(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, scale=(1.0, 2.0, 1.0))
     if not trees_lite():
-        trees_lobe(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, scale=(1.0, 1.5, 1.0))
+        rprop_lobe(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, scale=(1.0, 1.5, 1.0))
 
 # The windmill's field, in the north loop's east side: the wheat standing
 # golden, a crop that comes up over the kerb's height, its rows packed close
@@ -14288,33 +14288,54 @@ def field_wheat_lite():
 # it (bandHold), so one over the whole loop stood the road on a step. It
 # DRAPES: the trees stand on the land as drawn. The lite builds (the Android
 # TV's) keep each tree to one lobe and no apples.
+def rprop_round(o, angle=70.0):
+    """Shade `o` ROUND: smooth over every edge its faces turn less than
+    `angle` at (a six-sided trunk's, a ten-sided drum's sides), hard only at
+    a rim or a cap (a drum's ends turn 90). smooth_by_angle's 40 left a ring
+    of eight or fewer sides faceted. A round part shares its corners, so it
+    costs fewer vertices than a faceted one."""
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(angle))
+    o['chamfer'] = 0
+    return o
+
+def rprop_lobe(r, at, color, scale=(1, 1, 1), yaw=0.0):
+    """A lobe of the orchard's crown, shaded round (round 5's approved
+    apple tree; round 28): an icosphere of two splits, its 42 shared
+    corners fewer than the faceted lobe's 60 (four times its triangles: a
+    split fewer, rounded over 12 corners, read as faceted in the vertex
+    bake). The box's (trees_lite) is that one split."""
+    if trees_lite():
+        return trees_round(sphere(r, at, color, subdiv=1, flat=False, scale=scale, yaw=yaw))
+    return sphere(r, at, color, subdiv=2, flat=False, scale=scale, yaw=yaw)
+
 def apple_tree(x, z, seed, lite, apples=4, lite_fruit=False):
     k = 0.8 + 0.4 * hash01(x, z, seed)                     # a quarter either way
     lx, lz = 0.1 * (hash01(x, z, seed, 1) - 0.5), 0.1 * (hash01(z, x, seed, 2) - 0.5)
-    trunk = trees_trunk((x, -0.3, z), 0.38 * k, 2.4 * k, 0.28 * k)
+    trunk = rprop_round(trees_trunk((x, -0.3, z), 0.38 * k, 2.4 * k, 0.28 * k))
     tilted(trunk, math.atan(lz), math.atan(lx))
     cx, cz, cy = x + lx * 3.4 * k, z + lz * 3.4 * k, 3.7 * k
     a = hash01(x, z, seed, 3) * 6.28
     if lite:
-        trees_lobe(1.9 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.84, 1.0))
+        trees_round(sphere(1.9 * k, (cx, cy, cz), 0x6cae55, subdiv=1, flat=False, scale=(1.0, 0.84, 1.0)))
         # One lobe, and for the scatter's tree a few apples on it, a corner apiece.
         fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
         for j in range(apples if lite_fruit else 0):
             trees_round(box((0.6 * k, 0.6 * k, 0.6 * k), (cx + 1.75 * k * math.cos(a + 2.1 * j), cy + (-0.5, 0.45, -0.1)[j % 3] * k,
                                                            cz + 1.75 * k * math.sin(a + 2.1 * j)), fruit, yaw=a + 2.1 * j))
         return
-    # Faceted, as every lawn tree is: a middle lobe and four smaller round
-    # it, close set and each turned its own way so the crown is one faceted
-    # mass, as the oak's is (three big lobes spread out each read as a green
-    # crystal; shaded round, the orchard was another make of tree). Two of
-    # them on a bough showing under it, so the tree is branched, not a ball
-    # on a stick.
-    lobes = [trees_lobe(1.7 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.88, 1.0), yaw=a)]
+    # Shaded round (round 5's approved orchard; round 28 brought it back
+    # after a faceted round 27): a middle lobe and four smaller round it,
+    # close set, so the crown is one soft mass. Two of them on a bough
+    # showing under it, so the tree is branched, not a ball on a stick.
+    lobes = [rprop_lobe(1.7 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.88, 1.0), yaw=a)]
     for j, (da, r, dy, off, c) in enumerate(((0.0, 1.3, -0.45, 1.4, 0x5f9f4a), (1.6, 1.2, 0.35, 1.35, 0x6cae55),
                                              (3.2, 1.25, -0.2, 1.4, 0x5f9f4a), (4.7, 1.15, 1.0, 0.75, 0x6cae55))):
         b = a + da
         px, pz = cx + off * k * math.cos(b), cz + off * k * math.sin(b)
-        lobes.append(trees_lobe(r * k, (px, cy + dy * k, pz), c, scale=(1.0, 0.86, 1.0), yaw=b * 1.7))
+        lobes.append(rprop_lobe(r * k, (px, cy + dy * k, pz), c, scale=(1.0, 0.86, 1.0), yaw=b * 1.7))
         if j < 2:
             with plain_parts():
                 strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, TREES_BARK)
@@ -14410,7 +14431,7 @@ def bale_trailer(at):
         box((3.0, 0.2, 1.9), (x, y + 0.95, z), 0x9a7b55)
         box((0.9, 0.12, 0.12), (x + 1.9, y + 0.8, z), 0x4f5260)                   # the drawbar
         for dx in (-0.75, 0.75):
-            cyl(0.7, 1.4, (x + dx, y + 1.75, z - 0.7), 'yellow', segs=10, axis='along')
+            rprop_round(cyl(0.7, 1.4, (x + dx, y + 1.75, z - 0.7), 'yellow', segs=10, axis='along'))
 
 @piece(REAL)
 def hay_meadow():
@@ -14430,7 +14451,7 @@ def hay_meadow():
         for x in ROWS:
             z = Z0
             while z <= Z1 + 1e-6:
-                cyl(1.15, 1.6, (x, 1.15, z - 0.8), 'yellow', segs=10, axis='along')
+                rprop_round(cyl(1.15, 1.6, (x, 1.15, z - 0.8), 'yellow', segs=10, axis='along'))   # round, crisp ends
                 z += STEP
         for o in bpy.context.scene.objects:      # straw yellow, not run down the ramp to orange
             if o not in before:
@@ -14525,7 +14546,11 @@ def cow_farm():
 def farm_fence():
     def still():
         ribbon_fence(((0.0, -6.0), (0.0, 1.9)), step=1.5)
+        before = set(bpy.context.scene.objects)
         ribbon_gate((0.0, 1.9), (0.0, 3.0))
+        for o in bpy.context.scene.objects:             # the gate, the thing a racer reads, chamfered (round 28)
+            if o not in before:
+                o['chamfer'] = 1
         ribbon_fence(((0.0, 3.0), (0.0, 6.0)), step=1.5)
     draped('fence', still)
 
@@ -19384,10 +19409,12 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
     bands round it and the cascabel behind; a timber truck of a bed and two
     stepped cheeks the trunnions lie on, on four small wheels. A car and a
     half long at k = 1, its wheels on the ground at `at`. `bare` leaves
-    out her axles, trunnions and cascabel (the scatter's prop)."""
+    out her axles, trunnions and cascabel (the scatter's prop). The iron and
+    the wheels are shaded round (round 28: the Kenney gun's), crisp at
+    their ends."""
     x0, y0, z0 = at
     iron, band, wood = 0x38383d, 0x4f5260, 0xb06041
-    segs = 6 if LITE else 8
+    segs = 8                                              # (shaded round, eight sides cost what six flat ones did)
     def W(lx, ly, lz):
         x, z = turned(x0, z0, yaw, lx * k, lz * k)
         return (x, y0 + ly * k, z)
@@ -19402,7 +19429,7 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
             if not bare:
                 b((0.7, 0.07, 0.07), 0.0, 0.18, lz, iron)                        # an axle
             for sx in (-1, 1):
-                rowed(cyl(0.18 * k, 0.11 * k, W(sx * 0.375 - 0.055, 0.18, lz), 'bark', segs=6 if LITE else 10, axis='across', yaw=yaw), 6)
+                rprop_round(rowed(cyl(0.18 * k, 0.11 * k, W(sx * 0.375 - 0.055, 0.18, lz), 'bark', segs=8 if LITE else 10, axis='across', yaw=yaw), 6))
                 if not LITE:
                     b((0.14, 0.08, 0.08), sx * 0.375, 0.18, lz, iron)
         if not bare:
@@ -19411,9 +19438,9 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
     Z0, Z1, Y0, Y1 = -0.56, 0.8, 0.62, 0.71
     def bore(lz):
         return Y0 + (Y1 - Y0) * (lz - Z0) / (Z1 - Z0)
-    rod(W(0.0, Y0, Z0), W(0.0, Y1, Z1), 0.19 * k, iron, r2=0.13 * k, segs=segs)
+    rprop_round(rod(W(0.0, Y0, Z0), W(0.0, Y1, Z1), 0.19 * k, iron, r2=0.13 * k, segs=segs))
     def ring(lz, r, w, color):
-        rod(W(0.0, bore(lz - w / 2), lz - w / 2), W(0.0, bore(lz + w / 2), lz + w / 2), r * k, color, segs=segs)
+        rprop_round(rod(W(0.0, bore(lz - w / 2), lz - w / 2), W(0.0, bore(lz + w / 2), lz + w / 2), r * k, color, segs=segs))
     ring(0.77, 0.18, 0.14, iron)                                                 # the muzzle's swell
     ring(-0.5, 0.22, 0.12, iron)                                                 # the breech ring
     for lz, r in () if LITE else ((-0.14, 0.2), (0.3, 0.175)):
@@ -19431,15 +19458,15 @@ def cove_chest(at, yaw=0.0, k=1.0, lid='shut'):
         return (x, y0 + ly * k, z)
     def b(size, lx, ly, lz, color):
         return box([s * k for s in size], W(lx, ly, lz), color, yaw=yaw)
-    b((0.9, 0.42, 0.56), 0.0, 0.21, 0.0, wood)
+    rprop_bevel(b((0.9, 0.42, 0.56), 0.0, 0.21, 0.0, wood), 0.04 * k)   # (rounded over, round 28)
     p = max(0.01, 0.007 / k)                              # how far the iron stands off the wood: a hair, but never under one that flickers
     with plain_parts():
         for lx in (-0.29, 0.29):
             b((0.09, 0.42 + 2 * p, 0.56 + 3 * p), lx, 0.21, 0.0, iron)
         b((0.15, 0.15, 0.05), 0.0, 0.3, 0.29, gold)                              # the lock
-    if lid == 'shut':
-        b((0.92, 0.12, 0.58), 0.0, 0.48, 0.0, wood)
-        b((0.92, 0.09, 0.4), 0.0, 0.58, 0.0, wood)
+    if lid == 'shut':                                     # (rounded over, round 28: the Kenney chest's soft lid)
+        rprop_bevel(b((0.92, 0.12, 0.58), 0.0, 0.48, 0.0, wood), 0.035 * k)
+        rprop_bevel(b((0.92, 0.09, 0.4), 0.0, 0.58, 0.0, wood), 0.028 * k)
         with plain_parts():
             for lx in (-0.29, 0.29):                          # (their feet a hair over the lid's, not in its underside)
                 b((0.09, 0.12 + p, 0.58 + 2 * p), lx, 0.48 + 1.5 * p, 0.0, iron)
@@ -19576,11 +19603,11 @@ def prize_at_anchor():
     with animated('anim_sway:a=z:d=4:p=8.5+bob:h=0.1:p=5.6#prize', (0.0, 0.0, 0.0), yaw=YAW):
         own_ship((0.0, -0.08, 0.0), YAW, S, 'blue', 'cream')                      # her topsides blue, to the rail
         for (y, z, w) in ((7.7, 0.67, 2.1), (8.0, -4.01, 1.9)):                   # each yard, its sail furled along it
-            rod(K(-w - 0.1, y, z), K(w + 0.1, y, z), 0.12 * S, wood, segs=6)
-            rod(K(-w + 0.2, y - 0.36, z + 0.1), K(w - 0.2, y - 0.36, z + 0.1), 0.3 * S, cream, segs=6)
+            rprop_round(rod(K(-w - 0.1, y, z), K(w + 0.1, y, z), 0.12 * S, wood, segs=6))       # (round, round 28)
+            rprop_round(rod(K(-w + 0.2, y - 0.36, z + 0.1), K(w - 0.2, y - 0.36, z + 0.1), 0.3 * S, cream, segs=6))
             for i in () if LITE else range(4):
                 gx = -w + 0.6 + i * (2 * w - 1.2) / 3
-                rod(K(gx - 0.07, y - 0.36, z + 0.1), K(gx + 0.07, y - 0.36, z + 0.1), 0.33 * S, 0x38383d, segs=6)
+                rprop_round(rod(K(gx - 0.07, y - 0.36, z + 0.1), K(gx + 0.07, y - 0.36, z + 0.1), 0.33 * S, 0x38383d, segs=6))
         flag_on_pole(K(0.0, 9.6, 0.68), 0.7, (0xcf534f, 0xfff6eb, 0xcf534f, 0xfff6eb), 'anim_flutter:p=2.3#pennant', w=1.1, fh=0.5)
         poly([K(0.0, 4.5, 5.15), K(0.0, 3.5, 1.5), K(0.0, 8.6, 0.85)], [(0, 1, 2)], 0xfff6eb)   # her jib, left set
         beam(K(0.3, 2.5, 5.0), K(1.3, -0.6, 8.8), 0.07, cream)                     # her cable, from the bow
@@ -27548,13 +27575,14 @@ for _k in 'abc':
 OWN_BOX = 0.445      # the item box's side; the renderer sizes it by its height (mBoxScale)
 
 def own_item_box_faces():
-    """The item box: a cube with a broad chamfer on every edge, a four-pointed
-    star cut into its four sides and its top. One swatch's ramp by height
-    (the renderer tints the body through it, kBoxTint) with each face's panel
-    a few rows lighter, the stars white."""
-    s, c = OWN_BOX, 0.085
-    h, a = s / 2, s / 2 - c
-    R, r = 0.3 * s, 0.1 * s
+    """The item box: a cube, a four-pointed star cut into its four sides and
+    its top, its corners shared so chamfer() rounds every edge over (round
+    28: the Kenney box's broad soft edge; a flat cut read hard). One
+    swatch's ramp by height (the renderer tints the body through it,
+    kBoxTint) with each face's panel a few rows lighter, the stars white."""
+    s = OWN_BOX
+    h = a = s / 2
+    R, r = 0.28 * s, 0.1 * s
     row = lambda y, lift=0: max(1, 3 + 25 * (1 - y / s) - lift)
     out = []
     axes = (((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
@@ -27575,25 +27603,12 @@ def own_item_box_faces():
         k = r / math.sqrt(2)
         star = [(R, 0), (k, k), (0, R), (-k, k), (-R, 0), (-k, -k), (0, -R), (k, -k)]
         out.append(('white', own_facing([pt(n, u, v, h, fu, fv) + (0,) for fu, fv in star], n), 'star'))
-    # the chamfers: one along each edge, a triangle at each corner
-    for i, (n, u, v) in enumerate(axes):
-        for m, _, _ in axes[i + 1:]:
-            if abs(sum(n[k] * m[k] for k in range(3))) > 0.5:
-                continue                                  # opposite faces share no edge
-            w = (n[1] * m[2] - n[2] * m[1], n[2] * m[0] - n[0] * m[2], n[0] * m[1] - n[1] * m[0])
-            q = [tuple(n[k] * (h if f == 0 else a) + m[k] * (a if f == 0 else h) + w[k] * e * a + (h if k == 1 else 0.0)
-                       for k in range(3)) for f, e in ((0, -1), (0, 1), (1, 1), (1, -1))]
-            out.append(('purple', own_facing([p + (row(p[1]),) for p in q], tuple(n[k] + m[k] for k in range(3))), 'box'))
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            for sz in (-1, 1):
-                q = [(sx * h, sy * a + h, sz * a), (sx * a, sy * h + h, sz * a), (sx * a, sy * a + h, sz * h)]
-                out.append(('purple', own_facing([p + (row(p[1]),) for p in q], (sx, sy, sz)), 'box'))
     return out
 
 @own_model('item-box')
 def own_item_box():
-    own_shell('item-box', own_item_box_faces())
+    # rounded over just short of the stars' points (every lap draws eight in view on every track)
+    rprop_bevel(own_shell('item-box', own_item_box_faces(), smooth=True), 0.094)
 
 @own_model('item-banana')
 def own_item_banana():
@@ -27624,11 +27639,13 @@ def own_item_banana():
             for (u, v, col) in ((0, 1, 'yellow'), (1, 2, 'yellow'), (2, 3, 'cream'), (3, 0, 'yellow')):
                 q = [s0[u], s0[v], s1[v], s1[u]]
                 cen = tuple(sum(p[k] for p in q) / 4 - mid[k] for k in range(3))
-                faces.append((col, own_facing([p + (row(p) if col == 'yellow' else 6,) for p in q], cen), 'peel'))
-        faces.append(('yellow', own_facing([p + (26,) for p in secs[-1]], (e[0], 0.2, e[1])), 'peel'))
+                faces.append((col, own_facing([p + (row(p) if col == 'yellow' else 6,) for p in q], cen), 'peel%d' % i))
+        faces.append(('yellow', own_facing([p + (26,) for p in secs[-1]], (e[0], 0.2, e[1])), 'peel%d' % i))
     faces += own_band('salmon', (0.034, 0.15, 26), (0.046, 0.25, 14), 4, 'stalk', phase=math.pi / 4)
-    faces.append(('salmon', own_facing([p + (10,) for p in own_ring(0.046, 0.25, 4, math.pi / 4)], (0, 1, 0)), 'stalk'))
-    own_shell('item-banana', faces)
+    faces.append(('salmon', own_facing([p + (10,) for p in own_ring(0.046, 0.25, 4, math.pi / 4)], (0, 1, 0)), 'stalktop'))
+    # shaded round (round 28: the Kenney skin's soft peels), the pale
+    # inside and the stalk's cut end each a crisp edge
+    own_shell('item-banana', faces, smooth=True)
 
 @own_model('item-cone')
 def own_item_cone():
@@ -27647,6 +27664,53 @@ def own_item_cone():
     join_still('item-cone')
 
 # ---- the scatter's props ----
+
+def rprop_bevel(o, width, segs=2):
+    """Round `o`'s edges over as chamfer() does a block marked `round`
+    (hardened normals: flat faces, the cut shaded round), in `segs`
+    segments, not its three: for a part every lap draws many of. The
+    box's tier (BOX_TIER) leaves it a block, chamfer()'s to cut or not."""
+    if BOX_TIER:
+        return o
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)   # (the cut in the part's own units)
+    b = o.modifiers.new('round', 'BEVEL')
+    b.width, b.segments, b.limit_method, b.angle_limit = width, segs, 'ANGLE', math.radians(40)
+    b.use_clamp_overlap = b.harden_normals = True
+    for p in o.data.polygons:
+        p.use_smooth = True
+    o['chamfer'] = 0
+    return o
+
+def rprop_shell(name, faces):
+    """own_shell's faces as ONE closed surface: a corner is shared by every
+    face that meets it whatever its swatch, so chamfer() can cut the edges
+    of a block painted in bands (the beacon's board) as it does a box's."""
+    verts, polys, uvs, index = [], [], [], {}
+    for swatch, pts, _ in faces:
+        sx, sy = SWATCH[swatch]
+        loop = []
+        for (x, y, z, row) in pts:
+            key = (round(x, 4), round(y, 4), round(z, 4))
+            if key not in index:
+                index[key] = len(verts)
+                verts.append(tuple(P(x, y, z)))
+            loop.append(index[key])
+            uvs.append(((sx + 12) / 128, 1 - (sy + 0.5 + row) / 128))
+        polys.append(loop)
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], polys)
+    me.update()
+    uv = me.uv_layers.new(name='UVMap')
+    for i, t in enumerate(uvs):
+        uv.data[i].uv = t
+    me.materials.append(atlas_material())
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    o['chamfer'] = 1
+    return o
 
 @own_model('construction-light', grow=0.25)
 def own_road_lamp():
@@ -27672,8 +27736,8 @@ def own_road_lamp():
     for y, n in ((y0, -1), (y1, 1)):
         q = [(-w, y, -t), (w, y, -t), (w, y, t), (-w, y, t)]
         faces.append(('orange', own_facing([v + (row(y),) for v in q], (0, n, 0)), 'board'))
-    own_shell('board', faces)
-    cyl(0.11, 0.14, (0.0, 0.79, -0.07), 'yellow', segs=8, axis='along')
+    rprop_shell('board', faces)                           # its edges chamfered as a box's (round 28)
+    rprop_round(cyl(0.11, 0.14, (0.0, 0.79, -0.07), 'yellow', segs=8, axis='along'))
     join_still('construction-light')
 
 def own_cask(at, k=1.0, yaw=0.0):
@@ -27768,8 +27832,10 @@ def own_jolly_roger(at, yaw, scale, flap=None):
     def W(lx, ly, lz=0.0):
         return (x0 + (lx * c + lz * s) * k, y0 + ly * k, z0 + (-lx * s + lz * c) * k)
     box((0.3 * k, 0.16 * k, 0.3 * k), W(0, 0.08), 'grey', yaw=yaw)
-    box((0.16 * k, 3.4 * k, 0.16 * k), W(0, 1.7), 'brown', yaw=yaw)
-    box((0.22 * k, 0.2 * k, 0.22 * k), W(0, 3.5), 'dark', yaw=yaw)
+    # the pole a turned spar, tapering, and a ball at its head, shaded round
+    # (round 28: the Kenney flag's; a square bar read hard)
+    rprop_round(cyl(0.09 * k, 3.36 * k, W(0, 0.12), 'brown', r2=0.065 * k, segs=8, stem=True, caps=False))
+    trees_round(sphere(0.13 * k, W(0, 3.5), 'dark', subdiv=1, flat=False))
     L, Hc, top = 1.0, 0.72, 3.3
     def cloth():
         parts = [rowed(box((L * k, Hc * k, 0.07 * k), W(0.1 + L / 2, top - Hc / 2), 'dark', yaw=yaw), 8)]
@@ -27797,30 +27863,59 @@ def own_rock_sand():
                 (0.18, -0.22, 0.2, 5.0, 14.0, 0.8)), ('tan', 'salmon'), 'tan')
     join_still('rock')
 
+def rprop_lump(x, z, s, yaw, seed, squat, side, top):
+    """A worn stone `s` across at (x, z), bedded a little: a turned form of
+    seven sides (a pebble five), each corner a little in or out (the same in
+    every ring, so its flanks run straight up), shaded ROUND about itself
+    (the Kenney stones' soft flanks), a flat top on a crisp rim. Faces for
+    own_shell: the canyons scatter it thick, so two bands a side."""
+    n, H = 7 if s > 0.2 else 5, 0.5 * s * squat
+    k = [1 + 0.22 * jitter(i, 1, seed) for i in range(n)]
+    def ring(r, y, w):
+        return [(x + r * k[i] * math.cos(yaw + 2 * math.pi * i / n), y, z + 0.85 * r * k[i] * math.sin(yaw + 2 * math.pi * i / n), w)
+                for i in range(n)]
+    rings = [ring(0.54 * s, -0.1 * H, 22), ring(0.55 * s, 0.75 * H, 10), ring(0.43 * s, H, 6)]
+    g, out = 'lump%d' % int(seed), []
+    for lo, hi in zip(rings, rings[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            out.append((side, own_facing([lo[i], lo[j], hi[j], hi[i]], (lo[i][0] + lo[j][0] - 2 * x, 0.0, lo[i][2] + lo[j][2] - 2 * z)), g))
+    out.append((top, own_facing([p[:3] + (4,) for p in rings[-1]], (0, 1, 0)), g + 'top'))
+    return out
+
 @own_model('stones')
 def own_stone_heap():
-    # ...and its red stone: a broken block standing among what fell off it.
-    own_stones(((0.0, -0.04, 0.44, 1.1, 21.0, 1.45), (0.24, 0.18, 0.32, 2.6, 22.0, 0.95), (-0.24, 0.16, 0.26, 4.0, 23.0, 0.9),
-                (-0.3, -0.2, 0.15, 0.3, 24.0, 0.8), (0.32, -0.2, 0.13, 2.2, 25.0, 0.8)), ('salmon', 'brown'), 'salmon')
-    join_still('stones')
+    # ...and its red stone: a broken block standing among what fell off it,
+    # worn round (round 28; faceted shards in round 27 lost the Kenney heap's look).
+    faces = []
+    for (x, z, sz, yaw, seed, squat) in ((0.0, -0.04, 0.44, 1.1, 21.0, 1.45), (0.24, 0.18, 0.32, 2.6, 22.0, 0.95),
+                                          (-0.24, 0.16, 0.26, 4.0, 23.0, 0.9), (-0.3, -0.2, 0.15, 0.3, 24.0, 0.8),
+                                          (0.32, -0.2, 0.13, 2.2, 25.0, 0.8)):
+        faces += rprop_lump(x, z, sz, yaw, seed, squat, 'salmon', 'salmon')
+    own_shell('stones', faces, smooth=True)
 
 @own_model('skateboard', grow=1.0 / 3)
 def own_skateboard():
-    # A toy skateboard: a wooden deck kicked up at nose and tail, black grip
-    # over the whole of its top, two grey trucks and four pale wheels tucked
-    # under it.
-    hw, th = 0.46, 0.08
-    prof = ((-1.04, 0.47), (-0.74, 0.36), (0.74, 0.36), (1.04, 0.47))          # (z, the underside's y)
+    # A toy skateboard: a wooden deck kicked up at nose and tail, its ends
+    # rounded, black grip over the whole of its top, two grey trucks and
+    # four pale wheels tucked under it. The wood is shaded round from its
+    # edge in under it (round 28: the Kenney board's soft deck), the grip's
+    # edge crisp.
+    hw, th, L, rc = 0.46, 0.08, 1.04, 0.3
+    ends = [(L - rc + rc * math.cos(t), hw - rc + rc * math.sin(t)) for t in (0.0, 0.7, 1.22, math.pi / 2)]
+    st = [(-z, w) for z, w in ends] + [(z, w) for z, w in ends[::-1]]            # (z, half width), tail to nose
+    y = lambda z: 0.36 + 0.11 * max(0.0, (abs(z) - (L - rc)) / rc) ** 1.4         # the underside, kicked up at each end
     faces = []
-    for (z0, y0), (z1, y1) in zip(prof, prof[1:]):
-        faces.append(('dark', own_facing([(-hw, y0 + th, z0, 5), (hw, y0 + th, z0, 5), (hw, y1 + th, z1, 5), (-hw, y1 + th, z1, 5)], (0, 1, 0)), 'deck'))
-        faces.append(('brown', own_facing([(-hw, y0, z0, 24), (hw, y0, z0, 24), (hw, y1, z1, 24), (-hw, y1, z1, 24)], (0, -1, 0)), 'deck'))
+    for (z0, w0), (z1, w1) in zip(st, st[1:]):
+        y0, y1 = y(z0), y(z1)
+        faces.append(('dark', own_facing([(-w0, y0 + th, z0, 5), (w0, y0 + th, z0, 5), (w1, y1 + th, z1, 5), (-w1, y1 + th, z1, 5)], (0, 1, 0)), 'grip'))
+        faces.append(('brown', own_facing([(-w0, y0, z0, 24), (w0, y0, z0, 24), (w1, y1, z1, 24), (-w1, y1, z1, 24)], (0, -1, 0)), 'deck'))
         for sx in (-1, 1):
-            q = [(sx * hw, y0, z0, 14), (sx * hw, y1, z1, 14), (sx * hw, y1 + th, z1, 10), (sx * hw, y0 + th, z0, 10)]
-            faces.append(('brown', own_facing(q, (sx, 0, 0)), 'deck'))
-    for sz, (z, y) in ((-1, prof[0]), (1, prof[-1])):
-        faces.append(('brown', own_facing([(-hw, y, z, 14), (hw, y, z, 14), (hw, y + th, z, 10), (-hw, y + th, z, 10)], (0, 0, sz)), 'deck'))
-    own_shell('deck', faces)
+            q = [(sx * w0, y0, z0, 14), (sx * w1, y1, z1, 14), (sx * w1, y1 + th, z1, 10), (sx * w0, y0 + th, z0, 10)]
+            faces.append(('brown', own_facing(q, (sx * (z1 - z0), 0, -(w1 - w0))), 'deck'))
+    for sz, (z, w) in ((-1, st[0]), (1, st[-1])):
+        faces.append(('brown', own_facing([(-w, y(z), z, 14), (w, y(z), z, 14), (w, y(z) + th, z, 10), (-w, y(z) + th, z, 10)], (0, 0, sz)), 'deck'))
+    own_shell('deck', faces, smooth=True)
     wheels = []
     for sz in (-1, 1):
         box((0.44, 0.2, 0.16), (0.0, 0.27, sz * 0.6), 'grey')
@@ -27839,12 +27934,12 @@ def own_sled():
     wood = 'brown'
     horn = [(-1.0, 0.0), (0.4, 0.0), (0.76, 0.1), (0.98, 0.36), (1.0, 0.78), (0.8, 0.78), (0.78, 0.46), (0.64, 0.28),
             (0.38, 0.16), (-1.0, 0.16)]
+    # Every edge chamfered, the runners' too (round 28: the Kenney sled's soft timber).
     for sx in (-1, 1):
         x = sx * 0.5
-        prism(horn, x, 0.11, wood)
-        with plain_parts():
-            for z in (-0.72, 0.12):
-                box((0.1, 0.34, 0.14), (x, 0.31, z), wood)
+        prism(horn, x, 0.11, wood)['chamfer'] = 1
+        for z in (-0.72, 0.12):
+            box((0.1, 0.34, 0.14), (x, 0.31, z), wood)
     for sx in (-1, 0, 1):
         box((0.3, 0.08, 1.5), (sx * 0.36, 0.52, -0.26), 'salmon')
     join_still('sled')
@@ -27867,7 +27962,7 @@ def own_snow_bunker():
                 out = (lo[i][0] + lo[j][0] - 2 * cx, 0.6, lo[i][2] + lo[j][2] - 2 * cz)
                 faces.append(('snow', own_facing([lo[i], lo[j], hi[j], hi[i]], out), 'bank'))
         faces.append(('snow', own_facing(tiers[-1], (0, 1, 0)), 'bank'))
-    own_shell('bunker', faces)
+    own_shell('bunker', faces, smooth=True)                 # packed snow, shaded round (round 28: the Kenney bank's soft heaps)
 
 @own_model('snow-pile')
 def own_snow_pile():
@@ -27884,7 +27979,7 @@ def own_snow_pile():
             faces.append(('snow', own_facing([lo[i], lo[j], mid[j], mid[i]], out), 'pile'))
             faces.append(('snow', own_facing([mid[i], mid[j], top[j], top[i]], out), 'pile'))
         faces.append(('snow', own_facing(top, (0, 1, 0)), 'pile'))
-    own_shell('snow-pile', faces)
+    own_shell('snow-pile', faces, smooth=True)              # shaded round, as the Kenney drift was (round 28)
 
 def own_ball(r, at, color, rows=(4, 22), squash=0.9, n=6, grp='ball'):
     """A rolled ball as a turned form of `n` sides in four rings, shaded
@@ -28019,11 +28114,15 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
         return box((size[0] * S, size[1] * S, size[2] * S), K(x, y, z), color, yaw=yaw)
     secs = OWN_SHIP_SECS
     n = len(secs) - 1
+    before = set(bpy.context.scene.objects)
     heeled_hull(K, secs, ('bark',) * n, (topsides,) * n)
+    hull = [o for o in bpy.context.scene.objects if o not in before]
+    for strake in [[o for o in hull if o['swatch'] == c] for c in ('bark', snap(topsides))]:
+        rprop_hull(strake)                                # each strake one surface, shaded round along her (round 28)
     def q(z, h0, a0, h1, a1):
         return [K(-h0, a0, z), K(h0, a0, z), K(h1, a1, z), K(-h1, a1, z)]
-    hexa(q(-4.8, 1.76, 3.05, 1.7, 4.2), q(-2.3, 2.26, 2.85, 2.1, 4.1), topsides)       # the quarterdeck
-    hexa(q(2.6, 1.86, 2.95, 1.75, 3.6), q(4.25, 0.2, 3.45, 0.2, 3.9), topsides)        # the forecastle
+    hexa(q(-4.8, 1.76, 3.05, 1.7, 4.2), q(-2.3, 2.26, 2.85, 2.1, 4.1), topsides)['chamfer'] = 1   # the quarterdeck
+    hexa(q(2.6, 1.86, 2.95, 1.75, 3.6), q(4.25, 0.2, 3.45, 0.2, 3.9), topsides)['chamfer'] = 1    # the forecastle (both chamfered, round 28)
     decks = [[(-2.15, 2.94, -2.3), (2.15, 2.94, -2.3), (2.25, 2.89, 0.5), (-2.25, 2.89, 0.5)],
              [(-2.25, 2.89, 0.5), (2.25, 2.89, 0.5), (1.75, 3.04, 2.6), (-1.75, 3.04, 2.6)],
              [(-1.55, 4.23, -4.7), (1.55, 4.23, -4.7), (1.95, 4.13, -2.4), (-1.95, 4.13, -2.4)],
@@ -28080,6 +28179,44 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
     beam(K(0.0, 3.75, 3.7), K(0.0, 4.6, 5.3), 0.24 * S, wood)                           # the bowsprit
     return K
 
+def rprop_hull(objs, angle=55.0):
+    """A strake's lengths (hexa solids of one colour) joined into one
+    surface, the walls between the lengths gone, shaded round along her
+    and hard at the keel, the waterline, the sheer and her ends: the
+    Kenney ship's soft hull, where each length was a flat-sided box."""
+    import bmesh
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    if len(objs) > 1:
+        bpy.ops.object.join()
+    o = bpy.context.view_layer.objects.active
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    walls = {}
+    for f in bm.faces:
+        walls.setdefault(frozenset(v.index for v in f.verts), []).append(f)
+    bmesh.ops.delete(bm, geom=[f for fs in walls.values() if len(fs) > 1 for f in fs], context='FACES')
+    bm.to_mesh(o.data)
+    bm.free()
+    return rprop_round(o, angle)
+
+def rprop_cloth(verts, faces, color):
+    """poly()'s two-sided sheet shaded round: each side its own corners
+    (sharing them, the two sides' normals cancelled), so a bellied sail
+    reads as cloth, not as folded card."""
+    n = len(verts)
+    me = bpy.data.meshes.new('cloth')
+    me.from_pydata([tuple(P(*v)) for v in verts] * 2, [], list(faces) + [tuple(n + i for i in reversed(f)) for f in faces])
+    me.update()
+    for f in me.polygons:
+        f.use_smooth = True
+    o = bpy.data.objects.new('cloth', me)
+    bpy.context.scene.collection.objects.link(o)
+    return paint(o, color)
+
 def own_sail(K, S, yaw, z, y0, y1, w, color, belly=0.55, mark=False, brace=0.0, stretch=1.0, aback=False):
     """A square sail set on its yard at ship's z: `w` half its width, y0 to
     y1, bellied forward (`aback`: hung abaft the mast and pressed aft, as a
@@ -28102,9 +28239,9 @@ def own_sail(K, S, yaw, z, y0, y1, w, color, belly=0.55, mark=False, brace=0.0, 
         return K(cols[i] * w * (1 - 0.06 * (1 - rows[j])), y0 + (y1 - y0) * rows[j], z + f * (0.08 + bx))
     verts = [at(i, j) for j in range(3) for i in range(4)]
     faces = [(j * 4 + i, j * 4 + i + 1, (j + 1) * 4 + i + 1, (j + 1) * 4 + i) for j in range(2) for i in range(3)]
-    parts = [poly(verts, faces, color)]
-    parts.append(rod(K(-w - 0.15, y1, z), K(w + 0.15, y1, z), 0.11 * S, 'brown', segs=6))
-    parts.append(rod(K(-w, y0, z + f * (0.08 + belly * 0.3)), K(w, y0, z + f * (0.08 + belly * 0.3)), 0.09 * S, 'brown', segs=6))
+    parts = [rprop_cloth(verts, faces, color)]
+    parts.append(rprop_round(rod(K(-w - 0.15, y1, z), K(w + 0.15, y1, z), 0.11 * S, 'brown', segs=6)))
+    parts.append(rprop_round(rod(K(-w, y0, z + f * (0.08 + belly * 0.3)), K(w, y0, z + f * (0.08 + belly * 0.3)), 0.09 * S, 'brown', segs=6)))
     if mark:                                              # (the middle cloth lies at 0.75 x full(0) of the belly)
         parts += skull_mark(K(0.0, (y0 + y1) / 2, z + f * (0.08 + belly * 0.75 * full(0.0))), 1.4 * (y1 - y0) * S,
                             yaw + math.pi / 2, t=0.03)
