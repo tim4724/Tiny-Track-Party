@@ -9273,7 +9273,7 @@ def snow_fir(kind, at, tall):
         except ReferenceError:
             del _FIRS[key]
     if key not in _FIRS:
-        src = own_shell('fir', own_fir_faces(kind, FIR_LITE), smooth=FIR_LITE)
+        src = own_shell('fir', own_fir_faces(kind, FIR_LITE), smooth=True)
         _FIRS[key] = src.data
         bpy.data.objects.remove(src, do_unlink=True)
     o = bpy.data.objects.new('fir', _FIRS[key].copy())
@@ -27419,24 +27419,29 @@ def own_band(swatch, lo, hi, n, grp, phase=0.0, at=(0.0, 0.0)):
 # snow lying above it, on a short fat trunk the colour of a toy's wood: a
 # fir two units tall is a few dozen pixels there, and the stepped outline
 # and the green-white-green banding are all of it that arrives. So it is
-# flat sides turned about the trunk, each skirt one straight slope from its
-# rim in under the next skirt, which overhangs it by a hand, and every tier
-# runs its own ramp, light at its top and dark at the rim.
+# sides turned about the trunk, each skirt one straight slope from its rim
+# in under the next skirt, which overhangs it by a hand, and every tier
+# runs its own ramp, light at its top and dark at the rim. It is shaded
+# round, as the approved (Kenney) fir was: a band shares its corners round
+# the trunk (own_shell's smooth), and the light breaks only where the
+# swatch or the part does, at the rim, the snow line and under the skirt.
+# Shaded flat, side by side, the user called it hard-edged and broken.
 # A STAND of them has to read as dark wood with snow on it: the undersides
 # are the ramp's dark end, and one fir of the three is nearly all green.
 # With every kind mostly snow and its green from the ramp's light half, a
 # wooded slope across the valley was a pale mint wash.
-# Three snowfalls: `a` with snow lying on each tier down to a toothed
+# Three snowfalls: `a` with snow lying on each tier down to a scalloped
 # line; `b` the dark one, green all but a thin roll of snow along each rim
 # and a cap on its point; `c` snowed right over, the green left only under
 # the rims. The full build's snow sits a third of the way down the snow
 # ramp, toward its blue: the approved (Kenney) fir's snow was a pale blue
 # grey, and at the ramp's white end a single fir read whiter than it.
-# The box's build (lite) is five sides, flat as well: a face owns its
-# corners, so the light breaks at each edge as it does on the full one
-# (shared corners round it into a banded cone). Its snow line is a saw, one
-# slant to a side, which costs no corner (`b`'s snow lies under it, along
-# the rim, on the skirt's own slope); its point has no shoulder.
+# The box's build (lite) is five sides, shaded round as well, and level
+# snow lines, each one ring (`b`'s snow lies under it, along the rim, on
+# the skirt's own slope); its point has no shoulder. Its snow line was a
+# saw, one slant to a side, on flat sides: from the road a stand of them
+# read as broken. (Six sides cost the box a fifth more triangles a fir, and
+# the scene budget counts triangles: sharing corners saves none of them.)
 # (the underside's y and its outer r, the rim's r and y); the last row is the point's shoulder and tip
 OWN_FIR_TIERS = ((0.34, 0.54, 0.60, 0.41), (0.83, 0.41, 0.46, 0.885), (1.27, 0.32, 0.36, 1.315))
 OWN_FIR_POINT = ((0.15, 1.70), (0.0, 1.92))
@@ -27448,9 +27453,7 @@ def own_fir_faces(kind, lite):
     G, S, T = 'green', 'snow', 'salmon'
     out = []
     def band(swatch, lo, hi, g):
-        """A band about the trunk; the box's has a group to each side, so no two faces share a corner."""
-        fs = own_band(swatch, lo, hi, n, g)
-        return [(s, pts, '%s:%d' % (grp, i)) for i, (s, pts, grp) in enumerate(fs)] if lite else fs
+        return own_band(swatch, lo, hi, n, g)
     # the trunk: light at its foot, dark up under the skirt
     out += own_band(T, (0.2, 0.0, 4), (0.13, 0.36, 28), 4 if lite else 6, 'trunk', phase=0.4)
     inner = 0.1
@@ -27462,7 +27465,7 @@ def own_fir_faces(kind, lite):
         y0 = yu if rim else yu - (yl - yu) * inner / (rl - inner)
         out += own_band(G, (0.0 if lite else inner, y0, 31 if lite else 29), (ru, yu, 31 if lite else 29) if rim else (rl, yl, 31), n, g + 'under')   # the underside, in to the skirt below
         if rim:
-            out += own_band(G, (ru, yu, 31 if lite else 29), (rl, yl, 29 if lite else 25), n, g + 'under')      # under the rim
+            out += own_band(G, (ru, yu, 31 if lite else 29), (rl, yl, 29 if lite else 25), n, g + 'rim')        # under the rim: its own group, so the rim stays crisp
         if last:
             (rt, yt), tip = OWN_FIR_POINT
             if lite:
@@ -27473,23 +27476,17 @@ def own_fir_faces(kind, lite):
         at = lambda f: (rl + (rt - rl) * f, yl + (yt - yl) * f)                   # a point up the skirt
         up = (lambda f: f * 0.72) if last and lite else (lambda f: f)             # (the box's top skirt runs on to the tip)
         if kind == 'b' and lite:
-            # the box's: the snow along each rim up to a saw, lying on the
-            # skirt's own slope so each tier stays a cone (a roll stood out
+            # the box's: the snow along each rim up to a level line, lying on
+            # the skirt's own slope so each tier stays a cone (a roll stood out
             # from the rim, the skirt flat off its top, made a far stand of
             # them a pile of drums)
             gb = 25
             (r2, y2) = at(0.38) if last else (rt, yt)
-            lo, hi = own_ring(rl, yl, n), own_ring(r2, y2, n)
-            (ra, ya), (rb, yb) = at(up(0.34)), at(up(0.16))
-            for i in range(n):
-                j = (i + 1) % n
-                rad = (lo[i][0] + lo[j][0], 0.3, lo[i][2] + lo[j][2])
-                A, B = own_ring(ra, ya, n)[i], own_ring(rb, yb, n)[j]
-                out.append((S, own_facing([lo[j] + (12,), lo[i] + (12,), A + (3,), B + (4,)], rad), g + 'roll:%d' % i))
-                out.append((G, own_facing([B + (gb,), A + (gb - 1,), hi[i] + (gb - (11 if last else 13),),
-                                           hi[j] + (gb - (11 if last else 13),)], rad), g + 'skirt:%d' % i))
+            (rs, ys) = at(up(0.25))
+            out += band(S, (rl, yl, 20), (rs, ys, 10), g + 'roll')
+            out += band(G, (rs, ys, gb), (r2, y2, gb - (11 if last else 13)), g + 'skirt')
             if last:
-                out += band(S, (r2, y2, 10), (rt, yt, 1), g + 'tip')
+                out += band(S, (r2, y2, 16), (rt, yt, 6), g + 'tip')
         elif kind == 'b':
             gb = 23
             # a roll of snow along the rim: straight up off it (stood out over
@@ -27507,37 +27504,41 @@ def own_fir_faces(kind, lite):
             else:
                 out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
         elif kind == 'c' and lite:
-            out += band(S, (rl, yl, 26), (rt, yt, 6), g + 'snow')                # (the box's: no edge band, a third more faces on every far stand)
+            out += band(S, (rl, yl, 28), (rt, yt, 10), g + 'snow')                # (the box's: no edge band, a third more faces on every far stand)
         elif kind == 'c':
             (rc, yc) = at(0.05)                                                  # a dark green edge at the rim, the rest snow
             out += band(G, (rl, yl, 27), (rc, yc, 25), g + 'edge')
             out += band(S, (rc, yc, 30), (rt, yt, 15), g + 'snow')
+        elif lite:
+            # the box's `a`: the skirt green up to a level snow line half way up it
+            (rs, ys) = at(up(0.48))
+            out += band(G, (rl, yl, 29), (rs, ys, 21), g + 'skirt')
+            out += band(S, (rs, ys, 20), (rt, yt, 6), g + 'snow')
         else:
+            # the snow line low on the skirt in scallops, the approved fir's: a
+            # lobe of snow hanging flat-bottomed across each side, a cusp of
+            # green up between two at each corner (one broad tooth a side read
+            # as a saw). Its mean is where the fix-final shares had it.
             lo, hi = own_ring(rl, yl, n), own_ring(rt, yt, n)
+            L, sag = yt - yl, 0.1
+            f = 0.22 + (0.05 - 0.3 * sag) / L                                   # (the line's rise over a side averages 0.3 sag)
+            def line(w):                                                         # the lobe's foot, `w` along side i
+                return tuple(low[i][k] + (low[j][k] - low[i][k]) * w for k in range(3))
+            low, cusp = own_ring(*at(f), n), own_ring(*at(f + sag / L), n)
             for i in range(n):
                 j = (i + 1) % n
                 rad = (lo[i][0] + lo[j][0], 0.3, lo[i][2] + lo[j][2])
-                grp = (':%d' % i) if lite else ''
-                if lite:
-                    # the saw: the snow line high at one corner of the side, low at the next
-                    (ra, ya), (rb, yb) = at(up(0.6)), at(up(0.36))
-                    A, B = own_ring(ra, ya, n)[i], own_ring(rb, yb, n)[j]
-                    out.append((G, own_facing([lo[j] + (31,), lo[i] + (31,), A + (23,), B + (25,)], rad), g + 'skirt' + grp))
-                    out.append((S, own_facing([B + (13,), A + (11,)] + ([hi[i] + (2,), hi[j] + (2,)] if rt > 1e-6 else [hi[i] + (1,)]), rad), g + 'snow' + grp))
-                else:
-                    # the snow line low on the skirt, a low tooth of green up into it at the middle of each side
-                    f, sag = 0.22, 0.1
-                    (rs, ys), (rg, yg) = at(f), at(f + sag / (yt - yl))
-                    mid, peak = own_ring(rs, ys, n), own_ring(rg, yg, n)
-                    m = tuple((peak[i][k] + peak[j][k]) / 2 for k in range(3))
-                    out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), mid[i] + (15,), m + (11,), mid[j] + (15,)], rad), g + 'skirt'))
-                    out.append((S, own_facing([m + (20,), mid[i] + (22,), hi[i] + (8,), hi[j] + (8,), mid[j] + (22,)], rad), g + 'snow'))
+                foot = [line(0.3), line(0.7)]                                    # corner i to corner j
+                out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), cusp[i] + (11,)]
+                                          + [q + (15,) for q in foot] + [cusp[j] + (11,)], rad), g + 'skirt'))
+                out.append((S, own_facing([cusp[i] + (20,), hi[i] + (8,), hi[j] + (8,), cusp[j] + (20,)]
+                                          + [q + (22,) for q in foot[::-1]], rad), g + 'snow'))
         if last and not lite:
             out += band(S, (rt, yt, 10 if kind == 'b' else 12), (tip[0], tip[1], 6), g + ('tip' if kind == 'b' else 'snow'))
     return out
 
 def own_fir(kind, lite=False):
-    own_shell('tree', own_fir_faces(kind, lite), smooth=lite)
+    own_shell('tree', own_fir_faces(kind, lite), smooth=True)
 
 for _k in 'abc':
     own_model('tree-snow-' + _k)((lambda k: lambda: own_fir(k))(_k))
