@@ -37,7 +37,7 @@ test('the welcome board footer leads to a licenses page that renders its credits
   // proof the page is rendering the real data rather than its own markup. Every
   // section is the same row form, so a song is an .entry like anything else.
   await expect(page.locator('.entry__title', { hasText: 'Beachfront Celebration' })).toBeVisible();
-  await expect(page.locator('.entry__title', { hasText: 'Toy Car Kit' })).toBeVisible();
+  await expect(page.locator('.entry__title', { hasText: /^Model style after Kenney/ })).toBeVisible();
   await expect(page.locator('.entry__title', { hasText: /^Filament/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
