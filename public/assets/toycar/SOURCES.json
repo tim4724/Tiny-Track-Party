@@ -752,6 +752,7 @@
     "sled.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "snow-bunker.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "snow-pile.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "snowman-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "snowman.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "stones.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "tree-snow-a-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
