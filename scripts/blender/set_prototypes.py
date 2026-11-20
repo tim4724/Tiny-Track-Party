@@ -1341,12 +1341,11 @@ def fig_quad(kind, at, yaw=0.0, coat=0x8a5a3c, k=1.0, pose='up', dip=None, life=
     return F
 
 # What a bird is, in units of the piece it is in at `k` 1 (a gull 0.18
-# tall, a hawk 1.26 across, a penguin 1 tall, the ducks 0.75 over the
-# water): the body's rings tail to breast, the head, the bill, the tail, the
-# wings folded (`back`, one saddle; `folded`, one a flank) or spread
-# (`spread` and its `spread_tip`), a leg, and its blocks (size, where,
-# colour, fine); a bird that slides on its belly has its lying shape too
-# (`slide_*`).
+# tall, a hawk 1.26 across, the ducks 0.75 over the water): the body's
+# rings tail to breast, the head, the bill, the tail, the wings folded
+# (`back`, one saddle; `folded`, one a flank) or spread (`spread` and its
+# `spread_tip`), a leg, and its blocks (size, where, colour, fine). The
+# penguin is a toy of blocks of its own (penguin()).
 FIG_BIRD = {
     'gull': dict(
         colors=dict(body=0xf8f8fb, wing=0x9aa1b4, tip=0x2a2735, bill=0xffc044, leg=0xff7e44),
@@ -1377,92 +1376,29 @@ FIG_BIRD = {
         tail=((-0.16, 0.0, 0.035, 0.012), (-0.32, 0.0, 0.085, 0.012)), tail_c='tail',
         spread=((0.02, 0.02, 0.05, 0.11, 0.016), (0.03, 0.045, 0.3, 0.1, 0.014), (0.0, 0.06, 0.48, 0.075, 0.012)),
         spread_tip=((0.0, 0.06, 0.48, 0.075, 0.012), (-0.03, 0.08, 0.63, 0.035, 0.008))),
-    # a toy's penguin: square in section (`sides`), a chunky body barely
-    # narrower at the shoulders, the white front a broad flat plate wrapped
-    # round its sides, both feet one orange slab under it (`feet`: size, where).
-    # `soft`: body, head and front take the blocks' chamfer, the round-edged
-    # toy it was approved as (square, its facets' edges read as cut card),
-    # body and head the three-step round-over (`round`, its width in the
-    # bird's units; the box's one cut); the feet, the gold at its ears and
-    # the white over its eyes stay square, as they were then. `slide_*`: the
-    # same toy on its belly, built lying (tipped over from standing, its
-    # height became a hunched ball and its feet a plate stood up behind):
-    # long and flat, the head up at the front, the white along its underside,
-    # flippers out flat along its sides and the feet trailing flat behind.
-    'penguin': dict(
-        colors=dict(body=0x2a2735, wing=0x2a2735, bill=0xff7e44, leg=0xff7e44, belly=0xfff6eb, ear=0xffc044,
-                    eye=0xfff6eb),
-        sides=4, soft=True, round=(0.09, 0.075),
-        # (the white a hand proud of the body's flank all the way up: where it was
-        # a hair, the body's round-over came through it at the waist)
-        body=((0.0, 0.06, 0.215, 0.235), (0.0, 0.48, 0.22, 0.25), (0.0, 0.78, 0.175, 0.2)),
-        belly=((0.13, 0.135, 0.235, 0.135), (0.135, 0.36, 0.25, 0.14), (0.12, 0.68, 0.215, 0.12)),   # (its foot clear of the body's: their chamfers met in one plane)
-        # the box's: a straight column under the shoulders, the white plate
-        # straight up its front and proud of it all the way (a waist that the
-        # plate's two rings cut across showed black bars through the white)
-        whole=((0.0, 0.06, 0.22, 0.24), (0.0, 0.62, 0.22, 0.24), (0.005, 0.82, 0.175, 0.195), (0.01, 1.0, 0.13, 0.14)),
-        whole_belly=((0.13, 0.12, 0.235, 0.135), (0.13, 0.64, 0.235, 0.135)),
-        head=((0.01, 0.72, 0.165, 0.18), (0.015, 0.9, 0.17, 0.185), (0.01, 1.0, 0.125, 0.14)),
-        bill=((0.17, 0.85, 0.06, 0.05), (0.37, 0.83, 0.025, 0.02)),
-        feet=((0.4, 0.1, 0.38), (0.07, 0.05)),
-        folded=((0.0, 0.64, 0.25, 0.1, 0.035), (-0.03, 0.28, 0.33, 0.08, 0.03)), folded_side='x',
-        blocks=(((0.14, 0.13, 0.37), (0.03, 0.86), 'ear', False),     # (the box's too: without it a penguin is a black post)
-                ((0.085, 0.08, 0.07), (0.125, 0.93, 0.155), 'eye', True), ((0.085, 0.08, 0.07), (0.125, 0.93, -0.155), 'eye', True)),
-        slide_body=((-0.46, 0.16, 0.12, 0.09), (-0.3, 0.17, 0.215, 0.145), (0.05, 0.18, 0.23, 0.155),
-                    (0.3, 0.19, 0.18, 0.13)),
-        slide_belly=((-0.34, 0.075, 0.225, 0.075), (0.05, 0.075, 0.24, 0.08), (0.32, 0.1, 0.19, 0.075)),
-        slide_head=((0.24, 0.2, 0.16, 0.15), (0.4, 0.3, 0.17, 0.16), (0.5, 0.36, 0.125, 0.12)),
-        slide_bill=((0.46, 0.34, 0.06, 0.05), (0.68, 0.33, 0.025, 0.02)),
-        slide_out=((-0.02, 0.17, 0.2, 0.11, 0.03), (-0.12, 0.15, 0.44, 0.065, 0.02)),
-        slide_feet=((0.2, 0.05, 0.3), (-0.55, 0.13)),
-        slide_blocks=(((0.12, 0.12, 0.37), (0.38, 0.3), 'ear', False), ((0.07, 0.07, 0.07), (0.46, 0.37, 0.13), 'eye', True),
-                      ((0.07, 0.07, 0.07), (0.46, 0.37, -0.13), 'eye', True))),
-    # a bath toy: the duck in a toy's few blocks
-    'bathduck': dict(
-        colors=dict(body=0xffc044, bill=0xff7e44),
-        body=((-0.6, 0.36, 0.1, 0.06), (-0.3, 0.16, 0.26, 0.2), (0.3, 0.16, 0.26, 0.2), (0.46, 0.3, 0.12, 0.1)),
-        head=((0.3, 0.3, 0.19, 0.19), (0.36, 0.74, 0.17, 0.17)),
-        bill=((0.48, 0.55, 0.11, 0.05), (0.76, 0.52, 0.09, 0.03))),
 }
 
 def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colors):
     """THE bird, `kind` of FIG_BIRD, `k` sizing it, its bill to +X turned by
     `yaw`, in the animals' faceted build: a body drawn out to the
     tail, a head and its bill, wings, legs. `pose`: `stand` (on its feet at
-    `at`), `swim` (on the water at `at`: no legs), `slide` (a penguin on its
-    belly, the middle of it over `at`, flippers out) or `fly` (wings
+    `at`), `swim` (on the water at `at`: no legs) or `fly` (wings
     spread, `bank` rolling it into its turn). `life` names its motion
     (set_motion.h), pivoting at `at`. `colors` recolour it (a mallard
-    drake, a bath duck)."""
+    drake)."""
     A = FIG_BIRD[kind]
     C = dict(A['colors'], **colors)
     C.setdefault('head', C['body'])
-    u = k
-    slide = pose == 'slide'
-    def shape(key):                                            # the lying shape's part, sliding
-        return A['slide_' + key] if slide else A[key]
-    F = fig_frame(at, yaw, u, bank=bank, white=0xfff6eb if kind == 'penguin' else None)
-    whole = fig_lite() and 'whole' in A and not slide          # the box's penguin standing: body and head one limb
-    soft, rnd = [], []
+    F = fig_frame(at, yaw, k, bank=bank)
     def build():
-        sides = A.get('sides', 4 if kind == 'bathduck' else 6)
-        sq = math.sqrt(2) if 'sides' in A else 1.0             # (its rings are a square's half sides, not its corners)
-        rnd.append(F.limb(A['whole'] if whole else shape('body'), C['body'], keep=True, n=sides, f=sq,   # (a penguin's
-                          bury=3 if kind == 'penguin' and not whole and not slide else 0))        # foot on its feet, top in its head)
-        if 'feet' in A and pose in ('stand', 'slide'):
-            F.block(*shape('feet'), C['leg'])
-        if 'belly' in A:
-            soft.append(F.limb(A['whole_belly'] if whole and 'whole_belly' in A else shape('belly'), C['belly'], n=4,
-                               keep=not fig_lite(), f=sq))
+        F.limb(A['body'], C['body'], keep=True)
         if 'tail' in A and (pose != 'fly' or kind == 'hawk'):   # (a gull's body is drawn out to its tail)
             F.limb(A['tail'], C[A['tail_c']], n=4)
         if pose == 'fly':
             F.pair(A['spread'], C['wing'], n=4, side='x')
             F.pair(A['spread_tip'], C['tip'], n=4, side='x')
-        elif slide:
-            F.pair(A['slide_out'], C['wing'], n=4, side='x', bury=1)
         elif 'folded' in A:
-            F.pair(A['folded'], C['wing'], n=4, side=A['folded_side'], fine=True, bury=1 if kind == 'penguin' else 0)
+            F.pair(A['folded'], C['wing'], n=4, side=A['folded_side'], fine=True)
         elif 'back' in A:
             F.limb(A['back'], C['wing'], n=4)
         if pose == 'stand' and 'leg' in A:
@@ -1471,25 +1407,15 @@ def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colo
             F.limb(A['neck'], C['head'], bury=3)
             if C.get('collar'):
                 F.limb(A['collar'], C['collar'], fine=True, bury=3)
-        if not whole:
-            rnd.append(F.limb(shape('head'), C['head'], keep=True, n=sides, f=sq, bury=0 if 'neck' in A or slide else 1))
-        F.limb(shape('bill'), C['bill'], n=4, bury=1)
-        for size, pos, key, fine in A.get('slide_blocks' if slide else 'blocks', ()):
+        F.limb(A['head'], C['head'], keep=True, bury=0 if 'neck' in A else 1)
+        F.limb(A['bill'], C['bill'], n=4, bury=1)
+        for size, pos, key, fine in A.get('blocks', ()):
             F.block(size, pos, C[key], fine=fine)
     if life:
         with animated(life, tuple(at), yaw):
             build()
     else:
         build()
-    if A.get('round'):
-        for o, r in zip(rnd, A['round']):
-            if o is not None:
-                o['round'] = r * u
-                o['lite_chamfer'] = 1                          # (the box's: one cut, a square penguin read as a post)
-    if A.get('soft'):
-        for o in soft + rnd:
-            if o is not None:
-                o['chamfer'] = 1
     return F
 
 # ====================================================================================
@@ -7879,9 +7805,18 @@ def ship_can(at, color, yaw=0.0, roll=0.0, pitch=0.0, L=2.7):
 
 def toy_duck(x, y, z, yaw, k=1.0):
     """A yellow bath duck, a ship's lost cargo, its bill to +Z turned by
-    `yaw` (fig_bird's bath toy), one size wherever its piece is placed;
-    `k` over that for the raft out on the water, a speck from the road."""
-    fig_bird('bathduck', (x, y + 0.01, z), yaw - math.pi / 2, 'swim', k=0.36 * k * row_k())
+    `yaw`: body, head and bill in blocks, the toy approved before round 27
+    (lofted, it read as a slipper), the body and head round-edged; one
+    size wherever its piece is placed, `k` over that for the raft out on
+    the water, a speck from the road."""
+    u = k * row_k()
+    cc, ss = math.cos(yaw), math.sin(yaw)
+    def b(size, d, h, color):
+        return box([e * u for e in size], (x + d * u * ss, y + h * u, z + d * u * cc), color, yaw=yaw)
+    b((0.2, 0.14, 0.26), 0.0, 0.07, 0xffc044)
+    b((0.14, 0.13, 0.14), 0.07, 0.2, 0xffc044)
+    with plain_parts():
+        b((0.08, 0.04, 0.08), 0.17, 0.19, 0xff7e44)
 
 def storm_wrack(rows):
     """Kelp and planks the sea left against something: flat dark lengths,
@@ -10948,26 +10883,74 @@ def snowman_field():
             snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)))
     draped('field', build)
 
+# THE penguin is a toy of blocks, not one of the faceted birds (fig_bird):
+# a dark body full at the belly and narrower at the shoulders, the head on
+# top, the white front wrapped round its front half, the gold at its ears,
+# eyes, beak, flippers and feet. The big blocks have the round edge (box()'s
+# chamfer, kept in the box's tier too: `lite_chamfer`, a square crowd read
+# as posts), the small ones are square. This is the penguin approved before
+# round 27 (a faceted one in its place read as another make, twice).
+
 def penguin(x, y, z, k=0.46, yaw=0.0):
-    """A penguin standing at (x, y, z), beak to +X turned by `yaw`, `k` tall
-    (fig_bird). A live one is joined into one moving part by its caller."""
-    fig_bird('penguin', (x, y, z), yaw, k=k)
+    """A penguin standing at (x, y, z), beak to +X turned by `yaw`, `k` tall:
+    a penguin beside a car is under half a unit. A live one is joined into
+    one moving part by its caller. The box's (fig_lite) has no eyes."""
+    u = k / 0.47
+    c, s2 = math.cos(yaw), math.sin(yaw)
+    def b(size, dx, dy, dz, color, turn=0.0, pitch=0.0):
+        return box(size, (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c), color, yaw=yaw + turn, pitch=pitch)
+    soft = (b((0.23 * u, 0.2 * u, 0.21 * u), 0, 0.14 * u, 0, 0x2a2735),             # belly
+            b((0.2 * u, 0.16 * u, 0.18 * u), 0, 0.29 * u, 0, 0x2a2735),             # shoulders
+            b((0.16 * u, 0.13 * u, 0.15 * u), 0.01 * u, 0.405 * u, 0, 0x2a2735),    # head
+            # the white front wraps round the front half of the body, so a car beside
+            # it sees white as well as one coming at it (a plate on the front alone
+            # read as a black peg from every side but one)
+            snowy(b((0.14 * u, 0.25 * u, 0.235 * u), 0.055 * u, 0.19 * u, 0, 0xfff6eb), 0.15))   # white at any height
+    for o in soft:
+        o['lite_chamfer'] = 1
+    with plain_parts():                                  # too thin for a chamfer to show
+        b((0.18 * u, 0.06, 0.16 * u), 0.03 * u, 0.03, 0, 0xff7e44)                       # feet
+        b((0.06 * u, 0.06 * u, 0.165 * u), 0.01 * u, 0.385 * u, 0, 0xffc044)             # the gold at its ears
+        if not fig_lite():
+            snowy(b((0.04 * u, 0.04 * u, 0.158 * u), 0.065 * u, 0.425 * u, 0, 0xfff6eb), 0.15)   # the eyes
+        b((0.08 * u, 0.06, 0.06), 0.11 * u, 0.385 * u, 0, 0xff7e44)                      # beak
+        for sd in (-1, 1):
+            b((0.12 * u, 0.18 * u, 0.06), 0, 0.22 * u, sd * 0.125 * u, 0x2a2735, pitch=sd * 0.25)   # flippers, angled out
 
 def slider_penguin(x, y, z, k=0.45, yaw=0.0):
     """A penguin on its belly toward +X turned by `yaw`, the size of one `k`
-    tall standing (fig_bird), the pivot under the middle of its belly."""
-    fig_bird('penguin', (x, y, z), yaw, 'slide', k=k)
+    tall standing and in its blocks, the pivot under the middle of its
+    belly: long and flat, the white under it and up its flanks, the head up
+    at the front to see where it is going, the flippers out flat along its
+    sides and the feet trailing flat behind. The box's has no eyes."""
+    u = k / 0.47
+    c, s2 = math.cos(yaw), math.sin(yaw)
+    def b(size, dx, dy, dz, color, turn=0.0, pitch=0.0):
+        return box(size, (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c), color, yaw=yaw + turn, pitch=pitch)
+    # the standing one's body laid on its front, flattened: its white the
+    # underside, a hand proud of the body below and at the flanks as it is
+    # at the front and sides standing
+    soft = (snowy(b((0.3 * u, 0.09 * u, 0.235 * u), -0.035 * u, 0.045 * u, 0, 0xfff6eb), 0.15),
+            b((0.22 * u, 0.16 * u, 0.21 * u), -0.1 * u, 0.09 * u, 0, 0x2a2735),        # belly
+            b((0.18 * u, 0.14 * u, 0.18 * u), 0.08 * u, 0.08 * u, 0, 0x2a2735),        # shoulders
+            b((0.16 * u, 0.13 * u, 0.15 * u), 0.2 * u, 0.19 * u, 0, 0x2a2735))         # the head, up
+    for o in soft:
+        o['lite_chamfer'] = 1
+    with plain_parts():
+        b((0.06 * u, 0.06 * u, 0.165 * u), 0.2 * u, 0.17 * u, 0, 0xffc044)                # the gold at its ears
+        if not fig_lite():
+            snowy(b((0.04 * u, 0.04 * u, 0.158 * u), 0.255 * u, 0.21 * u, 0, 0xfff6eb), 0.15)   # the eyes
+        b((0.08 * u, 0.06, 0.06), 0.3 * u, 0.17 * u, 0, 0xff7e44)                         # beak
+        t = 0.4                                                                           # the flippers, a little swept back
+        for sd in (-1, 1):
+            b((0.1 * u, 0.06, 0.12 * u), -0.02 * u - 0.06 * u * math.sin(t), 0.07 * u,
+              sd * (0.095 * u + 0.06 * u * math.cos(t)), 0x2a2735, turn=-sd * t)
+        b((0.12 * u, 0.06, 0.15 * u), -0.26 * u, 0.05 * u, 0, 0xff7e44)                   # feet, trailing
 
 # The standing penguins' life (set_motion.h): rock on their feet out of step,
 # turn to watch a car coming (radii in world units), a little hop as one
 # passes close.
 PENGUIN = 'anim_waddle+watch:r=30+hop:r=14:h=0.12#%d'
-
-def stood_penguin(x, z, k, yaw, y=0.0):
-    """A penguin of the lite build's crowd: penguin() on the box's plainer
-    limbs, body and head one."""
-    with fig_plain():
-        penguin(x, y, z, k, yaw)
 
 # A CROWD of penguins, every one of them alive, at the cost of a few moving
 # parts: it stands in KNOTS of a few close together, each knot one part
@@ -11011,10 +10994,7 @@ def penguin_knot(tag, cx, cz, yaw, n, H, seed, lying=False, file=False, apart=Tr
             slider_penguin(x, y, z, 0.4 * size, yaw)
         else:                                                            # (every seventh a chick)
             h = (0.34 if (seed + 2 * j) % 7 == 3 else 0.42 + 0.06 * f) * size
-            if apart:
-                penguin(x, y, z, h, yaw + (f - 0.5) * 0.5)
-            else:
-                stood_penguin(x, z, h, yaw + (f - 0.5) * 0.5, y)
+            penguin(x, y, z, h, yaw + (f - 0.5) * 0.5)
     if not apart:
         h0 = H(cx, cz)
         d, p = 6 + seed * 5 % 4, 1.15 + 0.12 * (seed * 3 % 7)
@@ -11092,7 +11072,7 @@ def penguin_group():
 @piece(1.0)
 def penguin_group_lite():
     # the box's rookery: the knots rock as one part each, and every penguin
-    # of it is the plainer one (a walker in flippers past a crowd without read as two kinds)
+    # of it is the box's (a walker of the full make past the crowd read as two kinds)
     with fig_plain():
         penguin_group_build(False)
 
@@ -21281,7 +21261,7 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     the head and neck. `udder` (a dairy cow's) hangs one under the flank."""
     F = fig_quad('cow', at, yaw, coat, k=k, pose=pose, life=life, patch=patch, face=face)
     if udder and pose != 'lie':
-        F.block((0.13, 0.09, 0.13), (-0.2, 0.27), 0xf2bf99)
+        F.block((0.13, 0.09, 0.13), (-0.2, 0.27), 0xf2bf99)['chamfer'] = 1     # (round-edged: not an ear or a horn)
 
 # The ranch's herd on the range by the start (Crag): a dozen head and their
 # calves in loose bunches, each (x, z, yaw, coat, patch, face, size, pose);
