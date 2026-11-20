@@ -79,7 +79,6 @@ ScenerySpec grassScenery() {
     { "set-tree-alder", 0.0f, 0.95f, 0.45f },       // Tangle's tall dark wood
     { "set-tree-willow", 0.0f, 0.95f, 0.3f },       // and its willows
     { "set-tree-apple", 0.0f, 1.3f, 0.6f },         // Ribbon's round orchard tree
-    { "set-tree-poplar", 0.0f, 0.9f, 0.4f },        // and its poplar
   };
   s.hasBush = true;
   s.bush = { "set-lawn-shrub", 0.9f, 0.5f, 0.0f };
@@ -107,17 +106,14 @@ ScenerySpec grassScenery() {
 // light rigs.
 PropsSpec gardenProps() {
   PropsSpec p;
-  // The tent is Nature Kit, which is authored small — a third of a car length —
-  // so it is staged at better than twice its own size to read as something you
-  // could camp in beside a toy car. The generated crate and bale are already
-  // at world scale and are not. Hay bales line the kerb the way they line a
-  // real one, among road-works lights (City Kit Roads, authored at street
-  // scale, so well over twice its size). Only here: road works mean something
-  // on a country road, and nothing on a beach, a ski run or a bedroom floor.
-  p.models = { "prop-hay", "prop-crate", "tent-open", "construction-light" };
+  // Hay bales line the kerb the way they line a real one, among crates and
+  // road-works lights (a lamp authored at street scale, so staged at well
+  // over twice its size). Only here: road works mean something on a country
+  // road, and nothing on a beach, a ski run or a bedroom floor.
+  p.models = { "prop-hay", "prop-crate", "construction-light" };
   p.scatterDensity = 0.28f;
-  p.scatter = { { 0, 0.40f, 0.85f, 0.4f, false, true }, { 1, 0.22f, 0.9f, 0.25f },
-                { 2, 0.22f, 2.0f, 0.5f }, { 3, 0.16f, 2.4f, 0.4f, true, true } };
+  p.scatter = { { 0, 0.52f, 0.85f, 0.4f, false, true }, { 1, 0.28f, 0.9f, 0.25f },
+                { 2, 0.20f, 2.4f, 0.4f, true, true } };
   return p;
 }
 

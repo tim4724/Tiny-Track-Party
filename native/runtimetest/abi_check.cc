@@ -1560,7 +1560,7 @@ void themeThroughAbi() {
   // authored, then the bush donor (its own model, the lawn's shrub).
   check(std::strcmp(ttp_theme_scenery_models("grass"),
                     "[\"set-tree-oak\",\"set-tree-cherry\",\"set-tree-cherry-white\",\"set-tree-alder\","
-                    "\"set-tree-willow\",\"set-tree-apple\",\"set-tree-poplar\",\"set-lawn-shrub\"]") == 0,
+                    "\"set-tree-willow\",\"set-tree-apple\",\"set-lawn-shrub\"]") == 0,
         "grass stamps its seven tree families and the shrub, in authored order");
   check(std::strcmp(ttp_theme_scenery_models("playroom"), "[]") == 0,
         "the playroom stamps no scenery models — no trees indoors");

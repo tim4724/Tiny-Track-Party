@@ -162,7 +162,7 @@ def box(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     place(o, at, yaw, pitch, roll)
     return paint(o, color)
 
-def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem=False):
+def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem=False, caps=True):
     """A cylinder (or cone when r2 differs) whose base centre is `at`, standing
     along `axis` (up | along | across). Faceted, like a Kenney barrel; a thin
     one longer than four radii is a pole, built as the cars' square bar (a log
@@ -174,7 +174,7 @@ def cyl(r, h, at, color, r2=None, segs=8, axis='up', yaw=0.0, smooth=False, stem
         r2 = None if r2 is None else max(r2, BAR / 3) * math.sqrt(2)
         segs, smooth = 4, False
     bpy.ops.mesh.primitive_cone_add(vertices=segs, radius1=r, radius2=r if r2 is None else r2,
-                                    depth=h, end_fill_type='NGON')
+                                    depth=h, end_fill_type='NGON' if caps else 'NOTHING')
     o = bpy.context.active_object
     for v in o.data.vertices:
         v.co.z += h / 2
@@ -1358,43 +1358,71 @@ def umbrella(at, r, h, colors, gores=8):
         rim1 = (x + math.cos(a1) * r, y + h - 0.1, z + math.sin(a1) * r)
         poly([top, rim0, rim1], [(0, 1, 2)], colors[i % len(colors)])
 
-def palm(at, h=2.4, lean=0.3, yaw=0.0, trunk=0x9a7b55, sink=0.0):
-    """A palm in the kit's manner, as tall as the beach's own (1.8 to 3): a
-    leaning trunk in three tapering lengths, a crown of drooping fronds, two
-    coconuts. `sink` carries the trunk on that far under its foot, for a palm
-    set rigidly on a slope (its downhill side shows trunk, not air)."""
+def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
+    """THE palm, the scatter's (palm-tall, palm-bend) and every piece's: one
+    make at any size. A trunk leaning over in three tapering lengths, shaded
+    round, dark at its foot; a crown of six fronds, each a leaf folded along
+    its rib, out from the head and up a little, then drooping to a point,
+    darker underneath; two coconuts. It carries its own shade (own_shell),
+    so a palm is the same palm in a tall piece and a low one. `reach` is a
+    frond's length; `sink` carries the trunk on that far under its foot, for
+    a palm set rigidly on a slope (its downhill side shows trunk, not air).
+    LITE (the box's): the trunk in two lengths of five sides, five fronds,
+    no coconuts, and the crown ONE surface, the fronds joined by a web at
+    the head. Lite's far form keeps no small shape whole
+    (TtpRenderer::farForm, kFarWhole is the full tier's): it folded each
+    separate blade of a short palm away along its own width, and a stand
+    stood as bare trunks from eighty units off."""
     x, y, z = at
     k = h / 4.2
+    reach = reach or 0.46 * h
     dx, dz = math.cos(yaw), math.sin(yaw)
-    # (the box's palm, LITE: its trunk in two lengths of five sides, five
-    # fronds, no coconuts)
-    ts, sides, fronds = ((0, 0.5, 1.0), 5, 5) if LITE else ((0, 0.36, 0.7, 1.0), 6, 6)
-    pts = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t) for t in ts]
+    ts, sides, n = ((0, 0.5, 1.0), 5, 5) if LITE else ((0, 0.36, 0.7, 1.0), 6, 6)
+    line = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t, (0.3 - 0.17 * t) * k, 17 - 13 * t) for t in ts]
     if sink:
-        rod((x, y - sink, z), pts[0], 0.3 * k, trunk, segs=sides)
-    for i in range(len(ts) - 1):
-        rod(pts[i], pts[i + 1], (0.3 - 0.18 * ts[i]) * k, trunk, r2=(0.3 - 0.18 * ts[i + 1]) * k, segs=sides) if LITE else \
-            rod(pts[i], pts[i + 1], (0.3 - 0.06 * i) * k, trunk, r2=(0.26 - 0.06 * i) * k, segs=6)
-    tx, ty, tz = pts[-1]
-    if LITE:
-        # The box's crown is ONE surface, a star of five fronds joined at
-        # the trunk's head. Lite's far form keeps no small shape whole
-        # (TtpRenderer::farForm, kFarWhole is the full tier's): it folded
-        # each separate blade of a short palm away along its own width, and
-        # a stand stood as bare trunks from eighty units off.
-        rim = []
-        for i in range(2 * fronds):
-            a = yaw + i * math.pi / fronds + 0.3
-            r, y = (2.1 * k, ty - 0.45 * k) if i % 2 == 0 else (0.75 * k, ty - 0.1 * k)
-            rim.append((tx + r * math.cos(a), y, tz + r * math.sin(a)))
-        top = (tx, ty - 0.02 * k, tz)
-        poly([top] + rim, [(0, 1 + i, 1 + (i + 1) % (2 * fronds)) for i in range(2 * fronds)], 0x61cb8b)
-    for i in range(0 if LITE else fronds):              # each frond one blade, drooping
-        a = yaw + i * 2 * math.pi / fronds + 0.3
+        line.insert(0, (x, y - sink, z, 0.3 * k, 19))
+    faces = []
+    for i, ((xa, ya, za, ra, wa), (xb, yb, zb, rb, wb)) in enumerate(zip(line, line[1:])):
+        lo, hi = own_ring(ra, ya, sides, at=(xa, za)), own_ring(rb, yb, sides, at=(xb, zb))
+        for j in range(sides):
+            q = [lo[j] + (wa,), lo[(j + 1) % sides] + (wa,), hi[(j + 1) % sides] + (wb,), hi[j] + (wb,)]
+            faces.append(('brown', own_facing(q, (lo[j][0] + lo[(j + 1) % sides][0] - 2 * xa, 0.0, lo[j][2] + lo[(j + 1) % sides][2] - 2 * za)), 'trunk'))
+    own_shell('palm', faces, smooth=True)
+    tx, ty, tz = line[-1][:3]
+    w = 0.17 * reach
+    head = (tx, ty + 0.04 * reach, tz)
+    ribs = []
+    for i in range(n):
+        a = yaw + i * 2 * math.pi / n + 0.3
         ca, sa = math.cos(a), math.sin(a)
-        beam((tx, ty + 0.1 * k, tz), (tx + ca * 2.1 * k, ty - 0.45 * k, tz + sa * 2.1 * k), 0.5 * k, 0x61cb8b, d=0.06)
-    for sd in () if LITE else (-1, 1):
-        box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
+        mid = (tx + ca * 0.55 * reach, ty + 0.2 * reach, tz + sa * 0.55 * reach)
+        tip = (tx + ca * reach, ty - 0.26 * reach, tz + sa * reach)
+        ribs.append((ca, sa, mid, tip))
+    leaves = []
+    def leaf(q, grp):                                        # light above, darker underneath
+        q = own_facing(q, (0.0, 1.0, 0.0))
+        leaves.append(('green', q, grp))
+        leaves.append(('green', [c[:3] + (c[3] + 4,) for c in q[::-1]], grp + 'under'))
+    if LITE:
+        for i, (ca, sa, mid, tip) in enumerate(ribs):
+            a0, a1 = yaw + (i - 0.5) * 2 * math.pi / n + 0.3, yaw + (i + 0.5) * 2 * math.pi / n + 0.3
+            v0, v1 = [(tx + math.cos(b) * 0.3 * reach, ty - 0.04 * reach, tz + math.sin(b) * 0.3 * reach) for b in (a0, a1)]
+            leaf([head + (2,), v0 + (7,), mid + (4,)], 'crown')
+            leaf([head + (2,), mid + (4,), v1 + (7,)], 'crown')
+            leaf([v0 + (7,), tip + (12,), mid + (4,)], 'crown')
+            leaf([mid + (4,), tip + (12,), v1 + (7,)], 'crown')
+        own_shell('palm', leaves, smooth=True)
+        return
+    for ca, sa, mid, tip in ribs:
+        edge = lambda p, sd, drop: (p[0] - sa * sd * w, p[1] - drop, p[2] + ca * sd * w)
+        for sd in (-1, 1):
+            e0, e1 = edge(head, sd, 0.05 * reach), edge(mid, sd, 0.14 * reach)
+            for q in ([head + (2,), mid + (4,), e1 + (10,), e0 + (7,)], [mid + (4,), tip + (13,), e1 + (10,)]):
+                leaf(q, 'leaf')
+    own_shell('palm', leaves)
+    with plain_parts():
+        for sd in (-1, 1):
+            box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
 
 class square:
     """Blocks built inside stay square: a small thing far out (a swimmer's
@@ -4007,7 +4035,7 @@ def palm_clump(tag, cx, cz, palms, bushes):
     sway = 'sway:a=%s:d=3:p=%.1f' % ('xz'[n % 2], 3.2 + 0.3 * (n % 5))
     with animated('anim_drape+%s#%s' % (sway, tag), (cx, 0.0, cz)):
         for (dx, dz, h, lean, yw) in palms:                # close in: a palm a stride uphill of the pivot stood buried to its crown
-            palm((cx + 0.5 * dx, 0, cz + 0.5 * dz), h=h, lean=lean, yaw=math.radians(yw), trunk='tan', sink=1.1)
+            palm((cx + 0.5 * dx, 0, cz + 0.5 * dz), h=h, lean=lean, yaw=math.radians(yw), sink=1.1)
 
 @piece(1.0)
 def jungle_grove():
@@ -4100,13 +4128,21 @@ def cove_bush(x, z, r, h, row, turn=0.0, y=0.0):
 
 def cove_fern(x, z, k, turn=0.0, n=6, y=0.0):
     """A stemless crown of fronds standing out of the scrub (a young palm, a
-    banana's leaves): the palm's own blades, rising from one foot."""
+    banana's leaves): the palm's own leaf (palm()), folded along its rib,
+    rising from one foot. Drawn from both sides."""
+    verts, faces = [(x, y + 0.1, z)], []
     for i in range(n):
         a = turn + i * 2 * math.pi / n
         ca, sa = math.cos(a), math.sin(a)
-        up = 0.75 + 0.25 * (i % 2)
-        beam((x + ca * 0.1 * k, y + 0.1, z + sa * 0.1 * k), (x + ca * 1.25 * k, y + up * 1.15 * k, z + sa * 1.25 * k),
-             0.42 * k, 0x61cb8b, d=0.06)
+        top = (0.75 + 0.25 * (i % 2)) * 1.15 * k
+        at = lambda out, up, sd=0.0: (x + ca * out * k - sa * sd * k, y + up, z + sa * out * k + ca * sd * k)
+        b = len(verts)
+        verts += [at(0.62, 0.6 * top - 0.06 * k, -0.22), at(0.7, 0.6 * top + 0.06 * k), at(0.62, 0.6 * top - 0.06 * k, 0.22), at(1.25, top)]
+        faces += [(0, b, b + 1), (0, b + 1, b + 2), (b, b + 3, b + 1), (b + 1, b + 3, b + 2)]
+    # (its stalk: a sliver from the foot down into the ground, which is what stands it)
+    faces.append((0, len(verts), len(verts) + 1))
+    verts += [(x + 0.04, y - 0.06, z), (x, y - 0.06, z + 0.04)]
+    return poly(verts, faces, 0x61cb8b)
 
 def cove_rosette(x, z, R, h, n, turn, row, swatch='green', droop=0.25):
     """A fern as it grows on the jungle's floor: ONE crown of `n` fronds
@@ -8644,7 +8680,7 @@ def powder_resort(lite=False):
     if not lite:
         for x, z, g, k in RESORT_FIRS:
             pine((x, g - 0.35 * k, z), k)
-            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
     def lanes():
         for n, pts in enumerate(RESORT_LANES[:1] if lite else RESORT_LANES):
             rows = []
@@ -9201,7 +9237,7 @@ def forest(trees, lite=False):
         else:
             dark_pine((x, g - 0.35 * k, z), k)
         top = g + 0.4 * k if form in (2, 3) else g      # a trunk or a stump is held from its break
-        box((0.24 * k, top, 0.24 * k), (x, top / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+        box((0.24 * k, top, 0.24 * k), (x, top / 2 - 0.35 * k, z), 0x7a5a3a if form in (2, 3) else 'salmon')['chamfer'] = 0   # the fir's own trunk, run on
     FIR_LITE = False
     join_still('pines')
     x, z, _, k = trees[0][:4]
@@ -9950,7 +9986,7 @@ def flurry_hamlet_build(lite):
         FIR_LITE = lite
         g = G(x, z)
         (spruce if n % 4 == 1 else pine)((x, g - 0.35 * k, z), k)
-        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
     FIR_LITE = False
     join_still('hamlet')
     # what lies on the snow as drawn: the trodden paths, sleds and skis by the doors
@@ -10084,7 +10120,7 @@ def flurry_fields(lite=False):
         FIR_LITE = False
         for x, z, g, k in FIELDS_FIRS:
             pine((x, g - 0.35 * k, z), k)
-            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
     def lying():
         rail_fence([(5.0, -15.0), (5.0, -4.6)])                               # along the road, the gateway in it
         rail_fence([(5.0, -1.0), (4.6, 5.0), (3.2, 9.6), (2.4, 12.6)])        # (bending off the road's bank as it closes in)
@@ -10130,7 +10166,7 @@ def flurry_farm(lite=False):
         FIR_LITE = False
         for x, z, g, k in FARM_FIRS:
             pine((x, g - 0.35 * k, z), k)
-            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+            box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
     def lying():
         rail_fence([(3.2, -12.0), (3.2, -3.6)])
         rail_fence([(3.2, -0.8), (3.2, 12.0)])
@@ -12134,7 +12170,7 @@ def cut_ice(rows, i0, seeps, firs, seed):
         x, z = back[0], back[2]
         g = back[1] + 0.7
         spruce((x, g - 0.35 * k, z), k)
-        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 0x7a5a3a)['chamfer'] = 0
+        box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
 
 def gallery_shed(road, s0, s1, seed):
     """An avalanche gallery over the road from sample s0 to s1, at its real
@@ -13580,11 +13616,6 @@ def hedge(F, yaw, y0, a, b, h=1.1, t=0.9):
     pa, pb = F(a[0], 0, a[1]), F(b[0], 0, b[1])
     bld_hedge((pa[0], pa[2]), (pb[0], pb[2]), h, t, y0=y0)
 
-def round_tree(at, h=5.0, r=2.0, color=0x5f9f4a):
-    """A small garden tree: a trunk and one faceted crown."""
-    cyl(0.25 * r / 2, h * 0.5, at, 0x7a5a3a, segs=6)
-    sphere(r, (at[0], at[1] + h - r, at[2]), color, subdiv=1)
-
 def kennel(at, yaw):
     """A dog's kennel, its door on +X, and the dog sitting at it."""
     F = local(at[0], at[2], yaw)
@@ -13950,51 +13981,97 @@ def hash01(*v):
 # No kit fir stands on a lawn: every tree of the grass world is built here,
 # and each backyard track keeps to ONE family, its scatter (the tree_* pieces
 # below, theme.cc backyardTrack) and its set pieces alike, so everything in a
-# frame belongs together. Pretzel: faceted broadleaf oaks. Cloverleaf: cherries
-# in blossom. Tangle: tall dark alders and the weeping willows. Ribbon: the
-# orchard's smooth round-lobed trees and poplars of the same make. Metres
-# (a REAL piece's), the foot at y = 0; none is named `pine` (the snowy pine).
+# frame belongs together. Pretzel: broadleaf oaks. Cloverleaf: cherries in
+# blossom. Tangle: tall dark alders and the weeping willows, one dark wood.
+# Ribbon: the orchard's round-lobed apple trees and poplars of the same make.
+# Metres (a REAL piece's), the foot at y = 0; none is named `pine` (the snowy
+# pine).
+#
+# ONE construction under all of them, so the species read as one hand's work:
+# a trunk of six flat sides in `bark`, tapering, open at both ends (its foot
+# is in the ground and its head in the crown: trees_trunk), under a crown of
+# a few faceted lobes (trees_lobe), each shaded by its height in the piece,
+# light on top. The orchard's lobes alone are shaded round (apple_tree). The
+# box's build of any of them (trees_lite: a `-lite` piece, or LITE) keeps the
+# same lobes and shades them round over shared corners, a fifth of the
+# vertices, and its trunk has five sides.
+def trees_lite():
+    return LITE or (BLD_NOW[0] or '').endswith('-lite')
+
+def trees_round(o):
+    """Shade `o` round over shared corners, however coarse it is (an
+    icosphere of one split turns its faces more than the smooth-by-angle
+    limit, and would come out faceted at three vertices a face)."""
+    o['chamfer'] = 0
+    for f in o.data.polygons:
+        f.use_smooth = True
+    for e in o.data.edges:
+        e.use_edge_sharp = False
+    for name in ('sharp_face', 'sharp_edge'):
+        if name in o.data.attributes:
+            o.data.attributes.remove(o.data.attributes[name])
+    return o
+
+def trees_trunk(at, r, h, r2, color='bark'):
+    """A tree's trunk from `at` up: see the lawn's trees."""
+    lite = trees_lite()
+    o = cyl(r, h, at, color, r2=r2, segs=5 if lite else 6, stem=True, caps=False)
+    return trees_round(o) if lite else o
+
+def trees_bough(at, r, h, r2, a, tip, color='bark'):
+    """A bough out of the trunk at `at`, tipped `tip` over toward bearing `a`."""
+    lite = trees_lite()
+    o = cyl(r, h, at, color, r2=r2, segs=4 if lite else 5, stem=True, caps=False)
+    tilted(o, math.cos(a) * tip, math.sin(a) * tip)
+    return trees_round(o) if lite else o
+
+def trees_lobe(r, at, color, scale=(1, 1, 1), yaw=0.0):
+    """A lobe of a crown: an icosphere of one split, flat-faced (the box's:
+    shaded round)."""
+    o = sphere(r, at, color, subdiv=1, scale=scale, yaw=yaw)
+    return trees_round(o) if trees_lite() and len(o.data.polygons) == 20 else o
+
 def lawn_oak(x, z, k=1.0):
     """Pretzel's oak: a stout trunk under four faceted lobes."""
-    cyl(0.7 * k, 7.5 * k, (x, -0.5, z), 0x7a5a3a, r2=0.5 * k, segs=7)
+    trees_trunk((x, -0.5, z), 0.7 * k, 7.5 * k, 0.5 * k)
     for (dx, y, dz), r, c in (((0.0, 8.6, 0.0), 3.4, 0x5f9f4a), ((-2.2, 7.6, 1.4), 2.6, 0x6cae55),
                               ((0.6, 7.9, -1.8), 2.4, 0x6cae55), ((-0.8, 10.6, 0.4), 2.4, 0x5f9f4a)):
-        sphere(r * k, (x + dx * k, y * k, z + dz * k), c, subdiv=1)
+        trees_lobe(r * k, (x + dx * k, y * k, z + dz * k), c)
 
 CHERRY_CROWN = (((0.0, 7.2, 0.0), 2.9, 0), ((-2.2, 6.2, 1.3), 2.2, 0), ((1.9, 6.5, -1.6), 2.1, 1),
                 ((0.4, 8.8, 0.5), 1.9, 0), ((-0.5, 5.4, -2.3), 1.6, 2))
 
 def lawn_cherry(x, z, k, c, i=0):
-    """Cloverleaf's cherry in blossom, `c` 'pink' or 'white': grey-brown bark,
-    a forked trunk under four lobes of pale blossom (one of the other shade)
-    and a low one in young leaf. `i` turns the crown, so no two in a row are
-    one tree."""
+    """Cloverleaf's cherry in blossom, `c` 'pink' or 'white': a forked trunk
+    under four lobes of pale blossom (one of the other shade) and a low one
+    in young leaf. `i` turns the crown, so no two in a row are one tree."""
     main, other = ('blossom', 'petal') if c == 'pink' else ('petal', 'blossom')
-    cyl(0.5 * k, 5.0 * k, (x, -0.5, z), 'bark', r2=0.32 * k, segs=6)
-    a = 0.6 + 2.1 * i
-    o = cyl(0.3 * k, 3.2 * k, (x, 3.6 * k, z), 'bark', r2=0.14 * k, segs=5, smooth=False)
-    tilted(o, math.cos(a) * 0.8, math.sin(a) * 0.8)
+    trees_trunk((x, -0.5, z), 0.5 * k, 5.0 * k, 0.32 * k)
+    trees_bough((x, 3.6 * k, z), 0.3 * k, 3.2 * k, 0.14 * k, 0.6 + 2.1 * i, 0.8)
     t = 1.3 * i
     ct, st = math.cos(t), math.sin(t)
     for (dx, y, dz), r, kind in CHERRY_CROWN:
-        sphere(r * k, (x + (dx * ct + dz * st) * k, y * k, z + (dz * ct - dx * st) * k),
-               (main, other, 'leaf')[kind], subdiv=1, yaw=t)['ramp'] = 0.75
+        trees_lobe(r * k, (x + (dx * ct + dz * st) * k, y * k, z + (dz * ct - dx * st) * k),
+                   (main, other, 'leaf')[kind], yaw=t)['ramp'] = 0.75
+
+# Tangle's wood is dark: its alders and willows wear the same rows far down
+# the green swatch's ramp, whatever height they stand at.
+TANGLE_ROWS = (17, 21, 25)
 
 def lawn_alder(x, z, k=1.0, turn=0.0):
-    """Tangle's alder: tall and narrow, a dark trunk under three faceted
-    lobes stood one over another, the valley's dark green (far down the
-    swatch's ramp), so a stand of them is a dark wood."""
-    cyl(0.5 * k, 8.0 * k, (x, -0.5, z), 0x5a3a2a, r2=0.32 * k, segs=6)
+    """Tangle's alder: tall and narrow, three lobes stood one over another,
+    the valley's dark green, so a stand of them is a dark wood."""
+    trees_trunk((x, -0.5, z), 0.5 * k, 8.0 * k, 0.32 * k)
     c, s = math.cos(turn), math.sin(turn)
-    for (dx, y, dz), r, sy, row in (((0.0, 7.4, 0.0), 3.3, 1.35, 21), ((0.6, 11.8, -0.4), 2.5, 1.45, 17),
-                                    ((-1.6, 5.8, 1.0), 2.5, 1.15, 25)):
-        rowed(sphere(r * k, (x + (dx * c + dz * s) * k, y * k, z + (dz * c - dx * s) * k), 0x5f9f4a, subdiv=1,
-                     scale=(1.0, sy, 1.0), yaw=turn), row)
+    for (dx, y, dz), r, sy, row in (((0.0, 7.4, 0.0), 3.3, 1.35, TANGLE_ROWS[1]), ((0.6, 11.8, -0.4), 2.5, 1.45, TANGLE_ROWS[0]),
+                                    ((-1.6, 5.8, 1.0), 2.5, 1.15, TANGLE_ROWS[2])):
+        rowed(trees_lobe(r * k, (x + (dx * c + dz * s) * k, y * k, z + (dz * c - dx * s) * k), 0x5f9f4a,
+                         scale=(1.0, sy, 1.0), yaw=turn), row)
 
 def lawn_poplar(x, z, k=1.0):
     """Ribbon's poplar: the tall shape among its orchards, a slim column of
-    smooth lobes stepped up a bare trunk, the apple trees' make."""
-    cyl(0.4 * k, 5.0 * k, (x, -0.3, z), 0x7a5a3a, r2=0.26 * k, segs=6, stem=True)
+    round lobes stepped up a bare trunk, the apple trees' make."""
+    trees_trunk((x, -0.3, z), 0.4 * k, 5.0 * k, 0.26 * k)
     sphere(2.0 * k, (x, 6.6 * k, z), 0x6cae55, subdiv=2, flat=False, scale=(1.0, 1.9, 1.0))
     sphere(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 2.0, 1.0))
     sphere(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 1.5, 1.0))
@@ -14088,7 +14165,7 @@ def field_wheat_lite():
 def apple_tree(x, z, seed, lite, apples=6, top=True, lite_fruit=False):
     k = 0.8 + 0.4 * hash01(x, z, seed)                     # a quarter either way
     lx, lz = 0.1 * (hash01(x, z, seed, 1) - 0.5), 0.1 * (hash01(z, x, seed, 2) - 0.5)
-    trunk = cyl(0.38 * k, 2.4 * k, (x, -0.3, z), 0x7a5a3a, r2=0.28 * k, segs=6, stem=True)
+    trunk = trees_trunk((x, -0.3, z), 0.38 * k, 2.4 * k, 0.28 * k)
     tilted(trunk, math.atan(lz), math.atan(lx))
     cx, cz, cy = x + lx * 3.4 * k, z + lz * 3.4 * k, 3.7 * k
     a = hash01(x, z, seed, 3) * 6.28
@@ -14104,15 +14181,7 @@ def apple_tree(x, z, seed, lite, apples=6, top=True, lite_fruit=False):
                                                    cz + 1.75 * k * math.sin(a + 2.1 * j)), fruit, yaw=a + 2.1 * j)
                 for j in range(apples if lite_fruit else 0)]
         for o in [crown] + dots:
-            o['chamfer'] = 0
-            for f in o.data.polygons:
-                f.use_smooth = True
-            for e in o.data.edges:
-                e.use_edge_sharp = False
-            if 'sharp_face' in o.data.attributes:
-                o.data.attributes.remove(o.data.attributes['sharp_face'])
-            if 'sharp_edge' in o.data.attributes:
-                o.data.attributes.remove(o.data.attributes['sharp_edge'])
+            trees_round(o)
         return
     # the crown in lobes round the middle one, each on a bough of its own
     # showing under it, so the tree is branched, not a ball on a stick
@@ -14122,7 +14191,7 @@ def apple_tree(x, z, seed, lite, apples=6, top=True, lite_fruit=False):
         sphere(r * k, (px, cy + dy * k, pz), c, subdiv=2, flat=False, scale=(1.0, 0.86, 1.0))
         if j < 2:
             with plain_parts():
-                strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, 0x7a5a3a)
+                strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, 'bark')
     if top:
         sphere(1.1 * k, (cx - 0.2 * k, cy + 1.3 * k, cz + 0.2 * k), 0x6cae55, subdiv=2, flat=False, scale=(1.0, 0.8, 1.0))
     # apples a racer can count, out on the crown's skin
@@ -14747,14 +14816,13 @@ def treehouse():
     H = lambda x, z: 0.0
     s0 = H(0.0, 0.0)
     G = lambda x, z: H(x, z) - s0
-    BARK, WOOD = 0x7a5a3a, 0xb08a5a
-    cyl(1.4, 15.0, (0, -2.0, 0), BARK, r2=0.9, segs=10)
+    BARK, WOOD = 'bark', 0xb08a5a
+    cyl(1.4, 15.0, (0, -2.0, 0), BARK, r2=0.9, segs=8, caps=False)
     for a, r, h in ((1.6, 0.6, 5.0), (3.4, 0.55, 4.6), (5.0, 0.5, 4.4)):  # boughs away from the hut
-        o = cyl(r, h, (0, 9.0, 0), BARK, r2=0.25, segs=7, smooth=False)
-        tilted(o, math.cos(a) * 0.9, math.sin(a) * 0.9)
+        trees_bough((0, 9.0, 0), r, h, 0.25, a, 0.9)
     for c, r in (((0, 18.0, 0), 6.2), ((-4.8, 16.0, 3.0), 4.6), ((4.2, 16.6, -3.4), 4.4),
                  ((1.0, 21.2, 2.4), 4.2), ((-2.0, 19.5, -3.6), 3.8)):
-        sphere(r, c, 0x5f9f4a if r > 4.5 else 0x6cae55, subdiv=1)
+        trees_lobe(r, c, 0x5f9f4a if r > 4.5 else 0x6cae55)
     # the platform on four legs, its rails
     PY = 4.4
     box((7.6, 0.35, 6.6), (0.6, PY, 0), WOOD)
@@ -14818,14 +14886,13 @@ def swing_oak():
     # bough. The same tree
     # as the treehouse's, a little smaller, so the summer reaches round the
     # lap without a second den.
-    BARK = 0x7a5a3a
-    cyl(1.2, 12.0, (0, -0.5, 0), BARK, r2=0.8, segs=9)
+    BARK = 'bark'
+    cyl(1.2, 12.0, (0, -0.5, 0), BARK, r2=0.8, segs=8, caps=False)
     for a, r, h in ((2.2, 0.5, 4.4), (4.4, 0.45, 4.0)):
-        o = cyl(r, h, (0, 7.5, 0), BARK, r2=0.22, segs=7, smooth=False)
-        tilted(o, math.cos(a) * 0.9, math.sin(a) * 0.9)
+        trees_bough((0, 7.5, 0), r, h, 0.22, a, 0.9)
     for c, r in (((0, 14.5, 0), 5.2), ((-4.0, 13.0, 2.6), 3.9), ((3.6, 13.4, -2.8), 3.8),
                  ((0.8, 17.6, 2.0), 3.6), ((-1.8, 16.4, -3.0), 3.2)):
-        sphere(r, c, 0x5f9f4a if r > 4.0 else 0x6cae55, subdiv=1)
+        trees_lobe(r, c, 0x5f9f4a if r > 4.0 else 0x6cae55)
     # the swing's bough out toward the road (+X), the tyre on its rope
     BX, BZ = 5.0, 1.0
     strut((0.0, 8.0, 0.2), (BX, 8.9, BZ), 0.6, BARK)
@@ -14844,16 +14911,15 @@ def avenue_oaks():
     # clear of the deck's margin. Laid either side of the road, right at yaw 0,
     # left at yaw 180. The scatter is kept off the avenue's verge by a `clear`
     # landform in the track's `land`, not by this footprint.
-    BARK, STEP, N = 0x7a5a3a, 20.0, 5
+    BARK, STEP, N = 'bark', 20.0, 5
     for i in range(N):
         z = STEP * (i - (N - 1) / 2)
-        cyl(0.95, 10.0, (-0.6, -0.5, z), BARK, r2=0.65, segs=7)
+        trees_trunk((-0.6, -0.5, z), 0.95, 10.0, 0.65)
         for a, r, h in ((2.4, 0.4, 3.6), (4.0, 0.36, 3.2)):           # two boughs, back from the road
-            o = cyl(r, h, (-0.6, 6.0, z), BARK, r2=0.18, segs=6, smooth=False)
-            tilted(o, math.cos(a) * 0.85, math.sin(a) * 0.85)
+            trees_bough((-0.6, 6.0, z), r, h, 0.18, a, 0.85)
         for (x, y, dz), r in (((-1.6, 11.8, 0.0), 4.4), ((-4.4, 10.6, 2.2), 3.3), ((0.6, 10.9, -2.0), 3.0),
                               ((-2.0, 14.4, 1.0), 3.0)):
-            sphere(r, (x, y, z + dz * (1, -1)[i % 2]), 0x5f9f4a if r > 4.0 else 0x6cae55, subdiv=1)
+            trees_lobe(r, (x, y, z + dz * (1, -1)[i % 2]), 0x5f9f4a if r > 4.0 else 0x6cae55)
     join_still('avenue')
 
 def football_pitch_build(lite):
@@ -15307,21 +15373,25 @@ for _name, (_s, _e, _p, _n, _pts, _r) in BROOK_ROUTE.items():
 
 
 def willow(at):
-    """A weeping willow by the water, about as tall as a garden oak (three
-    cars): a short trunk, a low round crown and the streamers of its hanging
-    branches, a ragged fringe with the trunk showing between them, down to a
-    car's height off the ground (one solid curtain read as a green drum)."""
+    """Tangle's weeping willow by the water, about as tall as a garden oak
+    (three cars), the alders' make and their dark green: a short trunk, a
+    low round lobe for a crown and the streamers of its hanging branches, a
+    ragged fringe with the trunk showing between them, down to a car's
+    height off the ground (one solid curtain read as a green drum)."""
     x, y, z = at
-    cyl(0.8, 8.0, (x, y, z), 0x7a5a3a, r2=0.5, segs=7)
-    sphere(4.6, (x, y + 9.6, z), 0x6cae55, subdiv=1, scale=(1.0, 0.62, 1.0))
-    with plain_parts():
-        N = 12
-        for k in range(N):                      # each a streamer narrowing to its tip, flared out
-            a = (k + 0.5) * 2 * math.pi / N
-            h = (5.8, 6.8, 5.1, 6.3)[k % 4]
-            o = cyl(0.0, h, (x + 4.8 * math.cos(a), y + 9.9 - h, z + 4.8 * math.sin(a)),
-                    (0x61cb8b, 0x6cae55)[k % 2], r2=1.15, segs=3, yaw=a + math.pi / 3)
-            tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
+    lite = trees_lite()
+    trees_trunk((x, y, z), 0.8, 8.0, 0.5)
+    rowed(trees_lobe(4.6, (x, y + 9.6, z), 0x5f9f4a, scale=(1.0, 0.62, 1.0)), TANGLE_ROWS[0])
+    N = 8 if lite else 12
+    for k in range(N):                      # each a streamer narrowing to its tip, flared out
+        a = (k + 0.5) * 2 * math.pi / N
+        h = (5.8, 6.8, 5.1, 6.3)[k % 4]
+        o = cyl(0.0, h, (x + 3.6 * math.cos(a), y + 9.9 - h, z + 3.6 * math.sin(a)),
+                0x5f9f4a, r2=1.7 if lite else 1.15, segs=3, yaw=a + math.pi / 3, stem=True, caps=False)
+        tilted(o, -0.14 * math.sin(a), -0.14 * math.cos(a))
+        rowed(o, TANGLE_ROWS[1 + k % 2])
+        if lite:
+            trees_round(o)
 
 def duck(at, color=0xf8f8fb):
     """A duck on the water facing +X (fig_bird). Brown, it is a mallard
@@ -16076,15 +16146,16 @@ def tree_apple_lite():
     scatter_tree(lambda: apple_tree(0.0, 0.0, 3, True, apples=3, lite_fruit=True))
 
 @piece(REAL)
-def tree_poplar():
-    scatter_tree(lambda: lawn_poplar(0.0, 0.0, 1.0))
-
-@piece(REAL)
 def lawn_shrub():
     def build():
         for (x, y, z), r in (((0.0, 0.9, 0.0), 1.5), ((1.3, 0.6, 0.6), 1.05), ((-0.9, 0.55, -0.9), 0.95)):
-            sphere(r, (x, y, z), 0x5f9f4a, subdiv=1, scale=(1.1, 0.8, 1.0))
+            trees_lobe(r, (x, y, z), 0x5f9f4a, scale=(1.1, 0.8, 1.0))
     scatter_tree(build)
+
+# The box's builds of the scatter's trees and shrub (trees_lite: the same
+# builder under a `-lite` name; the apple has its own above).
+for _n in ('tree-oak', 'tree-cherry', 'tree-cherry-white', 'tree-alder', 'tree-willow', 'lawn-shrub'):
+    PIECES[_n + '-lite'], GROW[_n + '-lite'] = PIECES[_n], GROW[_n]
 
 # ---- PRETZEL: a copse on the down ----------------------------------------------------
 # A copse of the downs' oaks on the face of the down the road heads at before
@@ -16098,7 +16169,7 @@ def oak_copse_build(lite):
             if not lite or i < 3:
                 lawn_oak(x, z, k)
         for x, z, r in (() if lite else ((3.0, 1.0, 1.4), (2.2, -10.5, 1.1), (3.2, 11.0, 1.2))):
-            sphere(r, (x, r * 0.5, z), 0x5f9f4a, subdiv=1, scale=(1.1, 0.8, 1.0))
+            trees_lobe(r, (x, r * 0.5, z), 0x5f9f4a, scale=(1.1, 0.8, 1.0))
     draped('copse', still)
 
 @piece(REAL)
@@ -17953,6 +18024,16 @@ def canyon_mat(at, r, h, color, row=None, yaw=0.0, segs=6):
     """One low mound of flowers or brush: a faceted frustum, its top a little
     narrower than its foot, sunk a hair so no edge stands on the sand."""
     o = cyl(r, h, (at[0], at[1] - 0.04, at[2]), color, r2=r * 0.62, segs=segs, yaw=yaw)
+    o.data.polygons.foreach_get('normal', nz := [0.0] * (3 * len(o.data.polygons)))
+    foot = [f for f in o.data.polygons if nz[3 * f.index + 2] < -0.9]       # its foot is on the sand: no face under it
+    if foot:
+        import bmesh
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[f.index] for f in foot], context='FACES')
+        bm.to_mesh(o.data)
+        bm.free()
     return rowed(o, row) if row is not None else o
 
 @piece(1.0)
@@ -17960,8 +18041,12 @@ def canyon_sage():
     with plain_parts():
         for i, (z, r, h, c, row) in enumerate(((-1.2, 0.5, 0.42, 'sage', 2), (-0.35, 0.62, 0.52, 'sage', 8),
                                                (0.55, 0.55, 0.46, 'sage', 4), (1.3, 0.42, 0.36, 'olive', 6))):
-            canyon_mat((0.15 * math.sin(2.1 * i), 0.0, z), r, h, c, row, yaw=1.1 * i, segs=7)
+            o = canyon_mat((0.15 * math.sin(2.1 * i), 0.0, z), r, h, c, row, yaw=1.1 * i, segs=5 if trees_lite() else 7)
+            if trees_lite():
+                trees_round(o)                       # the box's: five sides, shaded round
     join_still('sage')
+
+PIECES['canyon-sage-lite'], GROW['canyon-sage-lite'] = PIECES['canyon-sage'], GROW['canyon-sage']
 
 def wash_bed_build(ford, end=False):
     # Wash: one reach of the dry wash's gravel bed, the floor of the channel
@@ -18451,6 +18536,8 @@ lite_too('ghost-wood', 'fish-racks', 'reef-shelf', 'tidepool-headland', 'reef-st
 lite_too('skull-trail')
 # ...and Driftwood's ship's boxes without their corrugation, half the cargo.
 lite_too('storm-containers', 'storm-containers-b', 'storm-containers-c')
+# Pretzel's lone oaks and avenue and Cloverleaf's first grove: the box's trees (trees_lite).
+lite_too('avenue-oaks', 'swing-oak', 'picnic-oak', 'hay-wain-oak', 'blossom-grove')
 # ...and Riptide's baths on two lane ropes and plainer huts, no rail to the road, its bandstand's audience in one row.
 lite_too('lido', 'seafront-bandstand', 'riptide-lagoon-beach')
 # Round 24: the seafront is the lap's heaviest vista on the box, so what stands
@@ -27176,10 +27263,13 @@ def own_band(swatch, lo, hi, n, grp, phase=0.0, at=(0.0, 0.0)):
 # and the green-white-green banding are all of it that arrives. So it is
 # eight flat sides turned about the trunk, each skirt one straight slope
 # from its rim in under the next skirt, which overhangs it by a hand, and
-# every tier runs its own ramp, light at its top and dark at the rim. Three
-# snowfalls: `a` with snow lying on each tier down to a line that sags in
-# the middle of each side; `b` with a roll of it along each rim and a white
-# tip; `c` snowed right over, the green left only under the rims.
+# every tier runs its own ramp, light at its top and dark at the rim. The
+# snow keeps to the top third of its ramp and the green of a skirt to its
+# middle: on a wooded slope seen from the road below, snow run down to its
+# blue and green run down to its dark made the stand a wall of stripes.
+# Three snowfalls: `a` with snow lying on each tier down to a line that
+# sags in the middle of each side; `b` with a fat roll of it along each rim
+# and a white tip; `c` snowed right over, the green left only under the rims.
 # (the underside's y and its outer r, the rim's r and y); the last row is the point's shoulder and tip
 OWN_FIR_TIERS = ((0.34, 0.54, 0.60, 0.41), (0.83, 0.41, 0.46, 0.885), (1.27, 0.32, 0.36, 1.315))
 OWN_FIR_POINT = ((0.15, 1.70), (0.0, 1.92))
@@ -27196,8 +27286,8 @@ def own_fir_faces(kind, lite):
     for t, (yu, ru, rl, yl) in enumerate(OWN_FIR_TIERS):
         last = t == len(OWN_FIR_TIERS) - 1
         g = 'tier%d' % t
-        out += own_band(G, (inner, yu, 31), (ru, yu, 28), n, g + 'under')       # the underside, in to the skirt below
-        out += own_band(G, (ru, yu, 28), (rl, yl, 22), n, g + 'under')          # under the rim
+        out += own_band(G, (inner, yu, 27), (ru, yu, 23), n, g + 'under')       # the underside, in to the skirt below
+        out += own_band(G, (ru, yu, 23), (rl, yl, 15), n, g + 'under')          # under the rim
         if last:
             (rt, yt), tip = OWN_FIR_POINT
         else:
@@ -27206,31 +27296,31 @@ def own_fir_faces(kind, lite):
         at = lambda f: (rl + (rt - rl) * f, yl + (yt - yl) * f)                   # a point up the skirt
         if kind == 'b':
             # the roll of snow along the rim: out a little, then a shelf in to the skirt
-            (r1, y1) = at(0.13 / (yt - yl))
-            out += own_band(S, (rl, yl, 26), (rl + 0.025, yl + 0.07, 13), n, g + 'roll')
-            out += own_band(S, (rl + 0.025, yl + 0.07, 13), (r1, y1, 4), n, g + 'roll')
+            (r1, y1) = at(0.2 / (yt - yl))
+            out += own_band(S, (rl, yl, 16), (rl + 0.035, yl + 0.11, 8), n, g + 'roll')
+            out += own_band(S, (rl + 0.035, yl + 0.11, 8), (r1, y1, 2), n, g + 'roll')
             if last:
-                (r2, y2) = at(0.55)
-                out += own_band(G, (r1, y1, 26), (r2, y2, 18), n, g + 'skirt')
-                out += own_band(S, (r2, y2, 26), (r2 + 0.04, y2, 26), n, g + 'tipunder')
-                out += own_band(S, (r2 + 0.04, y2, 18), (rt, yt, 8), n, g + 'tip')
+                (r2, y2) = at(0.4)
+                out += own_band(G, (r1, y1, 15), (r2, y2, 10), n, g + 'skirt')
+                out += own_band(S, (r2, y2, 16), (r2 + 0.04, y2, 16), n, g + 'tipunder')
+                out += own_band(S, (r2 + 0.04, y2, 12), (rt, yt, 5), n, g + 'tip')
             else:
-                out += own_band(G, (r1, y1, 26), (rt, yt, 14), n, g + 'skirt')
+                out += own_band(G, (r1, y1, 15), (rt, yt, 7), n, g + 'skirt')
         elif kind == 'c':
-            out += own_band(S, (rl, yl, 26), (rt, yt, 4), n, g + 'snow')
+            out += own_band(S, (rl, yl, 15), (rt, yt, 2), n, g + 'snow')
         else:
             # the snow line a third of the way up the skirt, sagging at the middle of each side
-            f, sag = (0.24, 0.0) if lite else (0.33, 0.08)
+            f, sag = (0.3, 0.0) if lite else (0.37, 0.09)
             (rs, ys), (rg, yg) = at(f), at(f - sag / (yt - yl))
             lo, mid, low, hi = own_ring(rl, yl, n), own_ring(rs, ys, n), own_ring(rg, yg, n), own_ring(rt, yt, n)
             for i in range(n):
                 j = (i + 1) % n
                 rad = (lo[i][0] + lo[j][0], 0.3, lo[i][2] + lo[j][2])
                 m = [tuple((low[i][k] + low[j][k]) / 2 for k in range(3))] if sag else []
-                out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), mid[i] + (14,)] + [q + (15,) for q in m] + [mid[j] + (14,)], rad), g + 'skirt'))
-                out.append((S, own_facing([mid[j] + (24,)] + [q + (26,) for q in m] + [mid[i] + (24,), hi[i] + (4,), hi[j] + (4,)], rad), g + 'snow'))
+                out.append((G, own_facing([lo[j] + (15,), lo[i] + (15,), mid[i] + (8,)] + [q + (9,) for q in m] + [mid[j] + (8,)], rad), g + 'skirt'))
+                out.append((S, own_facing([mid[j] + (14,)] + [q + (15,) for q in m] + [mid[i] + (14,), hi[i] + (2,), hi[j] + (2,)], rad), g + 'snow'))
         if last:
-            out += own_band(S, (rt, yt, 8 if kind == 'b' else 9), (tip[0], tip[1], 2), n, g + ('tip' if kind == 'b' else 'snow'))
+            out += own_band(S, (rt, yt, 5 if kind == 'b' else 6), (tip[0], tip[1], 1), n, g + ('tip' if kind == 'b' else 'snow'))
     return out
 
 def own_fir(kind, lite=False):
@@ -27604,49 +27694,15 @@ def own_snowman():
             beam((sx * rs[1] * 0.8, cy[1] + 0.03, 0.0), (sx * 0.52, cy[1] + 0.16, 0.02), 0.04, 'brown')
     join_still('snowman')
 
-@own_model('tent-open')
-def own_tent():
-    # The garden's tent, its door to +Z: the ridge tents' make (ridge_tent).
-    ridge_tent(0.0, 0.0, 'red', k=0.34, yaw=-math.pi / 2, L=1.9)
-    join_still('tent')
-
-def own_palm(h, lean, reach):
-    """The scatter's palm, the groves' make (palm()) at a prop's size and a
-    prop's cost: a leaning trunk in three lengths, shaded round; six fronds,
-    each a leaf folded along its rib, out from the head and then drooping
-    to a point; two coconuts."""
-    k = h / 4.2
-    ts = (0, 0.36, 0.7, 1.0)
-    pts = [(lean * h * t * t, h * t) for t in ts]
-    trunk = []
-    for i in range(3):
-        (xa, ya), (xb, yb) = pts[i], pts[i + 1]
-        a, b = own_ring((0.3 - 0.07 * i) * k, ya, 6, at=(xa, 0.0)), own_ring((0.24 - 0.07 * i) * k, yb, 6, at=(xb, 0.0))
-        for j in range(6):
-            q = [a[j] + (24 - 6 * i,), a[(j + 1) % 6] + (24 - 6 * i,), b[(j + 1) % 6] + (16 - 6 * i,), b[j] + (16 - 6 * i,)]
-            trunk.append(('brown', own_facing(q, (a[j][0] + a[(j + 1) % 6][0] - 2 * xa, 0.0, a[j][2] + a[(j + 1) % 6][2])), 'trunk%d' % i))
-    own_shell('trunk', trunk, smooth=True)
-    tx, ty = pts[-1]
-    leaves = []
-    for i in range(6):
-        a = i * math.pi / 3 + 0.3
-        ca, sa = math.cos(a), math.sin(a)
-        w = 0.3 * k
-        rib = ((tx, ty + 0.02, 0.0), (tx + ca * 0.55 * reach, ty + 0.1, sa * 0.55 * reach), (tx + ca * reach, ty - 0.13, sa * reach))
-        edge = lambda p, sd, drop: (p[0] - sa * sd * w, p[1] - drop, p[2] + ca * sd * w)
-        for sd in (-1, 1):
-            e0, e1 = edge(rib[0], sd, 0.02), edge(rib[1], sd, 0.07)
-            for q in ([rib[0] + (4,), rib[1] + (6,), e1 + (14,), e0 + (10,)], [rib[1] + (6,), rib[2] + (18,), e1 + (14,)]):
-                leaves.append(('green', q, 'leaf'))
-                leaves.append(('green', q[::-1], 'leaf'))
-    own_shell('fronds', leaves)
-    with plain_parts():
-        for sd in (-1, 1):
-            box((0.3 * k, 0.3 * k, 0.3 * k), (tx, ty - 0.2 * k, sd * 0.25 * k), 0x9a6a46)
-    join_still('palm')
-
-own_model('palm-tall')(lambda: own_palm(1.27, 0.04, 0.54))
-own_model('palm-bend')(lambda: own_palm(1.27, 0.2, 0.5))
+# The scatter's palms: the groves' make (palm()) at a prop's size, and the
+# box's builds of them.
+for _f, _lean, _reach in (('palm-tall', 0.04, 0.54), ('palm-bend', 0.2, 0.5)):
+    def _palm(lean=_lean, reach=_reach, lite=False):
+        with lite_parts(lite):
+            palm((0.0, 0.0, 0.0), h=1.27, lean=lean, reach=reach)
+        join_still('palm')
+    own_model(_f)(_palm)
+    own_model(_f + '-lite')(lambda fn=_palm: fn(lite=True))
 
 # ---- the crew's boats and ships ----
 
