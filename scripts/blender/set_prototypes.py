@@ -978,11 +978,58 @@ def fig_block(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     o['chamfer'] = 0
     return o
 
+# The snowman's balls, in one of three makes between the blocks it was
+# ("blocky") and the split spheres of round 27 ("too round"), for the
+# user to pick from stills of all three (round 28): `block` a block rounded
+# over at every edge, `facet` a ball of eight sides in five bands, flat,
+# `soft` the same shaded round about its axis, a hard break only where two
+# balls meet (four bands drew a lemon). TTP_RFIG_SNOW builds another make
+# for the stills; the scatter's snowman (own_snowman) is the soft one.
+RFIG_SNOW = os.environ.get('TTP_RFIG_SNOW', 'soft')
+
+def rfig_snow_ball(r, at, squash=0.9, yaw=0.0):
+    """A rolled ball of snow `r` in radius and `squash` of that high, in the
+    snowman's make (RFIG_SNOW), white at any height."""
+    if RFIG_SNOW == 'block':
+        o = box((1.8 * r, 1.7 * r * squash, 1.8 * r), at, 0xf3f7fb, yaw=yaw)
+        o['round'] = 0.45 * r
+    else:                                                # (Blender's UV sphere drew its normals a bit apart each run)
+        x, y, z = at
+        n, ring = OWN_BALL_N, OWN_BALL[1:-1]
+        verts = [P(x, y - r * squash, z), P(x, y + r * squash, z)]
+        for rr, yy in ring:
+            verts += [P(*q) for q in own_ring(r * rr, y + r * squash * yy, n, math.pi / n - yaw, (x, z))]
+        at_ = lambda i, k: 2 + i * n + k % n
+        faces = [(0, at_(0, k + 1), at_(0, k)) for k in range(n)]
+        faces += [(1, at_(len(ring) - 1, k), at_(len(ring) - 1, k + 1)) for k in range(n)]
+        faces += [(at_(i, k), at_(i, k + 1), at_(i + 1, k + 1), at_(i + 1, k)) for i in range(len(ring) - 1) for k in range(n)]
+        me = bpy.data.meshes.new('snowball')
+        me.from_pydata(verts, [], faces)
+        me.update()
+        for pl in me.polygons:
+            pl.use_smooth = RFIG_SNOW == 'soft'
+        o = bpy.data.objects.new('snowball', me)
+        bpy.context.scene.collection.objects.link(o)
+        bpy.context.view_layer.update()
+        if sum(1 for pl in me.polygons if pl.normal.dot(pl.center - P(x, y, z)) < 0) > len(faces) // 2:
+            me.flip_normals()
+        paint(o, 0xf3f7fb)
+    return snowy(o, 0.35)
+
+def rfig_round_sides(o):
+    """A turned part (a hat's crown, a scarf) shaded round about its axis, its
+    rim and cap kept crisp."""
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(62))
+    return o
+
 def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='out', balls=3, lean=0.0, broom=False,
                 buttons=0x38383d):
     """THE snowman, `h` tall in the game, its carrot to +X turned by `yaw`:
-    `balls` rolled balls of snow (two for a child's), round as they are in
-    life, a carrot, coal eyes and buttons, stick arms (`arms`: out, up, down
+    `balls` rolled balls of snow (two for a child's, rfig_snow_ball), a
+    carrot, coal eyes and buttons, stick arms (`arms`: out, up, down
     or none), a scarf and a hat of its own kind (`hat`: top, bucket, bobble,
     cone or None); `lean` tips the head off its body, `broom` stands one in
     its hand."""
@@ -998,10 +1045,9 @@ def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='
     for r in rs:
         cy.append(y + r * 0.86)
         y += r * 1.62
-    big = h > 1.5                                        # one that size shows a twice-split ball's facets
-    for i, r in enumerate(rs):
+    for i, r in enumerate(rs):                           # (each rolled a little turned on the last)
         off = lean * k if i == len(rs) - 1 else 0.0
-        snowy(sphere(r, p(0.0, cy[i], off), 0xf3f7fb, subdiv=3 if big else 2, scale=(1.0, 0.9, 1.0), flat=False), 0.35)
+        rfig_snow_ball(r, p(0.0, cy[i], off), yaw=yaw + (0.18, -0.12, 0.0)[i])
     hr, hy, hz = rs[-1], cy[-1], lean * k
     cyl(0.3 * hr, 0.62 * hr, p(hr * 0.78, hy - 0.04 * hr, hz), 0xff7e44, r2=0.1 * hr, segs=6, axis='across', yaw=yaw, stem=True)
     def b(size, pos, color, **kw):
@@ -1011,8 +1057,22 @@ def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='
     for i in range(2 if balls == 3 else 1):
         b((0.04 * k, 0.055 * k, 0.055 * k), (rs[-2] * 0.97, cy[-2] + (0.25 - 0.5 * i) * rs[-2], 0.0), buttons)
     ny = cy[-1] - hr * 0.82                              # the scarf: a band round the neck, an end down the front
-    cyl(hr * 0.9, 0.11 * k, p(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=8, stem=True)
-    b((0.05 * k, 0.26 * k, 0.1 * k), (hr * 0.9, ny - 0.12 * k, hz * 0.6 + 0.3 * hr), scarf)
+    if RFIG_SNOW == 'block':
+        box((1.9 * hr, 0.11 * k, 1.9 * hr), p(0.0, ny, hz * 0.6), scarf, yaw=yaw)
+    else:
+        rfig_round_sides(cyl(hr * 0.9, 0.11 * k, p(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=8, stem=True))
+    # its end hangs from the knot laid down the body's front (stood off the
+    # neck alone, all but its edge was inside the ball under it)
+    r2, ez = rs[-2], hz * 0.6 + 0.3 * hr
+    def front(yy):                                       # the middle ball's face at that height, at the end's side
+        if RFIG_SNOW == 'block':
+            return 0.9 * r2
+        d = (yy - cy[-2]) / (0.9 * r2)
+        return r2 * 0.93 * math.sqrt(max(0.0, 1.0 - d * d - (ez / r2) ** 2))
+    yt, yb = ny - 0.02 * k, ny - 0.26 * k
+    xt, xb = max(hr * 0.9, front(yt)) + 0.025 * k, front(yb) + 0.025 * k
+    b((0.05 * k, math.hypot(xb - xt, yt - yb), 0.1 * k), ((xt + xb) / 2, (yt + yb) / 2, ez), scarf,
+      roll=math.atan2(xb - xt, yt - yb))
     ar, ay = rs[-2], cy[-2] + 0.15 * rs[-2]
     L, stick = 0.42 * k, 0.045 * k
     if arms != 'none':
@@ -1026,16 +1086,16 @@ def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='
         b((0.1 * k, 0.22 * k, 0.26 * k), (0.0, 0.95 * H, bz), 0xffc044)
     top = hy + hr * 0.78
     if hat == 'top':
-        cyl(hr * 1.0, 0.07 * k, p(0.0, top - 0.035 * k, hz), hat_c, segs=8, stem=True)
-        cyl(hr * 0.65, hr * 1.1, p(0.0, top, hz), hat_c, segs=8, stem=True)
+        rfig_round_sides(cyl(hr * 1.0, 0.07 * k, p(0.0, top - 0.035 * k, hz), hat_c, segs=8, stem=True))
+        rfig_round_sides(cyl(hr * 0.65, hr * 1.1, p(0.0, top, hz), hat_c, segs=8, stem=True))
     elif hat == 'bucket':
-        cyl(hr * 0.8, hr * 0.95, p(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=8, stem=True)
+        rfig_round_sides(cyl(hr * 0.8, hr * 0.95, p(0.0, top - 0.05 * k, hz), hat_c, r2=hr * 0.6, segs=8, stem=True))
     elif hat == 'bobble':
         # the bobble alone, white on the white head, half the head's size: under
         # a cap in `hat_c` it read as a cap, not as this snowman
-        snowy(sphere(0.48 * hr, p(0.0, hy + 1.3 * hr, hz), 0xfff6eb, subdiv=1 if fig_lite() else 2, flat=False), 0.15)
+        rfig_snow_ball(0.48 * hr, p(0.0, hy + 1.3 * hr, hz), squash=1.0)
     elif hat == 'cone':
-        cyl(hr * 0.7, hr * 1.5, p(0.0, top - 0.06 * k, hz), hat_c, r2=0.03 * k, segs=6, stem=True)
+        rfig_round_sides(cyl(hr * 0.7, hr * 1.5, p(0.0, top - 0.06 * k, hz), hat_c, r2=0.03 * k, segs=6, stem=True))
 
 # ---- the animals: faceted limbs (loft) on one frame ----
 
@@ -1290,12 +1350,15 @@ FIG_BIRD = {
         spread_tip=((0.0, 0.06, 0.48, 0.075, 0.012), (-0.03, 0.08, 0.63, 0.035, 0.008))),
     # a toy's penguin: square in section (`sides`), a chunky body barely
     # narrower at the shoulders, the white front a broad flat plate wrapped
-    # round its sides, both feet one orange slab under it (`feet`: size, where)
+    # round its sides, both feet one orange slab under it (`feet`: size, where).
+    # `soft`: body, head and front take the blocks' chamfer, the round-edged
+    # toy it was approved as (square, its facets' edges read as cut card);
+    # the feet and the gold at its ears stay square, as they were then
     'penguin': dict(
         colors=dict(body=0x2a2735, wing=0x2a2735, bill=0xff7e44, leg=0xff7e44, belly=0xfff6eb, ear=0xffc044),
-        sides=4,
+        sides=4, soft=True,
         body=((0.0, 0.06, 0.215, 0.235), (0.0, 0.48, 0.23, 0.25), (0.0, 0.78, 0.175, 0.2)),
-        belly=((0.13, 0.12, 0.235, 0.135), (0.135, 0.36, 0.25, 0.14), (0.12, 0.68, 0.205, 0.12)),
+        belly=((0.13, 0.135, 0.235, 0.135), (0.135, 0.36, 0.25, 0.14), (0.12, 0.68, 0.205, 0.12)),   # (its foot clear of the body's: their chamfers met in one plane)
         # the box's: a straight column under the shoulders, the white plate
         # straight up its front and proud of it all the way (a waist that the
         # plate's two rings cut across showed black bars through the white)
@@ -1334,16 +1397,17 @@ def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colo
                   pitch=1.35 if slide else 0.0, bank=bank, drop=-0.2 if slide else 0.0,
                   white=0xfff6eb if kind == 'penguin' else None)
     whole = fig_lite() and 'whole' in A                        # the box's penguin: body and head one limb
+    soft = []
     def build():
         sides = A.get('sides', 4 if kind == 'bathduck' else 6)
         sq = math.sqrt(2) if 'sides' in A else 1.0             # (its rings are a square's half sides, not its corners)
-        F.limb(A['whole'] if whole else A['body'], C['body'], keep=True, n=sides, f=sq,
-               bury=2 if kind == 'penguin' and not whole else 0)
+        soft.append(F.limb(A['whole'] if whole else A['body'], C['body'], keep=True, n=sides, f=sq,
+                           bury=2 if kind == 'penguin' and not whole else 0))
         if 'feet' in A and pose in ('stand', 'slide'):
             F.block(A['feet'][0], A['feet'][1], C['leg'])
         if 'belly' in A:
-            F.limb(A['whole_belly'] if whole and 'whole_belly' in A else A['belly'], C['belly'], n=4,
-                   keep=not fig_lite(), f=sq)
+            soft.append(F.limb(A['whole_belly'] if whole and 'whole_belly' in A else A['belly'], C['belly'], n=4,
+                               keep=not fig_lite(), f=sq))
         if 'tail' in A and (pose != 'fly' or kind == 'hawk'):   # (a gull's body is drawn out to its tail)
             F.limb(A['tail'], C[A['tail_c']], n=4)
         if pose == 'fly':
@@ -1364,7 +1428,7 @@ def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colo
             if C.get('collar'):
                 F.limb(A['collar'], C['collar'], fine=True, bury=3)
         if not whole:
-            F.limb(A['head'], C['head'], keep=True, n=sides, f=sq, bury=0 if 'neck' in A else 1)
+            soft.append(F.limb(A['head'], C['head'], keep=True, n=sides, f=sq, bury=0 if 'neck' in A else 1))
         F.limb(A['bill'], C['bill'], n=4, bury=1)
         for size, pos, key, fine in A.get('blocks', ()):
             F.block(size, pos, C[key], fine=fine)
@@ -1374,6 +1438,10 @@ def fig_bird(kind, at, yaw=0.0, pose='stand', k=1.0, life=None, bank=0.0, **colo
             build()
     else:
         build()
+    if A.get('soft'):
+        for o in soft:
+            if o is not None:
+                o['chamfer'] = 1
     return F
 
 # ====================================================================================
@@ -5598,17 +5666,26 @@ def beach_day():
     # runs along it (+Z).
     red, yellow, blue, white, green = 0xff5040, 0xffc044, 0x339cf2, 0xfff6eb, 0x22c46e
     cols = ((red, white), (blue, white), (yellow, red), (green, white), (0xff7e44, white), (blue, yellow))
+    # two of the loungers taken, a sunbather lying back on each: sat on the
+    # mattress, the body along the raised back, the head at its top (laid
+    # flat at a guess beside one, it read as a heap of blocks on a towel)
+    BATHERS = {1: (yellow, 0x38383d), 2: (red, blue)}
     k = 0
     for z in (-6.6, -4.2, -1.8):
         for x in (0.2, -2.0):
             cx, cz = x + 0.3 * math.sin(3.0 * k), z + 0.4 * math.cos(2.0 * k)
             umbrella((cx, 0, cz), 0.85, 1.25, cols[k % 6], gores=8)
-            sun_lounger((cx + 0.45, 0.0, cz + 0.2), 0.2 * k + math.pi / 2, cols[(k + 2) % 6][0])
+            lx, lz, ly = cx + 0.45, cz + 0.2, 0.2 * k + math.pi / 2
+            sun_lounger((lx, 0.0, lz), ly, cols[(k + 2) % 6][0])
             box((0.4, 0.03, 0.8), (cx - 0.55, 0.02, cz - 0.3), cols[(k + 3) % 6][0], yaw=0.5 + 0.3 * k)   # a towel
+            if k in BATHERS:
+                # the hips where the back rises, the back of the shirt a towel's
+                # thickness over the back's slope (sun_lounger: 0.24 up over 0.29;
+                # at a hair over it the hair's back lay in its plane)
+                shirt, legs = BATHERS[k]
+                fig_person((lx - 0.162 * math.cos(ly), 0.23, lz + 0.162 * math.sin(ly)), ly, 'sit',
+                           shirt=shirt, legs=legs, lean=-0.88)
             k += 1
-    with square():
-        figure((0.65, 0.22, -4.0), 1.57, shirt=red, legs=blue, pose='lie')
-        figure((-1.55, 0.22, -6.4), 1.57, shirt=yellow, legs=0x38383d, pose='lie')
     for i in range(7):                                                           # the windbreak
         box((0.04, 0.8, 0.42), (1.3, 0.48, -0.9 + 0.42 * i), (blue, white)[i % 2])
     for i in range(4):
@@ -10775,10 +10852,9 @@ def snowman(at, hat=False):
     """The snowman by the rink (fig_snowman)."""
     fig_snowman(at, 0.58, hat='top' if hat else None)
 
-def snow_ball(r, at, squash=0.9, subdiv=1):
-    """A rolled ball of snow, round (a block at this size read as a crate);
-    `subdiv` 3 for one big enough that a once-split ball shows its facets."""
-    return snowy(sphere(r, at, 0xf3f7fb, subdiv=subdiv, scale=(1.0, squash, 1.0), flat=False), 0.35)
+def snow_ball(r, at, squash=0.9):
+    """A rolled ball of snow, the snowman's make (rfig_snow_ball)."""
+    return rfig_snow_ball(r, at, squash)
 
 def snowfolk(x, z, h, **kw):
     """One of the snowman field's crowd at (x, z), `h` tall (fig_snowman)."""
@@ -10793,9 +10869,8 @@ def snowman_field():
     # left by them. Big, the father two and a half units tall, so they read
     # from the chase cam at speed past the bend (a field of thirty half-unit
     # snowmen read as specks, and a family a unit and a half tall as small),
-    # and round: rolled balls of snow split three times, smooth, so none of
-    # them reads as a faceted lump. Built on y = 0 and laid on the snow as
-    # drawn (draped).
+    # and in the snowman's make (rfig_snow_ball). Built on y = 0 and laid on
+    # the snow as drawn (draped).
     R, B, G, P, O, D = 0xff5040, 0x3f7bd9, 0x61cb8b, 0xa878e8, 0xff7e44, 0x2a2735
     def build():
         F = (  # x (to the road), z, height, yaw, hat, hat colour, scarf, arms, balls, lean, broom
@@ -10808,9 +10883,9 @@ def snowman_field():
             snowfolk(fx, fz, h, yaw=yw, hat=hat, hat_c=hc, scarf=sc, arms=arms, balls=balls, lean=lean, broom=broom)
         # the snow dog at the father's feet, a red collar on
         ax_, az_, k = 0.6, -6.4, 2.8
-        snow_ball(0.2 * k, (ax_, 0.15 * k, az_), subdiv=2)
-        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_), subdiv=2)
-        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_), subdiv=2)
+        snow_ball(0.2 * k, (ax_, 0.15 * k, az_))
+        snow_ball(0.2 * k, (ax_ - 0.3 * k, 0.15 * k, az_))
+        snow_ball(0.15 * k, (ax_ + 0.22 * k, 0.36 * k, az_))
         for sd in (-1, 1):
             snowy(box((0.07 * k, 0.12 * k, 0.07 * k), (ax_ + 0.22 * k, 0.52 * k, az_ + sd * 0.08 * k), 0xf3f7fb), 0.5)
         box((0.1 * k, 0.06 * k, 0.06 * k), (ax_ + 0.38 * k, 0.35 * k, az_), D)
@@ -10819,7 +10894,7 @@ def snowman_field():
         # what the children left: the sled, the spare snowballs
         sled(1.2, 0, 7.4, 0.4, R, L=1.3)
         for i in range(6):
-            snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)), subdiv=2)
+            snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)))
     draped('field', build)
 
 def penguin(x, y, z, k=0.46, yaw=0.0):
@@ -11108,7 +11183,7 @@ def penguin_chute_build(apart):
         marker('path_drapeslide_%d' % k, pt)
     for n in range(4):                            # spread round the loop; the renderer moves them
         x = TOP + 2.0 + 4.0 * n
-        with animated('anim_path:c=drapeslide:p=13:o=%.3f#%d' % (n / 4, n), (x, 0.07, 0.0)), plain_parts():
+        with animated('anim_path:c=drapeslide:p=13:o=%.3f#%d' % (n / 4, n), (x, 0.07, 0.0)):
             slider_penguin(x, 0.07, 0.0, 0.72)
     # the climbers' loop: out of the water, up the flank in a line, over the
     # top and down behind it, home under the hill; uphill no faster than the
@@ -11121,8 +11196,8 @@ def penguin_chute_build(apart):
         marker('path_drapeclimb_%d' % k, pt)
     for n in range(3):
         at = climb[2 + n]
-        with animated('anim_path:c=drapeclimb:p=90:o=%.3f:f=1+waddle:d=12:p=0.46#%d' % (n / 3, n), at), plain_parts():
-            penguin(at[0], 0.0, at[2], 0.66, 0.0)          # (the watchers' make: the box's build is all plain)
+        with animated('anim_path:c=drapeclimb:p=90:o=%.3f:f=1+waddle:d=12:p=0.46#%d' % (n / 3, n), at):
+            penguin(at[0], 0.0, at[2], 0.66, 0.0)          # (the watchers' make)
 
 @piece(1.0)
 def penguin_chute():
@@ -11419,8 +11494,22 @@ DOG_TEAM = 1.25       # the team over a person's size: read from the road it was
 
 def glacier_musher(x, y, z, coat):
     """The musher stood on the sled's runners, facing +X, hands to the
-    handlebar (fig_person, at the team's size): a parka with its hood up."""
-    fig_person((x, y, z), 0.0, shirt=coat, hat=coat, legs=0x38383d, arm=1.2, k=DOG_TEAM)
+    handlebar (fig_person, at the team's size), dressed for the cold over
+    it: a bulky parka down over the hips, its hood up over the head with a
+    ruff of white fur round what shows of the face, dark mitts. (In the
+    person's bare shirt and a cap it read as a summer walker on the ice.)"""
+    parts = fig_person((x, y, z), 0.0, shirt=coat, hat=coat, legs=0x38383d, arm=1.2, k=DOG_TEAM)
+    for o in (parts[1], parts[-2], parts[-1]):           # the shirt, the head and its cap: under the parka
+        bpy.data.objects.remove(o, do_unlink=True)
+    u, t = DOG_TEAM * fig_u(), 1.2
+    def b(size, fx, fy, color, fz=0.0, tip=0.0):
+        return box([e * u for e in size], (x + fx * u, y + fy * u, z + fz * u), color, roll=tip)
+    b((0.13, 0.21, 0.165), 0.0, 0.285, coat)                       # the parka
+    b((0.14, 0.15, 0.155), -0.02, 0.425, coat)                     # its hood
+    b((0.035, 0.135, 0.18), 0.06, 0.42, 0xfff6eb)                   # the fur round the face
+    b((0.02, 0.075, 0.085), 0.085, 0.415, FIG_SKIN)                 # what shows of a face
+    for sd in (-1, 1):                                              # mitts on the hands at the bar
+        b((0.066, 0.05, 0.066), 0.13 * math.sin(t), 0.36 - 0.13 * math.cos(t), 0x2a2735, fz=sd * 0.096, tip=-t)
 
 def glacier_dog_sled(x, z):
     """A basket sled facing +X with its musher on the runners, at the
@@ -18701,6 +18790,8 @@ lite_too('promenade', 'pier-bridge', 'lifeguard-tower', 'seafront-wall-a', 'seaf
 
 # Glacier's dog team on four-sided limbs (glacier_husky).
 lite_too('glacier-dog-trail')
+# Round 28: the snowman field on the snowmen's own soft balls (decimated from the full build, they were lumps)
+lite_too('snowman-field')
 
 # ---- round 23: the beach brought up beside the hops ----
 # Where a beach road climbs over a hop its sea side lay two or three units
@@ -27886,16 +27977,30 @@ def own_snow_pile():
         faces.append(('snow', own_facing(top, (0, 1, 0)), 'pile'))
     own_shell('snow-pile', faces)
 
-def own_ball(r, at, color, rows=(4, 22), squash=0.9, n=6, grp='ball'):
-    """A rolled ball as a turned form of `n` sides in four rings, shaded
-    round: a tenth of a split sphere's corners."""
+# a rolled ball's turned profile (radius, height), pole to pole: the
+# landmark snowmen's soft ball (rfig_snow_ball), eight sides in five bands,
+# a face to the front
+OWN_BALL = ((0.0, -1.0), (0.588, -0.809), (0.951, -0.309), (0.951, 0.309), (0.588, 0.809), (0.0, 1.0))
+OWN_BALL_N = 8
+
+def own_ball(r, at, color, rows=(4, 22), squash=0.9, grp='ball'):
+    """A rolled ball as a turned form (OWN_BALL), shaded round: a tenth of a
+    split sphere's corners."""
     x, y, z = at
-    prof = ((0.0, -1.0), (0.72, -0.62), (1.0, 0.0), (0.72, 0.62), (0.0, 1.0))
     out = []
-    for (r0, y0), (r1, y1) in zip(prof, prof[1:]):
+    for (r0, y0), (r1, y1) in zip(OWN_BALL, OWN_BALL[1:]):
         w = lambda yy: rows[1] + (rows[0] - rows[1]) * (yy + 1) / 2
-        out += own_band(color, (r * r0, y + r * squash * y0, w(y0)), (r * r1, y + r * squash * y1, w(y1)), n, grp, at=(x, z))
+        out += own_band(color, (r * r0, y + r * squash * y0, w(y0)), (r * r1, y + r * squash * y1, w(y1)), OWN_BALL_N, grp,
+                        phase=math.pi / OWN_BALL_N, at=(x, z))
     return out
+
+def own_ball_front(r, dy, squash=0.9):
+    """How far in front of its axis an own_ball's front face is, `dy` over its middle."""
+    t = max(-1.0, min(1.0, dy / (r * squash)))
+    for (r0, y0), (r1, y1) in zip(OWN_BALL, OWN_BALL[1:]):
+        if y0 <= t <= y1:
+            return r * (r0 + (r1 - r0) * (t - y0) / (y1 - y0)) * math.cos(math.pi / OWN_BALL_N)
+    return 0.0
 
 @own_model('snowman', grow=0.84)
 def own_snowman():
@@ -27910,26 +28015,27 @@ def own_snowman():
         faces += own_ball(r, (0.0, cy[-1], 0.0), S, grp='ball%d' % i)
         y += r * 1.56
     hr, hy = rs[2], cy[2]
-    faces += own_band('red', (rs[1] * 0.72, cy[1] + rs[1] * 0.7, 6), (rs[1] * 0.66, cy[1] + rs[1] * 0.7 + 0.08, 2), 6, 'scarf')
-    faces += own_band('dark', (hr * 1.05, hy + hr * 0.74, 10), (hr * 1.05, hy + hr * 0.74 + 0.03, 10), 6, 'brim')
-    faces += own_band('dark', (hr * 1.05, hy + hr * 0.74 + 0.03, 10), (0.02, hy + hr * 0.74 + 0.03, 10), 6, 'brimtop')
-    faces += own_band('dark', (hr * 0.66, hy + hr * 0.74 + 0.03, 12), (hr * 0.66, hy + hr * 0.74 + 0.2, 4), 6, 'crown')
-    faces.append(('dark', own_facing([p + (2,) for p in own_ring(hr * 0.66, hy + hr * 0.74 + 0.2, 6)], (0, 1, 0)), 'hattop'))
+    faces += own_band('red', (rs[1] * 0.72, cy[1] + rs[1] * 0.7, 6), (rs[1] * 0.66, cy[1] + rs[1] * 0.7 + 0.08, 2), 8, 'scarf')
+    faces += own_band('dark', (hr * 1.05, hy + hr * 0.74, 10), (hr * 1.05, hy + hr * 0.74 + 0.03, 10), 8, 'brim')
+    faces += own_band('dark', (hr * 1.05, hy + hr * 0.74 + 0.03, 10), (0.02, hy + hr * 0.74 + 0.03, 10), 8, 'brimtop')
+    faces += own_band('dark', (hr * 0.66, hy + hr * 0.74 + 0.03, 12), (hr * 0.66, hy + hr * 0.74 + 0.2, 4), 8, 'crown')
+    faces.append(('dark', own_facing([p + (2,) for p in own_ring(hr * 0.66, hy + hr * 0.74 + 0.2, 8)], (0, 1, 0)), 'hattop'))
     own_shell('snowman', faces, smooth=True)
     flat = []
     def dot(x, y, z, s, c):                               # a coal, a button: a square stood just off the snow
         flat.append((c, own_facing([(x - s, y - s, z, 20), (x + s, y - s, z, 20), (x + s, y + s, z, 20), (x - s, y + s, z, 20)], (0, 0, 1)), 'dot'))
     for sx in (-1, 1):
-        dot(sx * 0.065, hy + 0.05, hr * 0.92, 0.024, 'dark')
+        dot(sx * 0.055, hy + 0.05, own_ball_front(hr, 0.05) + 0.006, 0.024, 'dark')
     for dy in (0.07, -0.05):
-        dot(0.0, cy[1] + dy, rs[1] * 0.99, 0.024, 'dark')
+        dot(0.0, cy[1] + dy, own_ball_front(rs[1], dy) + 0.006, 0.024, 'dark')
     tip, base = (0.0, hy - 0.01, hr + 0.17), own_ring(0.045, 0.0, 4, math.pi / 4)
     for i in range(4):                                    # the carrot
         a, b = base[i], base[(i + 1) % 4]
         q = [(a[0], hy - 0.01 + a[2], hr * 0.86, 6), (b[0], hy - 0.01 + b[2], hr * 0.86, 6), tip + (0,)]
         flat.append(('orange', own_facing(q, (a[0] + b[0], a[2] + b[2], 0.3)), 'carrot'))
-    flat.append(('red', own_facing([(0.03, cy[1] + rs[1] * 0.72, rs[1] * 0.66, 8), (0.11, cy[1] + rs[1] * 0.72, rs[1] * 0.64, 8),
-                                    (0.12, cy[1] + rs[1] * 0.2, rs[1] * 0.97, 14), (0.04, cy[1] + rs[1] * 0.2, rs[1] * 0.99, 14)], (0, 0.3, 1)), 'scarfend'))
+    zt, zb = own_ball_front(rs[1], rs[1] * 0.72) + 0.012, own_ball_front(rs[1], rs[1] * 0.2) + 0.012
+    flat.append(('red', own_facing([(0.03, cy[1] + rs[1] * 0.72, zt, 8), (0.11, cy[1] + rs[1] * 0.72, zt, 8),
+                                    (0.12, cy[1] + rs[1] * 0.2, zb, 14), (0.04, cy[1] + rs[1] * 0.2, zb, 14)], (0, 0.3, 1)), 'scarfend'))
     own_shell('face', flat)
     with plain_parts():
         for sx in (-1, 1):
