@@ -1498,18 +1498,21 @@ def umbrella(at, r, h, colors, gores=8):
         rim1 = (x + math.cos(a1) * r, y + h - 0.1, z + math.sin(a1) * r)
         poly([top, rim1, rim0], [(0, 1, 2)], colors[i % len(colors)])
 
-def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
+def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None, bend=0.0):
     """THE palm, the scatter's (palm-tall, palm-bend) and every piece's: one
     make at any size. A sand-tan trunk leaning over in three lengths, each
     widening to a ring where the next begins and shaded light at that ring,
-    dark at its foot; a crown of six fronds, each a leaf folded along
-    its rib, out from the head and up a little, then drooping to a point,
-    darker underneath; two coconuts. It carries its own shade (own_shell),
+    dark at its foot; `bend` bows it out that share of its height half way
+    up and back under its crown (palm-bend's); a crown of six fronds, each
+    a leaf folded along its rib, out from the head and up a little, then
+    drooping to a point, darker underneath, out of a round knot at the
+    trunk's head (round 28 fix: two coconut cubes read as a hard block on a
+    round thing). It carries its own shade (own_shell),
     so a palm is the same palm in a tall piece and a low one. `reach` is a
     frond's length; `sink` carries the trunk on that far under its foot, for
     a palm set rigidly on a slope (its downhill side shows trunk, not air).
     LITE (the box's): the trunk in two lengths of five sides (one ring),
-    five fronds, no coconuts, and the crown ONE surface, the fronds joined
+    five fronds, no knot, and the crown ONE surface, the fronds joined
     by a web at the head, its light rounded frond by frond (rounded over
     the whole crown, it turned to the underside's and the crown went
     dark). Lite's far form keeps no small shape whole (TtpRenderer::farForm,
@@ -1521,11 +1524,12 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
     reach = 1.1 * (reach or 0.46 * h)
     dx, dz = math.cos(yaw), math.sin(yaw)
     ts, sides, n = ((0, 0.5, 1.0), 5, 5) if LITE else ((0, 0.36, 0.7, 1.0), 6, 6)
-    line = [(x + dx * lean * h * t * t, y + h * t, z + dz * lean * h * t * t, (0.3 - 0.17 * t) * k) for t in ts]
+    off = lambda t: (lean * t * t + bend * math.sin(math.pi * t)) * h
+    line = [(x + dx * off(t), y + h * t, z + dz * off(t), (0.3 - 0.17 * t) * k) for t in ts]
     if sink:
         line.insert(0, (x, y - sink, z, 0.3 * k))
     faces = []
-    DARK, LIGHT, RING = 31, 20, 1.22                          # a length's rows of the tan ramp (its light end is salmon on a trunk), and how far its ring stands out
+    BARK, DARK, LIGHT, RING = 'tan', 31, 24, 1.22             # the trunk's swatch, a length's rows of its ramp (the approved palms' colour from the seat, round 28 fix), how far its ring stands out
     for i, ((xa, ya, za, ra), (xb, yb, zb, rb)) in enumerate(zip(line, line[1:])):
         last = i == len(line) - 2
         ring = not last and not (sink and i == 0)             # (none at the ground, on the length sunk under it)
@@ -1535,9 +1539,9 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
             jj = (j + 1) % sides
             out = (lo[j][0] + lo[jj][0] - 2 * xa, 0.0, lo[j][2] + lo[jj][2] - 2 * za)
             top = LIGHT if ring or last else DARK
-            faces.append(('tan', own_facing([lo[j] + (DARK,), lo[jj] + (DARK,), hi[jj] + (top,), hi[j] + (top,)], out), 'trunk'))
+            faces.append((BARK, own_facing([lo[j] + (DARK,), lo[jj] + (DARK,), hi[jj] + (top,), hi[j] + (top,)], out), 'trunk'))
             if up:                                            # the ring's top, in to the next length's foot
-                faces.append(('tan', own_facing([hi[j] + (LIGHT,), hi[jj] + (LIGHT,), up[jj] + (DARK,), up[j] + (DARK,)], (0.0, 1.0, 0.0)), 'trunk'))
+                faces.append((BARK, own_facing([hi[j] + (LIGHT,), hi[jj] + (LIGHT,), up[jj] + (DARK,), up[j] + (DARK,)], (0.0, 1.0, 0.0)), 'trunk'))
     own_shell('palm', faces, smooth=True)
     tx, ty, tz = line[-1][:3]
     w = 0.18 * reach
@@ -1582,9 +1586,7 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
             for q in ([head + (5,), mid + (6,), e1 + (8,), e0 + (7,)], [mid + (6,), tip + (9,), e1 + (8,)]):
                 leaf(q, 'leaf%d' % i)
     lit(own_shell('palm', leaves, smooth=True))
-    with plain_parts():
-        for sd in (-1, 1):
-            box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
+    own_shell('knot', own_ball(0.24 * k, (tx, ty - 0.06 * k, tz), 'brown', rows=(16, 28)), smooth=True)
 
 class square:
     """Blocks built inside stay square: a small thing far out (a swimmer's
@@ -14284,12 +14286,17 @@ def lawn_alder(x, z, k=1.0, turn=0.0):
 
 def lawn_poplar(x, z, k=1.0):
     """Ribbon's poplar: the tall shape among its orchards, a slim column of
-    round-shaded lobes stepped up a bare trunk, the apple trees' make."""
+    round-shaded lobe stepped up a bare trunk, the apple trees' make, under
+    a pointed tip: an icosahedron drawn up tall, its point the poplar's
+    (round 28 fix: as approved; a round lobe there made an egg of it). The
+    box's (trees_lite) shades the tip round over its twelve corners."""
     rprop_round(trees_trunk((x, -0.3, z), 0.4 * k, 5.0 * k, 0.26 * k))
     rprop_lobe(2.0 * k, (x, 6.6 * k, z), 0x6cae55, scale=(1.0, 1.9, 1.0))
-    rprop_lobe(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, scale=(1.0, 2.0, 1.0))
-    if not trees_lite():
-        rprop_lobe(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, scale=(1.0, 1.5, 1.0))
+    if trees_lite():
+        rprop_lobe(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, scale=(1.0, 2.0, 1.0))
+        return
+    sphere(1.5 * k, (x + 0.3 * k, 10.6 * k, z - 0.2 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 2.0, 1.0))
+    sphere(1.2 * k, (x - 0.9 * k, 5.0 * k, z + 0.7 * k), 0x5f9f4a, subdiv=1, flat=False, scale=(1.0, 1.5, 1.0))
 
 # The windmill's field, in the north loop's east side: the wheat standing
 # golden, a crop that comes up over the kerb's height, its rows packed close
@@ -19502,10 +19509,12 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
     half long at k = 1, its wheels on the ground at `at`. `bare` leaves
     out her axles, trunnions and cascabel (the scatter's prop). The iron and
     the wheels are shaded round (round 28: the Kenney gun's), crisp at
-    their ends."""
+    their ends; round 28 fix: each wheel's faces rounded over into its
+    tread (fixprop_wheel), ten sides to the iron, the bore dark in the
+    muzzle (an eight-sided cap on each read as a flat facet)."""
     x0, y0, z0 = at
     iron, band, wood = 0x38383d, 0x4f5260, 0xb06041
-    segs = 8                                              # (shaded round, eight sides cost what six flat ones did)
+    segs = 10                                             # (shaded round, ten sides cost what six flat ones did)
     def W(lx, ly, lz):
         x, z = turned(x0, z0, yaw, lx * k, lz * k)
         return (x, y0 + ly * k, z)
@@ -19520,7 +19529,7 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
             if not bare:
                 b((0.7, 0.07, 0.07), 0.0, 0.18, lz, iron)                        # an axle
             for sx in (-1, 1):
-                rprop_round(rowed(cyl(0.18 * k, 0.11 * k, W(sx * 0.375 - 0.055, 0.18, lz), 'bark', segs=8 if LITE else 10, axis='across', yaw=yaw), 6))
+                own_shell('wheel', fixprop_wheel(W(sx * 0.375, 0.18, lz), 0.18 * k, 0.055 * k, 'bark', 'wheel', yaw, 8 if LITE else 10, (5, 7)), smooth=True)
                 if not LITE:
                     b((0.14, 0.08, 0.08), sx * 0.375, 0.18, lz, iron)
         if not bare:
@@ -19533,15 +19542,40 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
     def ring(lz, r, w, color):
         rprop_round(rod(W(0.0, bore(lz - w / 2), lz - w / 2), W(0.0, bore(lz + w / 2), lz + w / 2), r * k, color, segs=segs))
     ring(0.77, 0.18, 0.14, iron)                                                 # the muzzle's swell
+    own_shell('bore', [('dark', own_facing([W(0.1 * math.cos(a), bore(0.84) + 0.1 * math.sin(a), 0.855) + (30,)       # its bore, dark,
+                                            for a in [2 * math.pi * i / segs for i in range(segs)]],          # a disc a hair
+                                           tuple(q - o for q, o in zip(W(0, 0, 1), W(0, 0, 0)))), 'bore')])   # off the muzzle
     ring(-0.5, 0.22, 0.12, iron)                                                 # the breech ring
     for lz, r in () if LITE else ((-0.14, 0.2), (0.3, 0.175)):
         ring(lz, r, 0.07, band)
 
+def fixprop_wheel(at, r, hw, swatch, grp, yaw=0.0, n=8, rows=(4, 7)):
+    """A wheel `r` round and `hw` half as wide at `at`, on an axle along
+    local X turned by `yaw` (box()'s sense): faces for own_shell(smooth=True),
+    each face rounded over into the tread at its shoulder, so it reads round
+    from the side and edge on (round 28 fix: a flat-faced puck read hard).
+    `rows` are the faces' and the tread's rows of the swatch's ramp."""
+    x0, y0, z0 = at
+    prof = ((0.0, -hw, rows[0]), (0.7 * r, -hw, rows[0]), (r, -0.45 * hw, rows[1]), (r, 0.45 * hw, rows[1]),
+            (0.7 * r, hw, rows[0]), (0.0, hw, rows[0]))                         # (radius, along the axle, row)
+    out = []
+    for a, b in zip(prof, prof[1:]):
+        for c, pts, g in own_band(swatch, a, b, n, grp):
+            q = []
+            for (rx, ry, rz, w) in pts[::-1]:                # (the ring's axis onto the axle: a mirror, so wound back)
+                X, Z = turned(x0, z0, yaw, ry, rz)
+                q.append((X, y0 + rx, Z, w))
+            out.append((c, q, g))
+    return out
+
 def cove_chest(at, yaw=0.0, k=1.0, lid='shut'):
     """A sea chest, its front to local +Z turned by `yaw`: a plank body in
-    two iron bands, a brass lock; `shut` under its stepped lid, or `open`,
-    the lid stood back on its hinges and the chest heaped over its brim
-    with gold."""
+    two iron bands, a brass lock, under a domed lid, a half round vault
+    its length with the bands arched over it (round 28 fix: the Kenney
+    chest's; a stepped slab of a lid read as a crate), shaded round over
+    the vault, crisp at its ends; `shut`, or `open`, the lid stood back
+    past upright on its hinges along the back and the chest heaped over
+    its brim with gold."""
     x0, y0, z0 = at
     wood, iron, gold = 0xb06041, 0x38383d, 0xffc044
     def W(lx, ly, lz):
@@ -19555,18 +19589,34 @@ def cove_chest(at, yaw=0.0, k=1.0, lid='shut'):
         for lx in (-0.29, 0.29):
             b((0.09, 0.42 + 2 * p, 0.56 + 3 * p), lx, 0.21, 0.0, iron)
         b((0.15, 0.15, 0.05), 0.0, 0.3, 0.29, gold)                              # the lock
-    if lid == 'shut':                                     # (rounded over, round 28: the Kenney chest's soft lid)
-        rprop_bevel(b((0.92, 0.12, 0.58), 0.0, 0.48, 0.0, wood), 0.035 * k)
-        rprop_bevel(b((0.92, 0.09, 0.4), 0.0, 0.58, 0.0, wood), 0.028 * k)
-        with plain_parts():
-            for lx in (-0.29, 0.29):                          # (their feet a hair over the lid's, not in its underside)
-                b((0.09, 0.12 + p, 0.58 + 2 * p), lx, 0.48 + 1.5 * p, 0.0, iron)
-                b((0.09, 0.09 + p, 0.4 + 2 * p), lx, 0.58 + p, 0.0, iron)
+    R, n, w = 0.29, 6 if LITE else 8, 0.46
+    th = 0.0 if lid == 'shut' else math.radians(108)
+    def V(lx, a, r, row):                                 # the lid: `a` round the vault from its front rim, `r` out from its axis
+        dz, dy = r * math.cos(a) + R, r * math.sin(a)    # (from the hinge, at the body's back top edge)
+        return W(lx, 0.42 + dz * math.sin(th) + dy * math.cos(th), -R + dz * math.cos(th) - dy * math.sin(th)) + (row,)
+    def way(a, b):
+        return tuple(q - o for q, o in zip(a[:3], b[:3]))
+    arc = [math.pi * i / n for i in range(n + 1)]
+    faces = []
+    for x0_, x1_, r0, r1, sw, g in ((-w, w, R, R, 'brown', 'vault'),) + tuple(
+            (lx - 0.045, lx + 0.045, R - 0.02, R + 2 * p / k, 'dark', 'band%d' % i) for i, lx in enumerate((-0.29, 0.29))):
+        row = (lambda a: 9 - 6 * math.sin(a)) if sw == 'brown' else (lambda a: 8 - 4 * math.sin(a))
+        for a0, a1 in zip(arc, arc[1:]):
+            q = [V(x0_, a0, r1, row(a0)), V(x1_, a0, r1, row(a0)), V(x1_, a1, r1, row(a1)), V(x0_, a1, r1, row(a1))]
+            faces.append((sw, own_facing(q, way(V(0, (a0 + a1) / 2, R, 0), V(0, 0, 0, 0))), g))
+        for lx, s in ((x0_, -1), (x1_, 1)):               # its ends: the vault's half discs, a band's half rings
+            if r0 == r1:
+                faces.append((sw, own_facing([V(lx, a, r1, 8) for a in arc], way(V(s, 0, 0, 0), V(0, 0, 0, 0))), g + 'end%d' % s))
+                continue
+            for a0, a1 in zip(arc, arc[1:]):
+                faces.append((sw, own_facing([V(lx, a0, r0, 8), V(lx, a0, r1, 8), V(lx, a1, r1, 8), V(lx, a1, r0, 8)],
+                                             way(V(s, 0, 0, 0), V(0, 0, 0, 0))), g + 'end%d' % s))
+    if th:                                                # stood open, its underside shows
+        faces.append(('brown', own_facing([V(-w, 0, R, 12), V(w, 0, R, 12), V(w, math.pi, R, 12), V(-w, math.pi, R, 12)],
+                                          way(V(0, 0, 0, 0), V(0, math.pi / 2, R, 0))), 'under'))
+    own_shell('lid', faces, smooth=True)
+    if lid == 'shut':
         return
-    # the lid stood back past upright on its hinges
-    a = [W(-0.46, 0.42, -0.24), W(0.46, 0.42, -0.24), W(0.46, 0.98, -0.42), W(-0.46, 0.98, -0.42)]
-    c = [W(-0.46, 0.39, -0.36), W(0.46, 0.39, -0.36), W(0.46, 0.95, -0.54), W(-0.46, 0.95, -0.54)]
-    hexa(a, c, wood)
     with plain_parts():
         b((0.82, 0.1, 0.48), 0.0, 0.4, 0.0, gold)                                # gold to the brim
         cyl(0.26 * k, 0.24 * k, W(-0.05, 0.42, 0.0), gold, r2=0.08 * k, segs=6)  # and heaped over it
@@ -27666,41 +27716,100 @@ for _k in 'abc':
 
 OWN_BOX = 0.445      # the item box's side; the renderer sizes it by its height (mBoxScale)
 
+FIXPROP_BOX_ROUND = 0.09   # the item box's round-over, the Kenney box's (a fifth of its side)
+
 def own_item_box_faces():
-    """The item box: a cube, a four-pointed star cut into its four sides and
-    its top, its corners shared so chamfer() rounds every edge over (round
-    28: the Kenney box's broad soft edge; a flat cut read hard). One
+    """The item box: a cube rounded over evenly on all twelve edges in three
+    segments, its corners an eighth of a ball, and on its four sides and its
+    top a flat panel with a four-pointed star cut into it, well inside the
+    panel (round 28 fix: the Kenney box; a round on the top edges alone read
+    as a loaf, a star out to the round showed slivers at the silhouette). One
     swatch's ramp by height (the renderer tints the body through it,
-    kBoxTint) with each face's panel a few rows lighter, the stars white."""
-    s = OWN_BOX
-    h = a = s / 2
-    R, r = 0.28 * s, 0.1 * s
+    kBoxTint), each panel a few rows lighter than its rounded frame, so it
+    reads inset; the stars white. Shade it with fixprop_rounded()."""
+    s, rr = OWN_BOX, FIXPROP_BOX_ROUND
+    h = s / 2
+    f = h - rr                                            # the flat panel's half side
+    R, k = 0.24 * s, 0.115 * s / math.sqrt(2)             # the star's points and its waist, the Kenney star's
     row = lambda y, lift=0: max(1, 3 + 25 * (1 - y / s) - lift)
+    E = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
+    def pt(core, d):                                      # the core point plus the round out along d
+        return tuple(round(core[i] + rr * d[i] + (h if i == 1 else 0.0), 6) for i in range(3))
+    def comb(*terms):
+        return tuple(sum(c * v[i] for c, v in terms) for i in range(3))
     out = []
-    axes = (((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
-            ((0, 0, 1), (0, 1, 0), (-1, 0, 0)), ((0, 0, -1), (0, 1, 0), (1, 0, 0)),
-            ((0, 1, 0), (0, 0, 1), (1, 0, 0)), ((0, -1, 0), (0, 0, 1), (-1, 0, 0)))
-    def pt(n, u, v, d, fu, fv):
-        return tuple(n[k] * d + u[k] * fu + v[k] * fv + (h if k == 1 else 0.0) for k in range(3))
-    for n, u, v in axes:
-        P4 = lambda fu, fv, lift=5: (lambda q: q + (row(q[1], lift),))(pt(n, u, v, h, fu, fv))
-        if n[1] < 0:                                     # the bottom: no one sees a star there
-            out.append(('purple', own_facing([P4(-a, -a, 0), P4(a, -a, 0), P4(a, a, 0), P4(-a, a, 0)], n), 'box'))
+    # the panels: on the bottom one plain square, elsewhere the star and four
+    # pieces round it, each a side of the panel down to the star's point
+    for n, u, v in (((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
+                    ((0, 0, 1), (0, 1, 0), (-1, 0, 0)), ((0, 0, -1), (0, 1, 0), (1, 0, 0)),
+                    ((0, 1, 0), (0, 0, 1), (1, 0, 0)), ((0, -1, 0), (0, 0, 1), (-1, 0, 0))):
+        def Q(a, b, lift=4):
+            q = pt(comb((f, n), (a, u), (b, v)), n)
+            return q + (row(q[1], lift),)
+        if n[1] < 0:
+            out.append(('purple', own_facing([Q(-f, -f), Q(f, -f), Q(f, f), Q(-f, f)], n), 'panel'))
             continue
-        for su in (-1, 1):
-            for sv in (-1, 1):
-                k = r / math.sqrt(2)
-                out.append(('purple', own_facing([P4(su * R, 0), P4(su * a, 0), P4(su * a, sv * a), P4(0, sv * a),
-                                                   P4(0, sv * R), P4(su * k, sv * k)], n), 'box'))
-        k = r / math.sqrt(2)
+        for D, T in (((1, 0), (0, 1)), ((0, 1), (-1, 0)), ((-1, 0), (0, -1)), ((0, -1), (1, 0))):
+            uv = lambda a, b: (D[0] * a + T[0] * b, D[1] * a + T[1] * b)
+            out.append(('purple', own_facing([Q(*uv(f, -f)), Q(*uv(f, f)), Q(*uv(k, k)), Q(*uv(R, 0)), Q(*uv(k, -k))], n), 'panel'))
         star = [(R, 0), (k, k), (0, R), (-k, k), (-R, 0), (-k, -k), (0, -R), (k, -k)]
-        out.append(('white', own_facing([pt(n, u, v, h, fu, fv) + (0,) for fu, fv in star], n), 'star'))
+        out.append(('white', own_facing([pt(comb((f, n), (a, u), (b, v)), n) + (0,) for a, b in star], n), 'star'))
+    th = [math.radians(30 * j) for j in range(4)]
+    def ring(core, a, b, j):                              # the round's j-th line between faces a and b
+        q = pt(core, comb((math.cos(th[j]), a), (math.sin(th[j]), b)))
+        return q + (row(q[1]),)
+    # the edges: a quarter round in three segments along each
+    for ia in range(3):
+        for ib in range(ia + 1, 3):
+            ie = 3 - ia - ib
+            for sa in (-1, 1):
+                for sb in (-1, 1):
+                    a, b = tuple(sa * c for c in E[ia]), tuple(sb * c for c in E[ib])
+                    ends = [comb((f, a), (f, b), (se * f, E[ie])) for se in (-1, 1)]
+                    for j in range(3):
+                        q = [ring(ends[0], a, b, j), ring(ends[1], a, b, j), ring(ends[1], a, b, j + 1), ring(ends[0], a, b, j + 1)]
+                        out.append(('purple', own_facing(q, comb((1, a), (1, b))), 'round'))
+    # the corners: an eighth of a ball, its pole up the box (Y), rings of
+    # 30 degrees down to the sides, matching the edges' segments
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                X, Y, Z = (sx, 0, 0), (0, sy, 0), (0, 0, sz)
+                core = (sx * f, sy * f, sz * f)
+                def cp(i, j):
+                    psi = math.radians(90 * j / i) if i else 0.0
+                    q = pt(core, comb((math.cos(th[i]), Y), (math.sin(th[i]) * math.cos(psi), X), (math.sin(th[i]) * math.sin(psi), Z)))
+                    return q + (row(q[1]),)
+                for i in range(3):
+                    for j in range(i + 1):
+                        out.append(('purple', own_facing([cp(i, j), cp(i + 1, j), cp(i + 1, j + 1)], (sx, sy, sz)), 'round'))
+                        if j < i:
+                            out.append(('purple', own_facing([cp(i, j), cp(i + 1, j + 1), cp(i, j + 1)], (sx, sy, sz)), 'round'))
     return out
+
+def fixprop_rounded(o, lo, hi, rr):
+    """Shade `o` (an own_shell on a box from `lo` to `hi`, glTF, rounded
+    over by `rr`) as a rounded box is: every corner's normal straight out
+    from the box's core (the box shrunk by its round) through it. The round
+    reads as one smooth curve whatever its segments, a face's flat middle
+    stays flat, and there is no crease where the two meet."""
+    me = o.data
+    lo, hi = [c + rr for c in lo], [c - rr for c in hi]
+    normals = []
+    for loop in me.loops:
+        b = me.vertices[loop.vertex_index].co
+        p = (b.x, b.z, -b.y)                              # (back to glTF)
+        d = [p[i] - min(max(p[i], lo[i]), hi[i]) for i in range(3)]
+        normals.append(P(*d).normalized())
+    for pl in me.polygons:
+        pl.use_smooth = True
+    me.normals_split_custom_set(normals)
+    return o
 
 @own_model('item-box')
 def own_item_box():
-    # rounded over just short of the stars' points (every lap draws eight in view on every track)
-    rprop_bevel(own_shell('item-box', own_item_box_faces(), smooth=True), 0.094)
+    h = OWN_BOX / 2
+    fixprop_rounded(own_shell('item-box', own_item_box_faces(), smooth=True), (-h, 0.0, -h), (h, OWN_BOX, h), FIXPROP_BOX_ROUND)
 
 @own_model('item-banana')
 def own_item_banana():
@@ -27741,14 +27850,22 @@ def own_item_banana():
 
 @own_model('item-cone')
 def own_item_cone():
-    # A road cone on its square foot: orange, one white band.
-    foot = []
-    b, t = 0.12, 0.03
-    for (x0, z0, x1, z1, n) in ((b, -b, b, b, (1, 0, 0)), (-b, b, -b, -b, (-1, 0, 0)), (b, b, -b, b, (0, 0, 1)), (-b, -b, b, -b, (0, 0, -1))):
-        foot.append(('orange', own_facing([(x0, 0.0, z0, 26), (x1, 0.0, z1, 26), (x1, t, z1, 22), (x0, t, z0, 22)], n), 'foot'))
-    foot.append(('orange', own_facing([(-b, t, -b, 20), (b, t, -b, 20), (b, t, b, 20), (-b, t, b, 20)], (0, 1, 0)), 'foot'))
-    own_shell('foot', foot)
-    cone = own_band('orange', (0.088, 0.03, 18), (0.066, 0.105, 10), 8, 'low')
+    # A road cone on its square foot: orange, one white band. The foot is
+    # a slab as thick as the Kenney cone's, its corners clipped, its sides
+    # shaded round into a chamfer at its top edge (round 28 fix: a thin
+    # square plate read hard); no underside (cones stand everywhere).
+    b, t, c, e = 0.12, 0.05, 0.03, 0.012
+    def rim(i, y, row):
+        return [(x - math.copysign(i, x), y, z - math.copysign(i, z), row)
+                for x, z in ((b, -b + c), (b, b - c), (b - c, b), (-b + c, b), (-b, b - c), (-b, -b + c), (-b + c, -b), (b - c, -b))]
+    rings = [rim(0, 0.0, 26), rim(0, t - e, 22), rim(e, t, 20)]
+    foot = [('orange', own_facing(rings[-1], (0, 1, 0)), 'foottop')]
+    for lo, hi in zip(rings, rings[1:]):
+        for i in range(8):
+            j = (i + 1) % 8
+            foot.append(('orange', own_facing([lo[i], lo[j], hi[j], hi[i]], (lo[i][0] + lo[j][0], 0.0, lo[i][2] + lo[j][2])), 'foot'))
+    own_shell('foot', foot, smooth=True)
+    cone = own_band('orange', (0.081, t, 18), (0.066, 0.105, 10), 8, 'low')
     cone += own_band('white', (0.066, 0.105, 4), (0.05, 0.165, 0), 8, 'band')
     cone += own_band('orange', (0.05, 0.165, 8), (0.03, 0.25, 2), 8, 'high')
     cone.append(('orange', own_facing([p + (2,) for p in own_ring(0.03, 0.25, 8)], (0, 1, 0)), 'top'))
@@ -27929,10 +28046,33 @@ def own_jolly_roger(at, yaw, scale, flap=None):
     rprop_round(cyl(0.09 * k, 3.36 * k, W(0, 0.12), 'brown', r2=0.065 * k, segs=8, stem=True, caps=False))
     trees_round(sphere(0.13 * k, W(0, 3.5), 'dark', subdiv=1, flat=False))
     L, Hc, top = 1.0, 0.72, 3.3
+    A, T = 0.06, 0.035                                    # the wave's depth and half the cloth's thickness
+    def wave(u):                                          # the cloth's offset across, u from the pole along it
+        return A * math.sin(2 * math.pi * (u - 0.5 * L) / L)
+    def way(lx, lz):                                      # a direction in the flag's frame, in the piece's
+        return tuple(a - b for a, b in zip(W(lx, 0.0, lz), W(0.0, 0.0, 0.0)))
     def cloth():
-        parts = [rowed(box((L * k, Hc * k, 0.07 * k), W(0.1 + L / 2, top - Hc / 2), 'dark', yaw=yaw), 8)]
-        parts[0]['chamfer'] = 0
-        parts += skull_mark(W(0.1 + L / 2, top - Hc / 2), Hc * k, yaw + math.pi / 2)
+        # Waved (round 28 fix: the Kenney flag's; a flat slab read as a
+        # plate): one full wave out from the pole, shaded round along it,
+        # crisp at its edges; the skull and bones lie across its middle,
+        # where the cloth runs nearly straight, turned with it and thick
+        # enough to stand through both faces where it curves.
+        m = 4 if LITE else 8                              # (its lengths: the box's half as many)
+        us = [L * i / m for i in range(m + 1)]
+        side = lambda u, d, y: W(0.1 + u, y, wave(u) + d * T) + (8,)
+        faces = []
+        for u0, u1 in zip(us, us[1:]):
+            for d in (-1, 1):
+                faces.append(('dark', own_facing([side(u0, d, top), side(u1, d, top), side(u1, d, top - Hc), side(u0, d, top - Hc)],
+                                                 way(0.0, d)), 'face%d' % d))
+            for y, n in ((top, 1), (top - Hc, -1)):
+                faces.append(('dark', own_facing([side(u0, -1, y), side(u1, -1, y), side(u1, 1, y), side(u0, 1, y)], (0, n, 0)), 'edge%d' % n))
+        for u, n in ((0.0, -1), (L, 1)):
+            faces.append(('dark', own_facing([side(u, -1, top), side(u, 1, top), side(u, 1, top - Hc), side(u, -1, top - Hc)],
+                                             way(n, 0.0)), 'end%d' % n))
+        parts = [own_shell('cloth', faces, smooth=True)]
+        slope = math.atan((wave(0.5 * L + L / m) - wave(0.5 * L - L / m)) * m / (2 * L))   # the cloth's turn across its middle
+        parts += skull_mark(W(0.1 + L / 2, top - Hc / 2), Hc * k, yaw + math.pi / 2 - slope, t=max(0.07, 0.11 * k))
         return parts
     if flap:
         animate(cloth(), flap, W(0, top))
@@ -27955,36 +28095,45 @@ def own_rock_sand():
                 (0.18, -0.22, 0.2, 5.0, 14.0, 0.8)), ('tan', 'salmon'), 'tan')
     join_still('rock')
 
-def rprop_lump(x, z, s, yaw, seed, squat, side, top):
-    """A worn stone `s` across at (x, z), bedded a little: a turned form of
-    seven sides (a pebble five), each corner a little in or out (the same in
-    every ring, so its flanks run straight up), shaded ROUND about itself
-    (the Kenney stones' soft flanks), a flat top on a crisp rim. Faces for
-    own_shell: the canyons scatter it thick, so two bands a side."""
-    n, H = 7 if s > 0.2 else 5, 0.5 * s * squat
-    k = [1 + 0.22 * jitter(i, 1, seed) for i in range(n)]
-    def ring(r, y, w):
-        return [(x + r * k[i] * math.cos(yaw + 2 * math.pi * i / n), y, z + 0.85 * r * k[i] * math.sin(yaw + 2 * math.pi * i / n), w)
-                for i in range(n)]
-    rings = [ring(0.54 * s, -0.1 * H, 22), ring(0.55 * s, 0.75 * H, 10), ring(0.43 * s, H, 6)]
-    g, out = 'lump%d' % int(seed), []
+def fixprop_stone(x, z, s, h, yaw, seed, n, cap):
+    """A broken stone `s` across and `h` tall at (x, z), bedded a little: a
+    prism of `n` uneven sides, each corner a little in or out and round
+    (the same in every ring, so its flanks run straight up), cut in to a
+    top `cap` of its breadth across over a facet at the shoulder (a shard,
+    under 0.2 across, straight up to it), its flanks drawn in a little, the
+    top tipped: faces for own_shell, FACETED (round 28 fix: the Kenney
+    heap's angular stones; shaded round they read as potatoes)."""
+    k = [1 + 0.2 * jitter(i, 1, seed) for i in range(n)]
+    a = [yaw + 2 * math.pi * (i + 0.25 * jitter(i, 2, seed)) / n for i in range(n)]
+    tip = (0.25 * jitter(0, 3, seed), 0.25 * jitter(0, 4, seed))
+    def ring(r, y, row, tilt=0.0):
+        out = []
+        for i in range(n):
+            px, pz = r * k[i] * math.cos(a[i]), 0.85 * r * k[i] * math.sin(a[i])
+            out.append((x + px, y + tilt * (tip[0] * px + tip[1] * pz), z + pz, row))
+        return out
+    sh = min(0.12 * s, 0.4 * h)
+    rings = [ring(0.58 * s, -0.03, 18)] + ([ring(0.47 * s, h - sh, 12)] if s >= 0.2 else []) + [ring(cap * s, h, 5, 1.0)]
+    out = []
     for lo, hi in zip(rings, rings[1:]):
         for i in range(n):
             j = (i + 1) % n
-            out.append((side, own_facing([lo[i], lo[j], hi[j], hi[i]], (lo[i][0] + lo[j][0] - 2 * x, 0.0, lo[i][2] + lo[j][2] - 2 * z)), g))
-    out.append((top, own_facing([p[:3] + (4,) for p in rings[-1]], (0, 1, 0)), g + 'top'))
+            out.append(('salmon', own_facing([lo[i], lo[j], hi[j], hi[i]], (lo[i][0] + lo[j][0] - 2 * x, 0.0, lo[i][2] + lo[j][2] - 2 * z)), 'stone'))
+    out.append(('salmon', own_facing(rings[-1], (0, 1, 0)), 'stone'))
     return out
 
 @own_model('stones')
 def own_stone_heap():
     # ...and its red stone: a broken block standing among what fell off it,
-    # worn round (round 28; faceted shards in round 27 lost the Kenney heap's look).
+    # as the Kenney heap stood (round 28 fix): a tall column, two broad
+    # blocks against it, a slab before them and shards about, all faceted.
     faces = []
-    for (x, z, sz, yaw, seed, squat) in ((0.0, -0.04, 0.44, 1.1, 21.0, 1.45), (0.24, 0.18, 0.32, 2.6, 22.0, 0.95),
-                                          (-0.24, 0.16, 0.26, 4.0, 23.0, 0.9), (-0.3, -0.2, 0.15, 0.3, 24.0, 0.8),
-                                          (0.32, -0.2, 0.13, 2.2, 25.0, 0.8)):
-        faces += rprop_lump(x, z, sz, yaw, seed, squat, 'salmon', 'salmon')
-    own_shell('stones', faces, smooth=True)
+    for (x, z, sz, h, yaw, seed, n, cap) in ((0.0, -0.12, 0.3, 0.46, 1.1, 21.0, 5, 0.36), (0.22, 0.08, 0.46, 0.29, 2.6, 22.0, 6, 0.36),
+                                              (-0.24, 0.06, 0.42, 0.21, 4.0, 23.0, 6, 0.38), (0.02, 0.3, 0.34, 0.08, 0.7, 26.0, 6, 0.42),
+                                              (-0.42, -0.2, 0.14, 0.09, 0.3, 24.0, 4, 0.15), (0.44, -0.24, 0.13, 0.08, 2.2, 25.0, 4, 0.15),
+                                              (-0.12, 0.44, 0.1, 0.06, 1.3, 27.0, 4, 0.12)):
+        faces += fixprop_stone(x, z, sz, h, yaw, seed, n, cap)
+    own_shell('stones', faces)
 
 @own_model('skateboard', grow=1.0 / 3)
 def own_skateboard():
@@ -27992,9 +28141,11 @@ def own_skateboard():
     # rounded, black grip over the whole of its top, two grey trucks and
     # four pale wheels tucked under it. The wood is shaded round from its
     # edge in under it (round 28: the Kenney board's soft deck), the grip's
-    # edge crisp.
-    hw, th, L, rc = 0.46, 0.08, 1.04, 0.3
-    ends = [(L - rc + rc * math.cos(t), hw - rc + rc * math.sin(t)) for t in (0.0, 0.7, 1.22, math.pi / 2)]
+    # edge crisp. Round 28 fix: the deck as thick as the Kenney board's, its
+    # nose a broad round in five steps a corner, each wheel turned with
+    # rounded shoulders and shaded round (a flat-faced puck read hard).
+    hw, th, L, rc = 0.46, 0.13, 1.04, 0.36
+    ends = [(L - rc + rc * math.cos(t), hw - rc + rc * math.sin(t)) for t in [math.pi / 2 * i / 5 for i in range(6)]]
     st = [(-z, w) for z, w in ends] + [(z, w) for z, w in ends[::-1]]            # (z, half width), tail to nose
     y = lambda z: 0.36 + 0.11 * max(0.0, (abs(z) - (L - rc)) / rc) ** 1.4         # the underside, kicked up at each end
     faces = []
@@ -28012,10 +28163,7 @@ def own_skateboard():
     for sz in (-1, 1):
         box((0.44, 0.2, 0.16), (0.0, 0.27, sz * 0.6), 'grey')
         for sx in (-1, 1):
-            rim = own_band('cream', (0.15, -0.09, 12), (0.15, 0.09, 12), 8, 'rim%d%d' % (sx, sz))
-            rim.append(('cream', own_facing([q + (6,) for q in own_ring(0.15, sx * 0.09, 8)], (0, sx, 0)), 'hub%d%d' % (sx, sz)))
-            # turned onto its side: the ring's axis (y) across the board (x)
-            wheels += [(c, [(sx * 0.3 + y, 0.15 + x, sz * 0.6 + z, w) for (x, y, z, w) in pts][::-1], g) for c, pts, g in rim]
+            wheels += fixprop_wheel((sx * 0.3, 0.15, sz * 0.6), 0.15, 0.09, 'white', 'wheel%d%d' % (sx, sz))
     own_shell('wheels', wheels, smooth=True)
     join_still('skateboard')
 
@@ -28140,10 +28288,10 @@ def own_snowman():
 
 # The scatter's palms: the groves' make (palm()) at a prop's size, and the
 # box's builds of them.
-for _f, _lean, _reach in (('palm-tall', 0.04, 0.54), ('palm-bend', 0.2, 0.5)):
-    def _palm(lean=_lean, reach=_reach, lite=False):
+for _f, _lean, _reach, _bend in (('palm-tall', 0.04, 0.54, 0.0), ('palm-bend', 0.04, 0.5, 0.12)):
+    def _palm(lean=_lean, reach=_reach, bend=_bend, lite=False):
         with lite_parts(lite):
-            palm((0.0, 0.0, 0.0), h=1.27, lean=lean, reach=reach)
+            palm((0.0, 0.0, 0.0), h=1.27, lean=lean, reach=reach, bend=bend)
         join_still('palm')
     own_model(_f)(_palm)
     own_model(_f + '-lite')(lambda fn=_palm: fn(lite=True))
@@ -28194,19 +28342,56 @@ def own_rowboat(at, yaw=0.0, scale=1.0, large=False, oars=True, hull=None, rim=N
                 beam(W(sx * 1.1, 0.69, -L * 0.18), W(sx * 1.37, 0.75, -L * 0.22), 0.2 * k, rim, d=0.05 * k)
 
 # A ship's hull, in her own units (x across, y up from her keel, z along, bow
-# to +z): (z, keel half-breadth, its y, waterline half-breadth, its y, deck
-# half-breadth, the rail's y). Ten and a half long, masts at OWN_SHIP_MASTS.
-OWN_SHIP_SECS = ((-4.8, 0.5, 1.3, 1.5, 1.9, 1.8, 3.1), (-2.5, 0.9, 0.3, 2.0, 1.4, 2.3, 2.9),
-                 (0.5, 1.0, 0.0, 2.1, 1.3, 2.4, 2.85), (2.6, 0.6, 0.3, 1.5, 1.4, 1.9, 3.0), (4.3, 0.05, 1.2, 0.12, 1.9, 0.2, 3.5))
-OWN_SHIP_MASTS = ((0.67, 2.85, 9.9), (-4.0, 4.1, 9.2))       # (z, the deck it is stepped on, its head): main, mizzen
+# to +z), ten and a half long, masts at OWN_SHIP_MASTS. FIXPROP_CASTLE is how
+# much higher her stern castle stands than round 27's quarterdeck did.
+FIXPROP_CASTLE = 0.45
+OWN_SHIP_MASTS = ((0.67, 2.85, 9.9), (-4.0, 4.1 + FIXPROP_CASTLE, 9.2))   # (z, the deck it is stepped on, its head): main, mizzen
+
+def fixprop_ship_secs():
+    """The hull's sections (z, keel half-breadth, its y, waterline
+    half-breadth, its y, deck half-breadth, the top's y), faired (round 28
+    fix: five straight lengths under a straight sheer read as a barge): the
+    keel's rise and the waterline run smooth through round 27's sections,
+    the breadth full amidships, square across the transom and drawn in round
+    to the stem, and the sheer the toy galleon's, her hull's own sides
+    standing up into a castle aft over a vertical break, a waist swept up a
+    little to either end, a step up to the forecastle and a rise to the stem."""
+    old = ((-4.8, 0.278, 1.3, 0.833, 1.9), (-2.5, 0.391, 0.3, 0.87, 1.4), (0.5, 0.417, 0.0, 0.875, 1.3),
+           (2.6, 0.316, 0.3, 0.789, 1.4), (4.3, 0.25, 1.2, 0.6, 1.9))           # (z, keel and waterline breadth over the deck's, their y)
+    zs = [o[0] for o in old]
+    def through(z, c):                                    # a smooth curve through column c (Catmull-Rom on uneven steps)
+        i = min(len(old) - 2, max(j for j in range(len(old)) if zs[j] <= z))
+        def m(j):
+            a, b = max(j - 1, 0), min(j + 1, len(old) - 1)
+            return (old[b][c] - old[a][c]) / (zs[b] - zs[a])
+        h = zs[i + 1] - zs[i]
+        t = (z - zs[i]) / h
+        return ((2 * t ** 3 - 3 * t ** 2 + 1) * old[i][c] + (t ** 3 - 2 * t ** 2 + t) * h * m(i)
+                + (-2 * t ** 3 + 3 * t ** 2) * old[i + 1][c] + (t ** 3 - t ** 2) * h * m(i + 1))
+    def breadth(z):
+        if z <= 0.2:
+            return 2.4 - 0.6 * ((0.2 - z) / 5.0) ** 2
+        return max(0.2, 2.4 * max(0.0, 1 - ((z - 0.2) / 4.1) ** 2) ** 0.75)   # (full shoulders, a fine entry)
+    def top(z):
+        if z <= -2.32:                                    # the castle
+            return 4.08 + FIXPROP_CASTLE + 0.1 * (-2.32 - z) / 2.48
+        if z >= 2.75:                                     # the forecastle
+            return 3.75 + 0.3 * ((z - 2.75) / 1.55) ** 1.5
+        return 2.85 + (0.4 * ((z + 0.3) / 1.96) ** 2 if z < -0.3 else 0.5 * ((z + 0.3) / 2.85) ** 2)   # (the waist)
+    out = []
+    for z in (-4.8, -3.6, -2.32, -2.26, -1.2, 0.1, 1.4, 2.55, 2.75, 3.4, 3.9, 4.3):
+        d = breadth(z)
+        out.append((z, through(z, 1) * d, through(z, 2), through(z, 3) * d, through(z, 4), d, top(z)))
+    return tuple(out)
 
 def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
     """A two-masted ship, bare-poled, bow to local +Z turned by `yaw`, `S`
     her scale and `stretch` her length over the plain hull's: a dark bottom
-    and topsides in two strakes (heeled_hull) with a wale along their seam
-    and a rail along her sheer, a planked deck with its coamed hatch, a
-    quarterdeck aft with lit stern windows in their frame, a framed door
-    under a railed break and her wheel on it, a forecastle, a rudder, a
+    and topsides in two strakes (heeled_hull) on fair sections
+    (fixprop_ship_secs) with a wale along their seam and a rail along her
+    sheer, a planked deck with its coamed hatch, a stern castle with lit
+    stern windows in their frame, a framed door under a railed break and
+    her wheel on it, a forecastle, a rudder tucked against her stern, a
     bowsprit, two masts with their tops and shrouds: two thin bars a side
     with ratlines between them (a solid plate there read as a tent pitched
     on deck). `ports` cuts three gun ports a side. Returns her frame
@@ -28219,58 +28404,58 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
         return (px, y0 + y * S, pz)
     def b(size, x, y, z, color):
         return box((size[0] * S, size[1] * S, size[2] * S), K(x, y, z), color, yaw=yaw)
-    secs = OWN_SHIP_SECS
+    secs = fixprop_ship_secs()
     n = len(secs) - 1
     before = set(bpy.context.scene.objects)
     heeled_hull(K, secs, ('bark',) * n, (topsides,) * n)
     hull = [o for o in bpy.context.scene.objects if o not in before]
     for strake in [[o for o in hull if o['swatch'] == c] for c in ('bark', snap(topsides))]:
         rprop_hull(strake)                                # each strake one surface, shaded round along her (round 28)
-    def q(z, h0, a0, h1, a1):
-        return [K(-h0, a0, z), K(h0, a0, z), K(h1, a1, z), K(-h1, a1, z)]
-    hexa(q(-4.8, 1.76, 3.05, 1.7, 4.2), q(-2.3, 2.26, 2.85, 2.1, 4.1), topsides)['chamfer'] = 1   # the quarterdeck
-    hexa(q(2.6, 1.86, 2.95, 1.75, 3.6), q(4.25, 0.2, 3.45, 0.2, 3.9), topsides)['chamfer'] = 1    # the forecastle (both chamfered, round 28)
-    decks = [[(-2.15, 2.94, -2.3), (2.15, 2.94, -2.3), (2.25, 2.89, 0.5), (-2.25, 2.89, 0.5)],
-             [(-2.25, 2.89, 0.5), (2.25, 2.89, 0.5), (1.75, 3.04, 2.6), (-1.75, 3.04, 2.6)],
-             [(-1.55, 4.23, -4.7), (1.55, 4.23, -4.7), (1.95, 4.13, -2.4), (-1.95, 4.13, -2.4)],
-             [(-1.6, 3.63, 2.7), (1.6, 3.63, 2.7), (0.15, 3.93, 4.2), (-0.15, 3.93, 4.2)]]
-    for d in decks:
-        skin([K(*p) for p in d], [(0, 1, 2, 3)], plank, (0, 1, 0))
-    for i in range(n):
-        s0, s1 = secs[i], secs[i + 1]
-        for sx in (-1, 1):
-            if not LITE:                                  # the wale, along the strakes' seam
+    at = {sc[0]: sc for sc in secs}
+    def side(z, y):                                       # how far out her topsides are at section z, height y
+        _, _, _, w, wy, d, t = at[z]
+        return w + (d - w) * (y - wy) / (t - wy)
+    Q = FIXPROP_CASTLE
+    for zs, rail in (((-4.8, -3.6, -2.32), (-4.8, -2.32)), ((-2.26, -1.2, 0.1, 1.4, 2.55), (-2.26, 0.1, 1.4, 2.55)),
+                     ((2.75, 3.4, 3.9, 4.3), (2.75, 3.4, 3.9, 4.3))):
+        # her decks, the castle's, the waist's and the forecastle's, a hair
+        # over her top and in under the rail; the rail along her sheer, in
+        # as few lengths as keep it on her edge
+        pts = [K(sx * (at[z][5] - 0.12), at[z][6] + 0.04, z) for z in zs for sx in (-1, 1)]
+        skin(pts, [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(len(zs) - 1)], plank, (0, 1, 0))
+        for za, zb in zip(rail, rail[1:]):
+            for sx in (-1, 1):
+                beam(K(sx * at[za][5], at[za][6] + 0.1, za), K(sx * at[zb][5], at[zb][6] + 0.1, zb), 0.24 * S, trim)
+    if not LITE:                                          # the wale, along the strakes' seam (in as few lengths as keep it there)
+        wale = [at[z] for z in (-4.8, -2.32, 0.1, 1.4, 2.55, 3.4, 3.9, 4.3)]
+        for s0, s1 in zip(wale, wale[1:]):
+            for sx in (-1, 1):
                 beam(K(sx * (s0[3] + 0.03), s0[4], s0[0]), K(sx * (s1[3] + 0.03), s1[4], s1[0]), 0.2 * S, trim)
-            if LITE and i == n - 1:
-                continue
-            if i == 0:                                    # the rail: along the quarterdeck's edge,
-                beam(K(sx * 1.7, 4.32, -4.8), K(sx * 2.1, 4.22, -2.3), 0.24 * S, trim)
-            else:                                         # ...and her sheer
-                beam(K(sx * s0[5], s0[6] + 0.1, s0[0]), K(sx * s1[5], s1[6] + 0.1, s1[0]), 0.24 * S, trim)
-    beam(K(-1.7, 4.32, -4.8), K(1.7, 4.32, -4.8), 0.24 * S, trim)                      # the taffrail
+    beam(K(-secs[0][5], secs[0][6] + 0.1, -4.8), K(secs[0][5], secs[0][6] + 0.1, -4.8), 0.24 * S, trim)   # the taffrail
     with plain_parts():
-        b((2.9, 0.85, 0.1), 0.0, 3.6, -4.8, trim)         # the stern windows, lit, in their frame
+        b((2.9, 0.85, 0.1), 0.0, 3.6 + Q, -4.8, trim)     # the stern windows, lit, in their frame
         for x in (-0.9, 0.0, 0.9):
-            b((0.6, 0.55, 0.12), x, 3.6, -4.86, 'yellow')
-        b((0.9, 1.05, 0.1), 0.0, 3.42, -2.28, trim)       # the cabin's door in its frame
-        b((0.6, 0.85, 0.1), 0.0, 3.36, -2.23, dark)
-        for sx in (-1, 1):                                # ...a light either side of her quarter, the steps up to the quarterdeck
-            b((0.12, 0.5, 0.6), sx * 2.0, 3.55, -3.6, 'yellow')
+            b((0.6, 0.55, 0.12), x, 3.6 + Q, -4.86, 'yellow')
+        sill = at[-2.26][6] + 0.04                        # (the deck at the break)
+        b((0.9, 1.05, 0.1), 0.0, sill + 0.5, -2.28, trim) # the cabin's door in its frame, in the castle's break
+        b((0.6, 0.85, 0.1), 0.0, sill + 0.43, -2.23, dark)
+        for sx in (-1, 1):                                # ...a light either side of her quarter, the steps up to the castle
+            b((0.12, 0.5, 0.6), sx * (side(-3.6, 3.55 + Q) + 0.02), 3.55 + Q, -3.6, 'yellow')
             if not LITE:
-                box((0.7 * S, 0.14 * S, 1.5 * S), K(sx * 1.4, 3.5, -1.75), wood, yaw=yaw, pitch=0.72)
-        b((0.16, 2.0, 0.7), 0.0, 1.9, -5.05, wood)        # the rudder
+                box((0.7 * S, 0.14 * S, 1.9 * S), K(sx * 1.4, 3.65, -1.65), wood, yaw=yaw, pitch=0.72)
+        b((0.16, 1.4, 0.32), 0.0, 1.95, -4.96, wood)      # the rudder, against her sternpost from her keel up
         b((1.1, 0.2, 1.0), 0.0, 2.97, -0.9, wood)         # the hatch: its coaming, the dark of the hold
         b((0.8, 0.06, 0.7), 0.0, 3.06, -0.9, dark)
         if not LITE:
-            b((0.14, 0.7, 0.14), 0.0, 4.5, -3.3, wood)                                   # her wheel on its post
-            cyl(0.42 * S, 0.12 * S, K(0.0, 4.85, -3.25), wood, segs=8, axis='along', yaw=yaw)
-            beam(K(-2.0, 4.75, -2.36), K(2.0, 4.75, -2.36), 0.14 * S, trim)              # the rail at the quarterdeck's break
+            b((0.14, 0.7, 0.14), 0.0, 4.5 + Q, -3.3, wood)                               # her wheel on its post
+            cyl(0.42 * S, 0.12 * S, K(0.0, 4.85 + Q, -3.25), wood, segs=8, axis='along', yaw=yaw)
+            beam(K(-2.0, 4.75 + Q, -2.36), K(2.0, 4.75 + Q, -2.36), 0.14 * S, trim)      # the rail at the castle's break
             for x in (-1.9, -0.7, 0.7, 1.9):
-                b((0.14, 0.6, 0.14), x, 4.42, -2.36, trim)
+                b((0.14, 0.6, 0.14), x, 4.42 + Q, -2.36, trim)
         if ports:
-            for z in (-1.5, -0.2, 1.1):
+            for z in (-1.2, 0.1, 1.4):
                 for sx in (-1, 1):
-                    b((0.14, 0.42, 0.5), sx * 2.32, 2.25, z, dark)
+                    b((0.14, 0.42, 0.5), sx * (side(z, 2.25) + 0.03), 2.25, z, dark)
         for (z, foot, head) in OWN_SHIP_MASTS:
             top = foot + (head - foot) * 0.6
             b((0.9, 0.16, 0.9), 0.0, top, z, wood)                                       # the top
@@ -28378,7 +28563,7 @@ def pirate_ship():
             fx, fy, fz = K(0.0, head, z)
             own_jolly_roger((fx, fy - 0.3, fz), YAW + math.pi / 2, k, 'anim_flutter:p=' + p)
         if not LITE:
-            own_jolly_roger(K(0.0, 4.25, -4.6), YAW + math.pi / 2, 0.5, 'anim_flutter:p=2.6#stern')
+            own_jolly_roger(K(0.0, 4.25 + FIXPROP_CASTLE, -4.6), YAW + math.pi / 2, 0.5, 'anim_flutter:p=2.6#stern')
     bx, bz = 3.4, -2.9
     with animated('anim_bob:h=0.08:p=3.4', (bx, 0.0, bz)):
         own_rowboat((bx, 0.0, bz), yaw=0.9, scale=0.34, large=True)

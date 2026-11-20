@@ -558,27 +558,29 @@ def monster(c):
         c.bar('bar' + 'RF'[(sy + 1) // 2], (-0.13, sy * 0.33 - 0.02, 0.24), (0.13, sy * 0.33 + 0.02, 0.29), LIGHTSLATE)
     chassis = list(c.parts)
     c.parts = []
-    # THE CAB (the rig drops it for the car's own body): a pick-up, the roster's dress
+    # THE CAB (the rig drops it for the car's own body): a pick-up, the roster's dress.
+    # Its small blocks stay square (round 28 fix): a race never draws them,
+    # and chamfered they took the truck past the roster's vertex count.
     c.box('bed', (-0.2, -0.3, 0.4375), (0.2, 0.3, 0.56))
     c.windows(c.loft('glass', [(0.13, 0.17, 0.56, 0.58), (0.06, 0.17, 0.56, 0.72), (-0.1, 0.17, 0.56, 0.72),
                                (-0.14, 0.17, 0.56, 0.6)]))
-    c.bar('load', (-0.16, -0.27, 0.54), (0.16, -0.15, 0.575))
-    c.grille(0.3, 0.46, 0.53, 0.09)
-    c.lamps(0.29, 0.48, 0.11, 0.17, 0.045)
-    c.tails(-0.3, 0.48, 0.12, 0.18)
+    c.box('load', (-0.16, -0.27, 0.54), (0.16, -0.15, 0.575), SLATE, 0)
+    for o in [c.grille(0.3, 0.46, 0.53, 0.09)] + c.lamps(0.29, 0.48, 0.11, 0.17, 0.045) + c.tails(-0.3, 0.48, 0.12, 0.18):
+        o.modifiers.clear()
     c.bumper(0.3, 0.4375, hw=0.2, h=0.035)
     c.bumper(-0.3, 0.4375, front=False, hw=0.2, h=0.035)
     cab = list(c.parts)
     c.parts = []
     # THE TRIM (dropped with it): an arch over each wheel, let into the bed's side, a roll bar behind the cab
+    # (square, as the cab's small blocks)
     for sy in (-1, 1):
         for o in c.pair(c.box, 'arch' + 'RF'[(sy + 1) // 2], 0.18, 0.3, (0, sy * Y - 0.15, 0.445), (0, sy * Y + 0.15, 0.53), 'paint', 0.02):
             for v in o.data.vertices:          # drawn in at the top: a flare over the wheel, not a shelf
                 if v.co.z > 0.5:
                     v.co.y = sy * Y + (v.co.y - sy * Y) * 0.55
                     v.co.x *= 0.87
-    c.pair(c.bar, 'roll', 0.13, 0.17, (0, -0.2, 0.56), (0, -0.16, 0.7))
-    c.bar('rollTop', (-0.17, -0.2, 0.7), (0.17, -0.16, 0.74))
+    c.pair(c.box, 'roll', 0.13, 0.17, (0, -0.2, 0.56), (0, -0.16, 0.7), SLATE, 0)
+    c.box('rollTop', (-0.17, -0.2, 0.7), (0.17, -0.16, 0.74), SLATE, 0)
     trim = list(c.parts)
     c.parts = chassis
     return [('cab', cab), ('chassis-trim', trim)]
