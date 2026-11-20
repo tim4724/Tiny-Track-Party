@@ -919,8 +919,8 @@ FIG_HAIR = (0x7a5a3a, 0x2a2735, 0xffc044, 0xb06041)
 def fig_person(at, yaw=0.0, pose='stand', shirt=0xcf534f, legs=0x4f5260, hair=None, hat=None, k=1.0,
                arm=0.0, out=False, lean=None, kick=0.0, gesture=None):
     """THE person: facing +X turned by `yaw`, FIG_ADULT tall standing at
-    `k` 1 (a child is FIG_KID), in six blocks, the cars' way: legs, a torso,
-    two arms, a head, and hair or a hat (`hat` a colour: a cap, a helmet, a
+    `k` 1 (a child is FIG_KID), in six blocks rounded over (r29edge_round):
+    legs, a torso, two arms, a head, and hair or a hat (`hat` a colour: a cap, a helmet, a
     hood). No face. The lite build (LITE) leaves out an arm hanging at the
     side. `pose`: `stand`; `sit` (on the ground at `at`, legs out);
     `ride` (on a seat whose top is `at`, shins down off its edge); `crouch`
@@ -938,7 +938,7 @@ def fig_person(at, yaw=0.0, pose='stand', shirt=0xcf534f, legs=0x4f5260, hair=No
     def b(size, fx, fy, fz, color, tip=0.0):
         o = box([e * u for e in size], (x + (fx * c + fz * s) * u, y + fy * u, z + (-fx * s + fz * c) * u), color,
                 yaw=yaw, roll=tip)
-        parts.append(o)
+        parts.append(r29edge_round(o))
         return o
     LEG, HIP = 0.215, 0.21
     if pose == 'sit':
@@ -991,6 +991,37 @@ def fig_person(at, yaw=0.0, pose='stand', shirt=0xcf534f, legs=0x4f5260, hair=No
         b((0.112, 0.045, 0.108), *body(-0.012, 0.2675), 0.0, FIG_HAIR[0] if hair is None else hair, tip=lean)
     return parts
 
+def r29edge_round(o):
+    """A person's block (or a cannonball's) rounded over at every edge,
+    three tenths of its thinnest side in two segments. The chamfer's capped
+    fifth of a tenth-unit head is a few pixels even on the close-up board,
+    where the person read as square blocks; a one-cut chamfer as wide reads
+    as an octagon, thinner than the block. Two segments look as round as
+    three there at two thirds of the vertices. The box's tier keeps them
+    square (LITE_CHAMFER)."""
+    o['share'], o['segs'] = 0.3, 2
+    return o
+
+class r29edge_cut:
+    """The blocks built inside `thin` and more through are cut `share` of
+    their thinnest side, in one segment (cut_width): a toy's soft edge where
+    CHAMFER's cap is too small to see. The rest stay square (plain_parts):
+    a cut costs a block nearly four times its triangles, and a scene's
+    budget counts them."""
+    def __init__(self, share, thin):
+        self.share, self.thin = share, thin
+    def __enter__(self):
+        self.before = set(bpy.context.scene.objects)
+        return self
+    def __exit__(self, *exc):
+        for o in bpy.context.scene.objects:
+            if o not in self.before and o.get('chamfer'):
+                if min(o.scale) >= self.thin:
+                    o['share'] = self.share
+                else:
+                    o['chamfer'] = 0
+        return False
+
 def fig_block(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     """A square-edged block at exactly `size`: an ear, an eye, a horn at an
     animal's own size is under box()'s MIN_T, and a chamfer there is only
@@ -1000,51 +1031,18 @@ def fig_block(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     o['chamfer'] = 0
     return o
 
-# The snowman's balls, in one of three makes between the blocks it was
-# ("blocky") and the split spheres of round 27 ("too round"), for the
-# user to pick from stills of all three (round 28): `block` a block rounded
-# over at every edge, `facet` a ball of eight sides in five bands, flat,
-# `soft` the same shaded round about its axis, a hard break only where two
-# balls meet (four bands drew a lemon). TTP_RFIG_SNOW builds another make
-# for the stills; the scatter's snowman (own_snowman) is the soft one. A
-# big ball (the snowman field's, half a unit and more grown) is turned on as
-# many sides as the ring rule lets it, in seven bands: on eight and five it
-# read as a lump at the size it stands.
-RFIG_SNOW = os.environ.get('TTP_RFIG_SNOW', 'soft')
-
-def rfig_ball_rings(r):
-    """A turned ball's sides and its rings (radius, height) between the poles."""
-    if r * bld_grow() < 0.4:
-        return OWN_BALL_N, OWN_BALL[1:-1]
-    return ring_sides(12, r), [(math.cos(a), math.sin(a)) for a in (math.pi * (i / 7 - 0.5) for i in range(1, 7))]
+# The snowman's balls: blocks of snow rounded over at every edge (round 28's
+# make A, the user's pick in round 29 over balls turned on eight sides, flat
+# or shaded round; between the blocks they were, "blocky", and round 27's
+# split spheres, "too round").
 
 def rfig_snow_ball(r, at, squash=0.9, yaw=0.0):
-    """A rolled ball of snow `r` in radius and `squash` of that high, in the
-    snowman's make (RFIG_SNOW), white at any height."""
-    if RFIG_SNOW == 'block':
-        o = box((1.8 * r, 1.7 * r * squash, 1.8 * r), at, 0xf3f7fb, yaw=yaw)
-        o['round'] = 0.45 * r
-    else:                                                # (Blender's UV sphere drew its normals a bit apart each run)
-        x, y, z = at
-        n, ring = rfig_ball_rings(r)
-        verts = [P(x, y - r * squash, z), P(x, y + r * squash, z)]
-        for rr, yy in ring:
-            verts += [P(*q) for q in own_ring(r * rr, y + r * squash * yy, n, math.pi / n - yaw, (x, z))]
-        at_ = lambda i, k: 2 + i * n + k % n
-        faces = [(0, at_(0, k + 1), at_(0, k)) for k in range(n)]
-        faces += [(1, at_(len(ring) - 1, k), at_(len(ring) - 1, k + 1)) for k in range(n)]
-        faces += [(at_(i, k), at_(i, k + 1), at_(i + 1, k + 1), at_(i + 1, k)) for i in range(len(ring) - 1) for k in range(n)]
-        me = bpy.data.meshes.new('snowball')
-        me.from_pydata(verts, [], faces)
-        me.update()
-        for pl in me.polygons:
-            pl.use_smooth = RFIG_SNOW == 'soft'
-        o = bpy.data.objects.new('snowball', me)
-        bpy.context.scene.collection.objects.link(o)
-        bpy.context.view_layer.update()
-        if sum(1 for pl in me.polygons if pl.normal.dot(pl.center - P(x, y, z)) < 0) > len(faces) // 2:
-            me.flip_normals()
-        paint(o, 0xf3f7fb)
+    """A rolled ball of snow `r` in radius and `squash` of that high: a block
+    rounded over at every edge, in two segments under 0.4 u grown, where a
+    third is not seen (the box's tier: one cut, at any size), white at any
+    height."""
+    o = box((1.8 * r, 1.7 * r * squash, 1.8 * r), at, 0xf3f7fb, yaw=yaw)
+    o['round'], o['segs'], o['lite_chamfer'] = 0.45 * r, 3 if r * bld_grow() >= 0.4 else 2, 1
     return snowy(o, 0.35)
 
 def rfig_round_sides(o):
@@ -1088,22 +1086,13 @@ def fig_snowman(at, h, yaw=0.0, hat=None, hat_c=0x2a2735, scarf=0xff5040, arms='
     for i in range(2 if balls == 3 else 1):
         b((0.04 * k, 0.055 * k, 0.055 * k), (rs[-2] * 0.97, cy[-2] + (0.25 - 0.5 * i) * rs[-2], 0.0), buttons)
     ny = cy[-1] - hr * 0.82                              # the scarf: a band round the neck, an end down the front
-    if RFIG_SNOW == 'block':
-        box((1.9 * hr, 0.11 * k, 1.9 * hr), p(0.0, ny, hz * 0.6), scarf, yaw=yaw)
-    else:
-        rfig_round_sides(cyl(hr * 0.9, 0.11 * k, p(0.0, ny - 0.055 * k, hz * 0.6), scarf, segs=8, stem=True))
+    box((1.9 * hr, 0.11 * k, 1.9 * hr), p(0.0, ny, hz * 0.6), scarf, yaw=yaw)
     # its end, short, tucked under the band at the side of the neck and
     # lying on the middle ball's shoulder, turned with it (a long length
     # from the knot down the front hung off the body like a tie)
     r2, ez = rs[-2], hz * 0.6 + 0.55 * hr
-    side = math.cos(math.pi / rfig_ball_rings(r2)[0])    # (the ball's faces lie that far in from its corners)
-    def front(yy):                                       # the middle ball's face at that height, at the end's side
-        if RFIG_SNOW == 'block':
-            return 0.9 * r2
-        d = (yy - cy[-2]) / (0.9 * r2)
-        return r2 * side * math.sqrt(max(0.0, 1.0 - d * d - (ez / r2) ** 2))
     ya, yb = ny - 0.03 * k, ny - 0.17 * k
-    xa, xb = front(ya) + 0.025 * k, front(yb) + 0.025 * k
+    xa = xb = 0.9 * r2 + 0.025 * k                       # (the middle ball's front face)
     fig_block((0.05 * k, math.hypot(xb - xa, ya - yb), 0.09 * k), p((xa + xb) / 2, (ya + yb) / 2, ez), scarf,
               yaw=yaw - math.atan2(ez, (xa + xb) / 2), roll=math.atan2(xb - xa, ya - yb))
     ar, ay = rs[-2], cy[-2] + 0.15 * rs[-2]
@@ -2955,12 +2944,12 @@ def promenade():
         tx, ty, tz = put(TC - HD, side * HW, pd)
         cyl(0.42, 2.45, (tx, ty, tz), white, segs=8)
         cyl(0.52, 1.1, (tx, ty + 2.45, tz), red, r2=0.03, segs=8)
-    # still anglers at the ends of the landing stage, rods out to sea
-    with square():
-        for s, shirt in ((-3.6, red), (3.7, 0x339cf2)):
-            x, z = at(TC + 3.7, s)
-            tx, tz = at(TC + 4.9, s * 1.1)
-            angler(x, pd, z, A + math.pi / 2, shirt, (tx, pd + 0.85, tz))
+    # still anglers at the ends of the landing stage, rods out to sea, with
+    # a person's round edges (square, the user saw hard edges on them)
+    for s, shirt in ((-3.6, red), (3.7, 0x339cf2)):
+        x, z = at(TC + 3.7, s)
+        tx, tz = at(TC + 4.9, s * 1.1)
+        angler(x, pd, z, A + math.pi / 2, shirt, (tx, pd + 0.85, tz))
     # the stair from the pier up to the bridge that carries its walk on over
     # the road (set-pier-bridge, a piece of its own astride the road: one
     # box over both would keep the verge off the whole straight). PIER_STAIR
@@ -4497,9 +4486,8 @@ def pirate_lookout():
             for k in range(3):                                 # the planks laid up the slope from the bridge's end
                 box((0.6, 0.1, 1.5), (HX + 1.1 + 0.75 * k, 0.05, 0.1 * math.sin(2.0 * k)), plank if k % 2 else 0x9a6a46)
         cove_cannon((LX - 2.6, 0, 1.6), yaw=math.radians(-90), k=0.85)
-        with plain_parts():
-            for (dx, dz) in ((0.0, 0.0), (0.42, 0.0), (0.2, 0.36)):
-                sphere(0.2, (LX - 1.6 + dx, 0.2, 2.6 + dz), 0x38383d, subdiv=1)
+        for (dx, dz) in ((0.0, 0.0), (0.42, 0.0), (0.2, 0.36)):     # the shot, rounded over: a ball, not a block
+            r29edge_round(sphere(0.2, (LX - 1.6 + dx, 0.2, 2.6 + dz), 0x38383d, subdiv=1))
     draped('shot', shot)
 
 @piece(1.0)
@@ -9450,7 +9438,7 @@ def skater(x, y, z, coat, hat):
         c, s = math.cos(tip), math.sin(tip)
         def at(ax, ay):                                  # a point of the foot's own frame (box()'s roll), the sole at its origin
             return (x + (fx + ax * c + ay * s) * u, y + (fy - ax * s + ay * c) * u, z + fz * u)
-        fig_block((0.14 * u, 0.06 * u, 0.07 * u), at(0.02, 0.026), 0xfff6eb, roll=tip)     # the boot, round the foot (its heel clear of the leg's back)
+        r29edge_round(box((0.14 * u, 0.06 * u, 0.07 * u), at(0.02, 0.026), 0xfff6eb, roll=tip))   # the boot, round the foot (its heel clear of the leg's back)
         fig_block((0.16 * u, BLADE * u - 0.004 * u, 0.02 * u), at(0.02, -0.004 - (BLADE - 0.004) / 2), 0xa0a8c9, roll=tip)   # the blade under it
 
 def clip(pts, keep):
@@ -10831,7 +10819,8 @@ def ski_school():
         marker('path_drapekids_%d' % k, pt)
     for n in range(10):
         at = loop[n]
-        with animated('anim_path:c=drapekids:p=100:o=%.3f:f=1#%d' % (n / 10, n), at), plain_parts():
+        with animated('anim_path:c=drapekids:p=100:o=%.3f:f=1#%d' % (n / 10, n), at), \
+                (plain_parts() if LITE else contextlib.nullcontext()):    # (a person's round edges in full)
             kid_skier(at[0], at[1], at[2], COATS[n % 6], COATS[(n + 3) % 6])
 
 def snowman(at, hat=False):
@@ -11533,11 +11522,11 @@ def glacier_musher(x, y, z, coat, k):
     the person's own proportions, it read as half of him; in a bare shirt
     and a cap as a summer walker on the ice.)"""
     def b(size, dx, dy, color, dz=0.0):
-        return box(tuple(e * k for e in size), (x + dx * k, y + dy * k, z + dz * k), color)
+        return r29edge_round(box(tuple(e * k for e in size), (x + dx * k, y + dy * k, z + dz * k), color))
     for sd in (-1, 1):
         b((0.12, 0.27, 0.1), 0.0, 0.135, 0x38383d, dz=sd * 0.07)       # legs
-        beam((x + 0.02 * k, y + 0.47 * k, z + sd * 0.12 * k), (x + 0.15 * k, y + 0.53 * k, z + sd * 0.12 * k),
-             0.09 * k, coat)                                              # an arm up to the bar
+        r29edge_round(beam((x + 0.02 * k, y + 0.47 * k, z + sd * 0.12 * k), (x + 0.15 * k, y + 0.53 * k, z + sd * 0.12 * k),
+                           0.09 * k, coat))                               # an arm up to the bar
         b((0.1, 0.1, 0.1), 0.16, 0.54, 0x2a2735, dz=sd * 0.12)           # its mitt on the bar, round its end
     b((0.2, 0.26, 0.28), 0.0, 0.39, coat)                               # the parka
     b((0.22, 0.06, 0.3), 0.0, 0.26, 0x2a2735)                          # its belt
@@ -11715,7 +11704,7 @@ def glacier_climber(x, z, coat, sack, probe=False):
     u = GLACIER_CLIMBER * fig_u()
     fig_person((x, 0.0, z), math.pi, shirt=coat, hat=0xffc044 if coat != 0xffc044 else 0xfff6eb, legs=0x38383d,
                arm=(0.0, 1.2), k=GLACIER_CLIMBER)
-    box((0.09 * u, 0.17 * u, 0.13 * u), (x + 0.095 * u, 0.3 * u, z), sack)       # the rucksack
+    r29edge_round(box((0.09 * u, 0.17 * u, 0.13 * u), (x + 0.095 * u, 0.3 * u, z), sack))   # the rucksack
     hx, hy, hz = x - 0.12 * u, 0.31 * u, z + 0.096 * u                        # the reaching hand
     if probe:                                                            # the axe's shaft down to the snow
         with animated('anim_drape+sway:a=z:d=18:p=5.5:r=0.55#probe', (hx, hy, hz)):
@@ -19011,9 +19000,9 @@ def bay_battery():
     keg(at(-1.95, 0.0, -1.45), r=0.2, h=0.46)
     if not LITE:
         keg(at(-2.6, 0.0, -1.5), r=0.2, h=0.46)
+    for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.2, -0.04)):
+        r29edge_round(box((0.2, 0.2, 0.2), at(0.0 + dx, 0.17 + dy, -1.35 + dz), iron, yaw=YAW + 0.4))   # the shot, rounded over
     with plain_parts():
-        for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.2, -0.04)):
-            box((0.2, 0.2, 0.2), at(0.0 + dx, 0.17 + dy, -1.35 + dz), iron, yaw=YAW + 0.4)
         beam(at(2.05, 0.05, -1.3), at(1.8, 0.95, -0.4), 0.07, wood)
         box((0.16, 0.16, 0.2), at(1.8, 0.95, -0.4), 0xfde4c7, yaw=YAW)
         # the spyglass on its stand
@@ -25131,11 +25120,13 @@ DEFENDERS, BESIEGERS = 0x5a8fd8, 0xff5040
 def soldier(at, color):
     # a toy knight facing +X: hose, a surcoat with its cross, belt and arms,
     # a great helm with its slit and plume, a spear at his side and his
-    # shield before him. Square-edged: his parts are a few tenths of a unit,
-    # where a chamfer cannot be seen and nearly quadruples what a rank costs
-    # up close. The piece he stands in keeps its chamfered frame, which is
-    # what lets the bake cut it a far form (TtpRenderer::farForm).
-    with plain_parts():
+    # shield before him. His three big blocks (hose, surcoat, helm) are cut
+    # a fifth of their thinnest side, a wooden toy's soft edge (round 29:
+    # square, a rank read as hard blocks on the close-up board; the
+    # chamfer's cap is a few pixels at his size). The rest stay square: cut
+    # too, the Gauntlet's crowd of them put its frame over the budget it had
+    # before round 27. The box's are square all through.
+    with plain_parts() if LITE else r29edge_cut(0.2, 0.4):
         _soldier(at, color)
 
 def _soldier(at, color):
@@ -28045,10 +28036,10 @@ def own_open_crate(at, yaw=0.0, k=1.0, bottles=False):
         quad([o[3], o[2], i[2], i[3]], (0, 1, 0), hi=6)
     quad([(-hx + t, f, -hz + t), (hx - t, f, -hz + t), (hx - t, f, hz - t), (-hx + t, f, hz - t)], (0, 1, 0), lo=28)
     own_shell('crate', faces)
+    for sx in (-1, 1):                                    # (chamfered: square, the posts read as hard blocks close up)
+        for sz in (-1, 1):
+            box((0.13 * k, (H + 0.11) * k, 0.13 * k), W(sx * (hx - 0.035), (H + 0.11) / 2, sz * (hz - 0.035)), post, yaw=yaw)
     with plain_parts():
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                box((0.13 * k, (H + 0.11) * k, 0.13 * k), W(sx * (hx - 0.035), (H + 0.11) / 2, sz * (hz - 0.035)), post, yaw=yaw)
         if bottles:
             for i, (bx, bz) in enumerate(((-0.2, -0.3), (0.2, -0.28), (-0.18, 0.12), (0.2, 0.3))):
                 cyl(0.15 * k, 0.5 * k, W(bx, f, bz), 'green', segs=6)
@@ -28261,9 +28252,8 @@ def own_snow_pile():
         faces.append(('snow', own_facing(top, (0, 1, 0)), 'pile'))
     own_shell('snow-pile', faces, smooth=True)              # shaded round, as the Kenney drift was (round 28)
 
-# a rolled ball's turned profile (radius, height), pole to pole: the
-# landmark snowmen's soft ball (rfig_snow_ball), eight sides in five bands,
-# a face to the front
+# a rolled ball's turned profile (radius, height), pole to pole: eight
+# sides in five bands, a face to the front
 OWN_BALL = ((0.0, -1.0), (0.588, -0.809), (0.951, -0.309), (0.951, 0.309), (0.588, 0.809), (0.0, 1.0))
 OWN_BALL_N = 8
 
@@ -28278,53 +28268,19 @@ def own_ball(r, at, color, rows=(4, 22), squash=0.9, grp='ball'):
                         phase=math.pi / OWN_BALL_N, at=(x, z))
     return out
 
-def own_ball_front(r, dy, squash=0.9):
-    """How far in front of its axis an own_ball's front face is, `dy` over its middle."""
-    t = max(-1.0, min(1.0, dy / (r * squash)))
-    for (r0, y0), (r1, y1) in zip(OWN_BALL, OWN_BALL[1:]):
-        if y0 <= t <= y1:
-            return r * (r0 + (r1 - r0) * (t - y0) / (y1 - y0)) * math.cos(math.pi / OWN_BALL_N)
-    return 0.0
-
 @own_model('snowman', grow=0.84)
 def own_snowman():
-    # The snow tracks' greeter by the road, the snowman field's make (snowfolk)
-    # at a prop's cost: three rolled balls, coal eyes and buttons, a carrot
-    # to +Z, stick arms, a red scarf and a top hat.
-    S = 'snow'
-    faces, y, cy = [], -0.04, []
-    rs = (0.3, 0.225, 0.165)
-    for i, r in enumerate(rs):
-        cy.append(y + r * 0.9)
-        faces += own_ball(r, (0.0, cy[-1], 0.0), S, grp='ball%d' % i)
-        y += r * 1.56
-    hr, hy = rs[2], cy[2]
-    faces += own_band('red', (rs[1] * 0.72, cy[1] + rs[1] * 0.7, 6), (rs[1] * 0.66, cy[1] + rs[1] * 0.7 + 0.08, 2), 8, 'scarf')
-    faces += own_band('dark', (hr * 1.05, hy + hr * 0.74, 10), (hr * 1.05, hy + hr * 0.74 + 0.03, 10), 8, 'brim')
-    faces += own_band('dark', (hr * 1.05, hy + hr * 0.74 + 0.03, 10), (0.02, hy + hr * 0.74 + 0.03, 10), 8, 'brimtop')
-    faces += own_band('dark', (hr * 0.66, hy + hr * 0.74 + 0.03, 12), (hr * 0.66, hy + hr * 0.74 + 0.2, 4), 8, 'crown')
-    faces.append(('dark', own_facing([p + (2,) for p in own_ring(hr * 0.66, hy + hr * 0.74 + 0.2, 8)], (0, 1, 0)), 'hattop'))
-    own_shell('snowman', faces, smooth=True)
-    flat = []
-    def dot(x, y, z, s, c):                               # a coal, a button: a square stood just off the snow
-        flat.append((c, own_facing([(x - s, y - s, z, 20), (x + s, y - s, z, 20), (x + s, y + s, z, 20), (x - s, y + s, z, 20)], (0, 0, 1)), 'dot'))
-    for sx in (-1, 1):
-        dot(sx * 0.055, hy + 0.05, own_ball_front(hr, 0.05) + 0.006, 0.024, 'dark')
-    for dy in (0.07, -0.05):
-        dot(0.0, cy[1] + dy, own_ball_front(rs[1], dy) + 0.006, 0.024, 'dark')
-    tip, base = (0.0, hy - 0.01, hr + 0.17), own_ring(0.045, 0.0, 4, math.pi / 4)
-    for i in range(4):                                    # the carrot
-        a, b = base[i], base[(i + 1) % 4]
-        q = [(a[0], hy - 0.01 + a[2], hr * 0.86, 6), (b[0], hy - 0.01 + b[2], hr * 0.86, 6), tip + (0,)]
-        flat.append(('orange', own_facing(q, (a[0] + b[0], a[2] + b[2], 0.3)), 'carrot'))
-    zt, zb = own_ball_front(rs[1], rs[1] * 0.72) + 0.012, own_ball_front(rs[1], rs[1] * 0.2) + 0.012
-    flat.append(('red', own_facing([(0.03, cy[1] + rs[1] * 0.72, zt, 8), (0.11, cy[1] + rs[1] * 0.72, zt, 8),
-                                    (0.12, cy[1] + rs[1] * 0.2, zb, 14), (0.04, cy[1] + rs[1] * 0.2, zb, 14)], (0, 0.3, 1)), 'scarfend'))
-    own_shell('face', flat)
-    with plain_parts():
-        for sx in (-1, 1):
-            beam((sx * rs[1] * 0.8, cy[1] + 0.03, 0.0), (sx * 0.52, cy[1] + 0.16, 0.02), 0.04, 'brown')
+    # The snow tracks' greeter by the road: THE snowman (fig_snowman), the
+    # landmarks' make, its carrot to +Z, stick arms out, a red scarf and a
+    # top hat.
+    fig_snowman((0.0, 0.0, 0.0), 0.87, yaw=-math.pi / 2, hat='top')
     join_still('snowman')
+
+@own_model('snowman-lite', grow=0.84)
+def own_snowman_lite():
+    # the box's (a biome prop, under its 400 vertices): one cut on each ball
+    with lite_parts(True):
+        own_snowman()
 
 # The scatter's palms: the groves' make (palm()) at a prop's size, and the
 # box's builds of them.
@@ -28653,8 +28609,7 @@ def cull_hidden(grounded):
         dim = np.linalg.norm(m[:3, :3], axis=0)
         if dim.min() < 1e-6:
             continue
-        r = o.get('round')
-        c = 0.0 if not o.get('chamfer') else min(r, 0.33 * dim.min()) if r else min(CHAMFER, 0.2 * dim.min())
+        c = cut_width(o, dim.min()) if o.get('chamfer') else 0.0
         blocks.append((np.linalg.inv(m), dim, c, world[o].min(axis=0), world[o].max(axis=0), moves_with(o), o))
     lo = np.array([b[3] for b in blocks]).reshape(-1, 3)
     hi = np.array([b[4] for b in blocks]).reshape(-1, 3)
@@ -28778,8 +28733,9 @@ def chamfer(lite=False, grow=1.0):
     corner keeps one normal and the chamfer adds triangles, not vertices (a
     flat-shaded cut would cost a box four times its vertices). Not cylinders:
     there it triples the count and barely shows. A block marked 'round' gets
-    a round-over instead: three segments, that wide (a third of its thinnest
-    side at most)."""
+    a round-over instead: three segments (or its 'segs'), that wide (a third
+    of its thinnest side at most); one marked with a 'share' of its thinnest
+    side is cut that wide in its 'segs' (cut_width)."""
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
     for o in bpy.context.scene.objects:
@@ -28792,9 +28748,8 @@ def chamfer(lite=False, grow=1.0):
         bpy.context.view_layer.objects.active = o
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         b = o.modifiers.new('chamfer', 'BEVEL')
-        r = o.get('round')
-        b.width = min(r, 0.33 * min(o.dimensions)) if r else min(CHAMFER, 0.2 * min(o.dimensions))
-        b.segments = 3 if r and not lite else 1
+        b.width = cut_width(o, min(o.dimensions))
+        b.segments = 1 if lite else o.get('segs', 3 if o.get('round') else 1)
         b.limit_method = 'ANGLE'
         b.angle_limit = math.radians(40)
         b.use_clamp_overlap = True
@@ -28803,6 +28758,15 @@ def chamfer(lite=False, grow=1.0):
             p.use_smooth = True
 
 CHAMFER = 0.05   # the car's 0.02 at its 0.9 length, at this scale and a little over
+
+def cut_width(o, thin):
+    """How wide chamfer() cuts block `o`, `thin` its thinnest side: its
+    'round' (a third of `thin` at most), its 'share' of `thin` (a person's,
+    a toy soldier's: blocks a tenth of a unit across, where CHAMFER's cut
+    was a few pixels on the close-up board; not in the box's tier, where
+    such blocks stay square), or the chamfer's fifth."""
+    r, share = o.get('round'), not BOX_TIER and o.get('share')
+    return min(r, 0.33 * thin) if r else share * thin if share else min(CHAMFER, 0.2 * thin)
 
 def unscaled(o):
     """`o` with its scale applied, before others are joined into it: a join
