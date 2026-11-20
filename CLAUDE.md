@@ -103,11 +103,14 @@ were deleted once each layer was conformance-proven; git history has them.
 `partyplug/` is a reusable party-game transport kit shared across games, served
 under `/partyplug/`. It is a **copy-fork**, so every local edit to a kit file
 must be declared in `partyplug/UPSTREAM.md` — `tests/partyplug-fork.test.js`
-fails until it is. 3D assets are the Kenney Toy Car Kit under
-`public/assets/toycar/` — `toycar` names the asset pack, not the game. The four
-cars themselves are built, not Kenney's: `scripts/toy_cars.py` in the kit's own
-construction, exported by `gen-concept-cars.py --roster` (its header lists the
-bakes that follow).
+fails until it is. The 3D models are under `public/assets/toycar/` (`toycar`
+names the asset pack, after the Kenney Toy Car Kit whose style and palette
+layout they follow, not the game) and every one is BUILT by a script, none
+downloaded: `SOURCES.json` beside them names it. The cars are
+`scripts/toy_cars.py`, exported by `gen-concept-cars.py --roster` (its header
+lists the bakes that follow); everything else is
+`scripts/blender/set_prototypes.py`; the one colour atlas is
+`scripts/gen-colormap.mjs`.
 
 Browser code is ES modules. Modules Node imports directly via dynamic `import()`
 (`shared/tracks.js`, `shared/devTracks.js`, `shared/protocol.js`,

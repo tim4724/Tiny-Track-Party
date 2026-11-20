@@ -5,7 +5,7 @@
 # The kit's grammar, measured off its vehicles: a 1/16 grid, chunky
 # axis-aligned blocks with one 0.02 chamfer, flat shading, a whole face
 # coloured at a time from the shared colormap (paint = an odd column of row 2,
-# light at the top of the car; trim = row 3), the kit's own wheel, windows and
+# light at the top of the car; trim = row 3), one wheel (wheel_mesh), windows and
 # glass painted onto faces. No thin rods: a strut or a pipe is a square bar
 # about 0.04 across.
 #
@@ -40,7 +40,8 @@ CAR_H = (0.0, 0.45)  # the height the paint gradient runs over, light on top
 # toy atlas cells (row, col)
 PAINT = {'cream': (2, 1), 'green': (2, 3), 'gold': (2, 5), 'orange': (2, 7),
          'red': (2, 9), 'blue': (2, 11), 'sky': (2, 13), 'purple': (2, 15)}
-SLATE = (3, 3)       # tyres, bumpers, struts
+SLATE = (3, 3)       # bumpers, struts
+TYRE = (3, 5)        # the tyres' dark slate (the windows' cell)
 WINDOW = (3, 5)      # the kit's dark window
 LIGHTSLATE = (3, 7)  # chrome
 WHITE = (3, 9)       # hubs, lamps
@@ -293,38 +294,69 @@ class Car:
         return body, children
 
 
-# The kit's standard wheel (slate tyre, white hub) rides on every shipped car,
-# so the shipped GT is where it is read back from: the kit vehicle it came off
-# (the speedster) is no longer in the folder.
-WHEEL_SOURCE = 'vehicle-gt.glb'
+# The wheel every car rides on: a slate tyre with a chamfered shoulder, its
+# outer face dished in to a white hub. Turned about its axle in WHEEL_SIDES
+# flats and shaded round (the one round thing on a car), each ring of the
+# section its own vertices where the surface breaks, so the shoulder and the
+# dish keep their edges. The ramp runs down the wheel as it does the body.
+WHEEL_SIDES = 16
+# the section, hub face to back face: (x across as a share of the half width, r as a share of the radius, cell)
+WHEEL_SECTION = (
+    ((-0.6, 0.0), (-0.6, 0.3), WHITE),       # the hub
+    ((-0.6, 0.3), (-1.0, 0.48), TYRE),      # the dish, out to the rim
+    ((-1.0, 0.48), (-1.0, 0.8), TYRE),      # the side wall
+    ((-1.0, 0.8), (-0.6, 1.0), TYRE),       # the shoulder
+    ((-0.6, 1.0), (0.6, 1.0), TYRE),        # the tread
+    ((0.6, 1.0), (1.0, 0.8), TYRE),
+    ((1.0, 0.8), (1.0, 0.0), TYRE),         # the back face
+)
 
 
 def wheel_mesh(left, r, w):
-    """The kit's standard wheel at radius r and width w, hub facing out."""
-    key = 'l' if left else 'r'
+    """The wheel at radius r and width w, about the origin, hub facing out."""
+    key = ('l' if left else 'r', r, w)
     try:
-        _wheel_src[key].name
+        return _wheel_src[key].copy()
     except (KeyError, ReferenceError):
-        before = set(bpy.data.objects)
-        bpy.ops.import_scene.gltf(filepath=os.path.join(KIT, WHEEL_SOURCE))
-        new = [o for o in bpy.data.objects if o not in before]
-        for o in new:
-            n = o.name.split('.')[0]
-            if n in ('wheel-fl', 'wheel-fr'):
-                me = o.data.copy()
-                me.name = 'kit-wheel-' + n[-1]
-                me.materials.clear()
-                me.materials.append(material())
-                _wheel_src[n[-1]] = me
-        for o in new:
-            bpy.data.objects.remove(o)
-    me = _wheel_src[key].copy()
-    vs = [v.co for v in me.vertices]
-    lo = Vector([min(v[i] for v in vs) for i in range(3)])
-    hi = Vector([max(v[i] for v in vs) for i in range(3)])
-    me.transform(Matrix.Diagonal((w / (hi.x - lo.x), 2 * r / (hi.y - lo.y), 2 * r / (hi.z - lo.z), 1))
-                 @ Matrix.Translation(-(lo + hi) / 2))
-    return me
+        pass
+    side = 1.0 if left else -1.0
+    bm = bmesh.new()
+    cells = []          # per face
+    n = WHEEL_SIDES
+    def ring(x, rr):
+        return [bm.verts.new((side * x * w / 2, rr * r * math.cos(2 * math.pi * i / n),
+                              rr * r * math.sin(2 * math.pi * i / n))) for i in range(n)]
+    def face(verts, out, cell, smooth):
+        f = bm.faces.new(verts)
+        f.normal_update()
+        if f.normal.dot(Vector(out)) < 0:
+            f.normal_flip()
+        f.smooth = smooth
+        cells.append(cell)
+    for (x0, r0), (x1, r1), cell in WHEEL_SECTION:
+        # the outside is to the left of the way along the section
+        nx, nr = -(r1 - r0) * r, (x1 - x0) * w / 2
+        if r0 == 0.0 or r1 == 0.0:
+            face(ring(x1 if r0 == 0.0 else x0, max(r0, r1)), (side * nx, 0, 0), cell, False)
+            continue
+        lo, hi = ring(x0, r0), ring(x1, r1)
+        for i in range(n):
+            j = (i + 1) % n
+            am = 2 * math.pi * (i + 0.5) / n
+            face((lo[i], lo[j], hi[j], hi[i]), (side * nx, nr * math.cos(am), nr * math.sin(am)), cell, True)
+    me = bpy.data.meshes.new('wheel-' + key[0])
+    smooth = [f.smooth for f in bm.faces]
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(material())
+    uv = me.uv_layers.new().data
+    for pl in me.polygons:
+        pl.use_smooth = smooth[pl.index]
+        for li in pl.loop_indices:
+            z = me.vertices[me.loops[li].vertex_index].co.z
+            uv[li].uv = uv_of(cells[pl.index], 0.5 - z / (2 * r))
+    _wheel_src[key] = me
+    return me.copy()
 
 
 # ============================================================== the cars
@@ -484,6 +516,65 @@ def hatch_muscle(c):
     c.pair(c.bar, 'pipe', 0.05, 0.09, (0, -0.45, 0.12), (0, -0.41, 0.16))
 
 
+def monster(c):
+    """The monster truck an item turns a car into: big wheels far apart under a ladder frame, its axles on four raked struts, a pick-up cab on top."""
+    R, W, X, Y = 0.1875, 0.1875, 0.21875, 0.25
+    c.wheel(True, Y, X, R, W)
+    c.wheel(False, -Y, X, R, W)
+    # THE CHASSIS, all the rig keeps (TtpRendererCars: the car's own body is
+    # seated on it, its floor at 0.4375 less the mount's 0.07): two axles,
+    # a ladder frame slung between them, a drive block, four struts raked up
+    # to the deck the body stands on, bumper bars.
+    for y in (-Y, Y):
+        c.box('axle', (-X + W / 2 - 0.02, y - 0.035, R - 0.035), (X - W / 2 + 0.02, y + 0.035, R + 0.035), SLATE, 0)
+        c.box('diff', (-0.05, y - 0.06, R - 0.06), (0.05, y + 0.06, R + 0.06), LIGHTSLATE, 0.015)
+    c.pair(c.box, 'rail', 0.06, 0.1, (0, -0.3, 0.24), (0, 0.3, 0.29), SLATE, 0)
+    c.box('drive', (-0.07, -0.12, 0.2), (0.07, 0.1, 0.31), LIGHTSLATE)
+    c.box('deck', (-0.15, -0.3, 0.325), (0.15, 0.3, 0.365), SLATE, 0.01)
+    for sy in (-1, 1):
+        for sx in (-1, 1):
+            c.strut(f'strut{sx}{sy}', (sx * 0.09, sy * Y, R + 0.02), (sx * 0.12, sy * 0.13, 0.33), 0.045, LIGHTSLATE).modifiers.clear()
+        c.box('bar' + 'RF'[(sy + 1) // 2], (-0.13, sy * 0.33 - 0.02, 0.24), (0.13, sy * 0.33 + 0.02, 0.29), LIGHTSLATE, 0)
+    chassis = list(c.parts)
+    c.parts = []
+    # THE CAB (the rig drops it for the car's own body): a pick-up, the roster's dress
+    c.box('bed', (-0.2, -0.3, 0.4375), (0.2, 0.3, 0.56))
+    c.windows(c.loft('glass', [(0.13, 0.17, 0.56, 0.58), (0.06, 0.17, 0.56, 0.72), (-0.1, 0.17, 0.56, 0.72),
+                               (-0.14, 0.17, 0.56, 0.6)]))
+    c.box('load', (-0.16, -0.27, 0.54), (0.16, -0.15, 0.575), SLATE, 0)
+    for o in [c.grille(0.3, 0.46, 0.53, 0.09)] + c.lamps(0.29, 0.48, 0.11, 0.17, 0.045) + c.tails(-0.3, 0.48, 0.12, 0.18):
+        o.modifiers.clear()
+    c.bumper(0.3, 0.4375, hw=0.2, h=0.035)
+    c.bumper(-0.3, 0.4375, front=False, hw=0.2, h=0.035)
+    cab = list(c.parts)
+    c.parts = []
+    # THE TRIM (dropped with it): an arch over each wheel, a roll bar behind the cab
+    for sy in (-1, 1):
+        c.pair(c.box, 'arch' + 'RF'[(sy + 1) // 2], 0.14, 0.3, (0, sy * Y - 0.13, 0.4), (0, sy * Y + 0.13, 0.44), 'paint', 0.012)
+    c.pair(c.box, 'roll', 0.13, 0.17, (0, -0.2, 0.56), (0, -0.16, 0.74), SLATE, 0)
+    c.box('rollTop', (-0.17, -0.2, 0.7), (0.17, -0.16, 0.74), SLATE, 0)
+    trim = list(c.parts)
+    c.parts = chassis
+    return [('cab', cab), ('chassis-trim', trim)]
+
+
+MONSTER = 'vehicle-monster-truck'
+
+
+def build_monster():
+    """(chassis, children): the truck in the node layout the renderer's rig
+    reads (TtpRendererTrack: `chassis` it keeps and repaints, `cab` and
+    `chassis-trim` it drops, the four wheels it turns)."""
+    c = Car('chassis', 'purple')
+    extra = monster(c)
+    children = list(c.wheels)
+    for name, parts in extra:
+        children.append((name, c._join(name, parts), (0, 0, 0)))
+    body = bpy.data.objects.new('chassis', c._join('chassis', c.parts))
+    c.col.objects.link(body)
+    return body, children
+
+
 # THE ROSTER: one car per role, its look matching its stats and its paint the
 # role's established colour, so every table keyed on a role's body tone (the
 # item chips, the TV shells' copies) still holds. The user's picks of
@@ -514,6 +605,8 @@ CARS = {
 
 def build(name, x=0.0, live=False):
     """(body, [(child node, mesh, location)]) for one car, roster or concept."""
+    if name == MONSTER:
+        return build_monster()
     fn, paint = ROSTER[name] if name in ROSTER else CARS[name]
     c = Car(name, paint)
     fn(c)

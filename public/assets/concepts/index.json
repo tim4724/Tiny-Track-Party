@@ -3,19 +3,19 @@
  "models": [
   {
    "name": "tk-stock-hatch-muscle",
-   "tris": 1752,
+   "tris": 1624,
    "note": "Toy kit construction, front wheels in the open. Hot hatch in the pony's dress: stripes over bonnet and roof, quad lamps, chrome bumpers; the roof vent gives way to the stripes.",
    "base": "vehicle-stock"
   },
   {
    "name": "tk-jeep-b",
-   "tris": 1804,
+   "tris": 1644,
    "note": "Toy kit construction, front wheels in the open. Hardtop 4x4: a roofed cab with windows all round, roof rails with lamps, a bull bar, the spare on the tail.",
    "base": "vehicle-jeep"
   },
   {
    "name": "tk-muscle-c",
-   "tris": 1840,
+   "tris": 1712,
    "note": "Toy kit construction, front wheels in the open. Pony fastback: a long hood under twin white stripes, a fastback roof with rear louvres, quad lamps, chrome bumpers."
   }
  ]

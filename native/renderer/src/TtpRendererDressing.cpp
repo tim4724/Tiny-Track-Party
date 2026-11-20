@@ -1481,8 +1481,8 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     }
 }
 
-// The track's SET PIECES (theme.set): composed landmark models
-// (scripts/gen-set-pieces.mjs) placed where the TRACK says, not where a stream
+// The track's SET PIECES (theme.set): landmark models
+// (scripts/gen-set-prototypes.mjs) placed where the TRACK says, not where a stream
 // rolls. Each stands in the track's frame at its `u`: local +Z along the
 // direction of travel, +X the track's LEFT (-lat — the right-handed choice, see
 // TrackBin::Sample::basis), on the ground. Instanced like the props, so the

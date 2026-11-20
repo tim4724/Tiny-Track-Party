@@ -60,7 +60,7 @@ struct FurnDef {   // oil / pad / box / pole descriptor
 
 struct BananaDef { double u, lat; };
 
-// A SET PIECE: one composed landmark model (scripts/gen-set-pieces.mjs) the
+// A SET PIECE: one landmark model (scripts/gen-set-prototypes.mjs) the
 // RENDERER places on this track. Not builder input — it rides here for the
 // reason `name` and `cup` do below: the catalogue is where it is authored.
 struct SetDef {

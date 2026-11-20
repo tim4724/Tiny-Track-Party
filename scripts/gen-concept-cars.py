@@ -4,7 +4,8 @@
 # children):
 #
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py -- --roster
-#       the four SHIPPED cars (toy_cars.ROSTER) into public/assets/toycar/.
+#       the four SHIPPED cars (toy_cars.ROSTER) and the monster truck into
+#       public/assets/toycar/.
 #       Then: scripts/dedupe-wheel-meshes.mjs, scripts/gen-kit-colors.mjs and a
 #       wasm rebuild, scripts/capture-car-thumbs.js.
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py [-- name ...]
@@ -34,7 +35,8 @@ def export(name, body, children, out):
     """Write out/<name>.glb: body at the root, the children, given as
     (name, mesh, location), as its child nodes. Returns the triangle count."""
     bpy.ops.object.select_all(action='DESELECT')
-    body.name = name
+    if name != toy_cars.MONSTER:       # the truck's root is its `chassis`, by name
+        body.name = name
     keep = [body]
     for cname, mesh, loc in children:
         o = bpy.data.objects.new(cname, mesh)
@@ -136,7 +138,7 @@ def write_index(tris):
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     if argv == ['--roster']:
-        for name in toy_cars.ROSTER:
+        for name in list(toy_cars.ROSTER) + [toy_cars.MONSTER]:
             build(name, KIT)
         return
     os.makedirs(OUT, exist_ok=True)

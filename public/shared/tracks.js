@@ -237,8 +237,7 @@ const BOXES = {
 
 // Set pieces — `set`, per track: the big landmarks that make one circuit look
 // unlike the rest of its cup (the biome's scatter is the same on all four). Each
-// names a composed model (scripts/gen-set-pieces.mjs, or modelled in Blender by
-// scripts/gen-set-prototypes.mjs) and places it by `u`
+// names a model built in Blender by scripts/gen-set-prototypes.mjs and places it by `u`
 // (fraction of the lap) and `lat` (world units off the centreline; + is the
 // track's RIGHT), turned `yaw` degrees from the track's heading there; `y`
 // lifts or sinks it, `scale` sizes it. Visual only: the sim never sees one, so a

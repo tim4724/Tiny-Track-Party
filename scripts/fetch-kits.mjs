@@ -2,11 +2,12 @@
 // fetch-kits.mjs — put the Kenney kits on disk so the asset gallery's KIT
 // FIELD can stand every model in them, not just the ones the game draws.
 //
-// The game ships a HAND-PICKED handful of the kits' models under
-// public/assets/toycar. Deciding what to add next means looking at all the
-// others, and that is a browsing job rather than a checked-in one: the kits are
-// CC0 and re-fetchable, so the reproducible source is a URL plus a hash, and the
-// bytes are a cache. Same rule, and the same .cache/ home, as the race-music
+// The game ships NONE of the kits' models: everything under
+// public/assets/toycar is built by this repo's scripts, in the kits' style. The
+// kits are a reference to look at while building (what a thing reads as at a
+// toy's size), and that is a browsing job rather than a checked-in one: the kits
+// are CC0 and re-fetchable, so the reproducible source is a URL plus a hash, and
+// the bytes are a cache. No builder and no test reads it. Same rule, and the same .cache/ home, as the race-music
 // masters (scripts/fetch-music.mjs).
 //
 //   node scripts/fetch-kits.mjs            download + extract what the browser needs

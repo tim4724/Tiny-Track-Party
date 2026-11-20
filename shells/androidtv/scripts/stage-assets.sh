@@ -81,7 +81,6 @@ mkdir -p "$OUT/toycar/Textures" "$OUT/toycar/thumbs" "$OUT/audio/cues" \
 # ("Textures/colormap.png"), and the shell provides bytes under that same string.
 cp "$ROOT/public/assets/toycar"/*.glb "$OUT/toycar/"
 cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
-cp "$ROOT/public/assets/toycar/KENNEY-License.txt" "$OUT/toycar/"
 
 # Each car's front-3/4 HERO STILL — what makes a lobby seat show the car the
 # player actually picked rather than a shape standing in for one. The 24-frame

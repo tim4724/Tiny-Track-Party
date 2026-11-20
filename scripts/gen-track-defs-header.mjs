@@ -157,8 +157,8 @@ function bananaInit(f) {
 const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'sandOffFrom', 'sandOffTo', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
 
 // ---- set pieces (renderer-only: the builder never reads them) ----
-// `model` names a GLB under public/assets/toycar that scripts/gen-set-pieces.mjs
-// composed; the rest place it. Absent yaw/y read 0 and absent scale reads 1, so
+// `model` names a GLB under public/assets/toycar that scripts/gen-set-prototypes.mjs
+// built; the rest place it. Absent yaw/y read 0 and absent scale reads 1, so
 // a plain 0 would not be faithful for scale — it is carried as authored.
 // `lite: false` keeps a piece off the lite tier (Android TV) altogether; a
 // piece that brings its own ground (SET_GROUND) cannot, since that ground is
