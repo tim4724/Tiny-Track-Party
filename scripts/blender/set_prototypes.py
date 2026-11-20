@@ -420,13 +420,15 @@ def skull_mark(at, h, yaw, t=None):
     """The skull and crossed bones in white on a black flag `h` high whose
     middle is `at` and which flies along (sin yaw, cos yaw): blocks standing
     through the cloth, `t` thick (a flag's own by default), so both faces
-    carry it. The parts, for the cloth's own moving part."""
+    carry it; a thin `t` is a print on a sail, under box()'s MIN_T. The
+    parts, for the cloth's own moving part."""
     x, y, z = at
     c, s = math.cos(yaw), math.sin(yaw)
     white, black = 0xfff6eb, 0x38383d
     t = t or max(0.07, 0.12 * h)
     def b(w, hh, du, dv, color, thick=t, pitch=0.0):
         o = box((thick, hh * h, w * h), (x + s * du * h, y + dv * h, z + c * du * h), color, yaw=yaw, pitch=pitch)
+        o.scale[0] = thick
         o['chamfer'] = 0
         return rowed(o, 0)
     out = [b(0.6, 0.085, 0.0, -0.06, white, pitch=0.6), b(0.6, 0.085, 0.0, -0.06, white, pitch=-0.6),   # the bones, crossed
@@ -452,6 +454,7 @@ def join_anims(k):
         objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.get('anim') == gid]
         if not objs:
             continue
+        unscaled(objs[0])
         bpy.ops.object.select_all(action='DESELECT')
         for o in objs:
             o.select_set(True)
@@ -1169,6 +1172,13 @@ FIG_QUAD = {
               (((0.2, 0.455, 0.07, 0.07), (0.31, 0.475, 0.082, 0.078), (0.385, 0.45, 0.06, 0.055)), 'coat', {}),
               (((0.365, 0.44, 0.05, 0.045), (0.47, 0.415, 0.036, 0.032)), 'muzzle', dict(bury=1))),
         ears=((0.265, 0.52, 0.045, 0.032, 0.026), (0.27, 0.61, 0.052, 0.008, 0.008)),
+        # the box's: its two-ring skull and tapered muzzle drew a wedge, a
+        # deer's, and the pricked ears one spike; a square skull, a blunt
+        # muzzle and the ears set wide and splayed
+        lite_head=((((0.19, 0.37, 0.07, 0.08), (0.27, 0.45, 0.06, 0.07)), 'coat', dict(bury=3)),
+                   (((0.2, 0.46, 0.095, 0.09), (0.36, 0.465, 0.09, 0.085)), 'coat', dict(n=4)),
+                   (((0.345, 0.435, 0.062, 0.055), (0.46, 0.425, 0.058, 0.05)), 'muzzle', dict(n=4, bury=1))),
+        lite_ears=((0.27, 0.5, 0.05, 0.03, 0.022), (0.27, 0.6, 0.075, 0.012, 0.01)),
         blocks=(((0.045, 0.045, 0.045), (0.475, 0.428), 'eye', 0.0, False), ((0.03, 0.03, 0.163), (0.335, 0.5), 'eye', 0.0, True)),
         look=dict(mane=0xfff6eb, muzzle=0xfff6eb, belly=0xfff6eb, sock=0xfff6eb, eye=0x2a2735)),
 }
@@ -1208,9 +1218,9 @@ def fig_quad(kind, at, yaw=0.0, coat=0x8a5a3c, k=1.0, pose='up', dip=None, life=
         J = A['fore'] if i < 2 else A['hind']
         J = [(lx + q[0] + step[i] * (1.0 if j == len(J) - 1 else 0.4 if j == len(J) - 2 else 0.0), q[1], lz, q[2], q[3])
              for j, q in enumerate(J)]
-        if fig_lite():                                         # one limb to the ground, no hoof
-            F.limb([J[0], (J[-1][0], 0.0, lz, J[-1][3] * 1.25, J[-1][4] * 1.25)], leg, n=4, bury=3)
-            continue
+        if fig_lite():                                         # one limb straight to the ground, no hoof
+            F.limb([J[0], (J[-1][0] - step[i], 0.0, lz, J[-1][3] * 1.25, J[-1][4] * 1.25)], leg, n=4, bury=3)
+            continue                                           # (a stride, unjointed, set the legs as an A, a goat's)
         # (an end inside the barrel, the next joint or the hoof, and the sole on the ground, are left open)
         if C.get('sock'):
             F.limb(J[:-1], leg, n=4, bury=1)
@@ -1223,10 +1233,11 @@ def fig_quad(kind, at, yaw=0.0, coat=0x8a5a3c, k=1.0, pose='up', dip=None, life=
     a = A['dip'][pose] if dip is None else dip
     def head():
         F.hinge = (A['hinge'], a)
-        for rings, key, kw in A['head']:
+        box_ = fig_lite() and 'lite_head' in A
+        for rings, key, kw in A['lite_head' if box_ else 'head']:
             F.limb(rings, C[key], **kw)
         if 'ears' in A:                                  # pricked: a pointed limb each side
-            F.pair(A['ears'], coat, n=4, bury=1)
+            F.pair(A['lite_ears' if box_ else 'ears'], coat, n=4, bury=1)
         for size, pos, key, roll, fine in A['blocks']:
             F.block(size, pos, C[key], roll=roll, fine=fine)
         if ears:
@@ -1295,7 +1306,7 @@ FIG_BIRD = {
         feet=((0.4, 0.1, 0.38), (0.07, 0.05)),
         folded=((0.0, 0.64, 0.25, 0.1, 0.035), (-0.03, 0.28, 0.33, 0.08, 0.03)), folded_side='x',
         out=((0.0, 0.62, 0.22, 0.09, 0.03), (-0.04, 0.5, 0.5, 0.06, 0.025)),
-        blocks=(((0.14, 0.13, 0.37), (0.03, 0.86), 'ear', True),)),
+        blocks=(((0.14, 0.13, 0.37), (0.03, 0.86), 'ear', False),)),   # (the box's too: without it a penguin is a black post)
     # a bath toy: the duck in a toy's few blocks
     'bathduck': dict(
         colors=dict(body=0xffc044, bill=0xff7e44),
@@ -1406,7 +1417,10 @@ def boat(at, yaw, hull, trim=0xfff6eb, L=0.95):
 
 def umbrella(at, r, h, colors, gores=8):
     """A beach umbrella: a pole and a canopy of gores in alternating colours,
-    peaked over the pole and falling to its rim."""
+    peaked over the pole and falling to its rim. A gore is wound to face the
+    sky (poly()'s reversed twin is the same face and is dropped: wound the
+    other way, the one left was lit as the canopy's underside, the sand's
+    bounce, and a white gore read khaki from above)."""
     x, y, z = at
     beam((x, y, z), (x, y + h + 0.06, z), 0.06, 0xfff6eb)
     top = (x, y + h + 0.05, z)
@@ -1414,7 +1428,7 @@ def umbrella(at, r, h, colors, gores=8):
         a0, a1 = i / gores * 2 * math.pi, (i + 1) / gores * 2 * math.pi
         rim0 = (x + math.cos(a0) * r, y + h - 0.1, z + math.sin(a0) * r)
         rim1 = (x + math.cos(a1) * r, y + h - 0.1, z + math.sin(a1) * r)
-        poly([top, rim0, rim1], [(0, 1, 2)], colors[i % len(colors)])
+        poly([top, rim1, rim0], [(0, 1, 2)], colors[i % len(colors)])
 
 def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
     """THE palm, the scatter's (palm-tall, palm-bend) and every piece's: one
@@ -1443,7 +1457,7 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
     if sink:
         line.insert(0, (x, y - sink, z, 0.3 * k))
     faces = []
-    DARK, LIGHT, RING = 30, 9, 1.22                           # a length's rows of the tan ramp, and how far its ring stands out
+    DARK, LIGHT, RING = 31, 20, 1.22                          # a length's rows of the tan ramp (its light end is salmon on a trunk), and how far its ring stands out
     for i, ((xa, ya, za, ra), (xb, yb, zb, rb)) in enumerate(zip(line, line[1:])):
         last = i == len(line) - 2
         ring = not last and not (sink and i == 0)             # (none at the ground, on the length sunk under it)
@@ -1468,26 +1482,38 @@ def palm(at, h=2.4, lean=0.3, yaw=0.0, sink=0.0, reach=None):
         tip = (tx + ca * reach, ty - 0.26 * reach, tz + sa * reach)
         ribs.append((ca, sa, mid, tip))
     leaves = []
-    def leaf(q, grp):                                        # light above, darker underneath
+    def leaf(q, grp):                                        # light above, a little darker underneath
         q = own_facing(q, (0.0, 1.0, 0.0))
         leaves.append(('green', q, grp))
-        leaves.append(('green', [c[:3] + (c[3] + 4,) for c in q[::-1]], grp + 'under'))
+        leaves.append(('green', [c[:3] + (c[3] + 2,) for c in q[::-1]], grp + 'under'))
+    # The crown is one light green, as the approved palm's flat leaves were,
+    # in both builds: the green ramp's light quarter, and every face lit as
+    # the frond's top turned toward the sky (folded and drooping, its halves
+    # and the undersides a racer sees from below turned from the light, and
+    # the full crown went a shade darker than the box's).
+    def lit(o):                                              # (one normal a corner, so no corner splits)
+        me = o.data
+        acc = [Vector((0.0, 0.0, 1.5)) for _ in me.vertices]
+        for f in me.polygons:
+            for v in f.vertices:
+                acc[v] += f.normal if f.normal.z >= 0 else -f.normal
+        me.normals_split_custom_set_from_vertices([a.normalized() for a in acc])
     if LITE:
         for i, (ca, sa, mid, tip) in enumerate(ribs):
             a0, a1 = yaw + (i - 0.5) * 2 * math.pi / n + 0.3, yaw + (i + 0.5) * 2 * math.pi / n + 0.3
             v0, v1 = [(tx + math.cos(b) * 0.3 * reach, ty - 0.04 * reach, tz + math.sin(b) * 0.3 * reach) for b in (a0, a1)]
-            for q in ([head + (0,), v0 + (4,), mid + (2,)], [head + (0,), mid + (2,), v1 + (4,)],
-                      [v0 + (4,), tip + (8,), mid + (2,)], [mid + (2,), tip + (8,), v1 + (4,)]):
+            for q in ([head + (5,), v0 + (7,), mid + (6,)], [head + (5,), mid + (6,), v1 + (7,)],
+                      [v0 + (7,), tip + (9,), mid + (6,)], [mid + (6,), tip + (9,), v1 + (7,)]):
                 leaf(q, 'crown%d' % i)
-        own_shell('palm', leaves, smooth=True)
+        lit(own_shell('palm', leaves, smooth=True))
         return
-    for ca, sa, mid, tip in ribs:
+    for i, (ca, sa, mid, tip) in enumerate(ribs):
         edge = lambda p, sd, drop: (p[0] - sa * sd * w, p[1] - drop, p[2] + ca * sd * w)
         for sd in (-1, 1):
             e0, e1 = edge(head, sd, 0.05 * reach), edge(mid, sd, 0.14 * reach)
-            for q in ([head + (0,), mid + (2,), e1 + (6,), e0 + (4,)], [mid + (2,), tip + (9,), e1 + (6,)]):
-                leaf(q, 'leaf')
-    own_shell('palm', leaves)
+            for q in ([head + (5,), mid + (6,), e1 + (8,), e0 + (7,)], [mid + (6,), tip + (9,), e1 + (8,)]):
+                leaf(q, 'leaf%d' % i)
+    lit(own_shell('palm', leaves, smooth=True))
     with plain_parts():
         for sd in (-1, 1):
             box((0.3 * k, 0.3 * k, 0.3 * k), (tx + sd * 0.25 * k * dz, ty - 0.2 * k, tz - sd * 0.25 * k * dx), 0x9a6a46)
@@ -8535,7 +8561,7 @@ def chair(at, yaw, color=0x3f7bd9, riders=(), k=1.0, lite=False):
         with fig_plain():                                # (many and small on the rope: an arm at the side is left out)
             parts += fig_person((px, y - 0.42 * k, pz), yaw - math.pi / 2, 'sit', shirt=coat, lean=0.0,
                                 legs=None if lite else 0x38383d,     # (the box's riders: what shows over the chair)
-                                hat=(0x3f7bd9, 0xffc044)[i])
+                                hat=(0x3f7bd9, 0xffc044)[i], k=k)
     return parts
 
 def station(x, z, y, ground, yaw, roof=0xff5040, k=1.0):
@@ -8792,8 +8818,9 @@ def ski_lift(lite=False):
     # it side-on. The mountain is the TRACK's terrain (SET_GROUND); this is
     # what stands on it: a chairlift's four towers, stout red columns with a
     # broad crossarm, march up that flank on the diagonal from a valley
-    # station by the road to the top station on the summit, the chairs (at
-    # their real size, skiers sat in most going up) riding up one side
+    # station by the road to the top station on the summit, the chairs (half
+    # again a real one, their riders with them: at their real size they were
+    # lost on the mountain from the road; skiers sat in most going up) riding up one side
     # and down the other round the haul rope's loop (anim_path), the rope a
     # bar thick enough to read (seven thin towers and a hairline cable read as
     # a dotted line up the hill from the road); skiers run down the
@@ -8853,7 +8880,7 @@ def ski_lift(lite=False):
         at = (V[0] + dx * f + nx * GAUGE, cy(f), V[1] + dz * f + nz * GAUGE)   # rest spot, any will do
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
         with animated('anim_path:c=lift:p=60:o=%.3f:f=1#%d' % (k / 10, k), at):
-            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders, lite=lite)   # faces +X, the way it rides
+            chair(at, math.pi / 2, (0x3f7bd9, 0xff5040)[k % 2], riders, k=1.5, lite=lite)   # faces +X, the way it rides
     # valley station on the flat by the road, its hut behind it, skis racked,
     # a queue waiting at the gate
     station(V[0], V[1], y0, 0.0, yaw, k=1.8)
@@ -9105,7 +9132,7 @@ def powder_chairlift(lite=False):
         at = (x, cy(x), GAUGE)
         riders = ((COATS[k % 6], COATS[(k + 2) % 6]), (COATS[(k + 4) % 6],), ())[k % 3]
         with animated('anim_path:c=plift:p=42:o=%.3f:f=1#%d' % (k / 8, k), at):
-            chair(at, yaw, (0xff5040, 0x3f7bd9)[k % 2], riders, lite=lite)
+            chair(at, yaw, (0xff5040, 0x3f7bd9)[k % 2], riders, k=1.5, lite=lite)   # (the ski lift's size: one chair on the track)
     # the two stations, their legs down through the snow to the plain
     station(X0, 0.0, y0, 0.0, yaw)
     station(X1, 0.0, y1, 0.0, yaw)
@@ -9349,9 +9376,20 @@ for _name, _trees in FORESTS.items():
 
 def skater(x, y, z, coat, hat):
     """A skater gliding toward +X on one skate, the other leg lifted behind,
-    arms straight out for balance (fig_person), the pivot at the skate.
-    Joined into one moving part by its caller."""
-    fig_person((x, y, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, kick=-0.9, lean=0.25, out=True, k=1.28)   # (0.64: at a person's 0.5 the rink read empty from the road)
+    arms straight out for balance (fig_person), the pivot at the skate: a
+    white skate boot on each foot, the leg's end inside it, over a steel
+    blade, the person stood up on the blades. Joined into one moving part
+    by its caller."""
+    K, KICK, LEG, HIP, BLADE = 1.28, -0.9, 0.215, 0.21, 0.016   # (fig_person's legs)
+    u = K * fig_u()
+    fig_person((x, y + BLADE * u, z), 0.0, shirt=coat, hat=hat, legs=0x38383d, kick=KICK, lean=0.25, out=True, k=K)   # (0.64: at a person's 0.5 the rink read empty from the road)
+    for (fx, fy, fz), tip in (((0.0, BLADE, 0.031), 0.0),                                        # the standing foot
+                              ((LEG * math.sin(KICK), BLADE + HIP - LEG * math.cos(KICK), -0.031), -KICK)):   # the lifted one
+        c, s = math.cos(tip), math.sin(tip)
+        def at(ax, ay):                                  # a point of the foot's own frame (box()'s roll), the sole at its origin
+            return (x + (fx + ax * c + ay * s) * u, y + (fy - ax * s + ay * c) * u, z + fz * u)
+        fig_block((0.14 * u, 0.06 * u, 0.07 * u), at(0.02, 0.026), 0xfff6eb, roll=tip)     # the boot, round the foot (its heel clear of the leg's back)
+        fig_block((0.16 * u, BLADE * u - 0.004 * u, 0.02 * u), at(0.02, -0.004 - (BLADE - 0.004) / 2), 0xa0a8c9, roll=tip)   # the blade under it
 
 def clip(pts, keep):
     """Sutherland-Hodgman: the part of polygon `pts` where keep(x, z) >= 0,
@@ -11540,8 +11578,9 @@ GLACIER_CLIMBER = 1.55    # the roped team over a person's size (0.78): at a per
 def glacier_climber(x, z, coat, sack, probe=False):
     """A climber facing -X (away from the road, across the ice)
     (fig_person): a rucksack in a second colour on the back (toward the
-    road), a helmet; an ice axe held out ahead, its shaft down to the snow
-    when `probe`."""
+    road), a helmet; an ice axe in the reaching hand, its shaft down to the
+    snow when `probe`, else a short thin one slanting down ahead (held
+    upright at the axe's own girth it read as a black paddle)."""
     u = GLACIER_CLIMBER * fig_u()
     fig_person((x, 0.0, z), math.pi, shirt=coat, hat=0xffc044 if coat != 0xffc044 else 0xfff6eb, legs=0x38383d,
                arm=(0.0, 1.2), k=GLACIER_CLIMBER)
@@ -11551,8 +11590,9 @@ def glacier_climber(x, z, coat, sack, probe=False):
         with animated('anim_drape+sway:a=z:d=18:p=5.5:r=0.55#probe', (hx, hy, hz)):
             box((0.06 * u, 0.36 * u, 0.06 * u), (hx - 0.06 * u, hy - 0.15 * u, hz), 0x555b66, roll=0.35)
             box((0.15 * u, 0.06 * u, 0.06 * u), (hx - 0.01 * u, hy + 0.03 * u, hz), 0x2a2735)
-    else:
-        box((0.06 * u, 0.26 * u, 0.06 * u), (hx - 0.03 * u, hy - 0.08 * u, hz), 0x555b66)   # the axe held ahead
+    else:                                                                # (slanted as the probe, a third its length)
+        fig_block((0.023 * u, 0.13 * u, 0.023 * u), (hx - 0.023 * u, hy - 0.05 * u, hz), 0x555b66, roll=0.35)
+        fig_block((0.06 * u, 0.02 * u, 0.02 * u), (hx - 0.003 * u, hy + 0.007 * u, hz), 0x2a2735)
 
 @piece(1.0)
 def glacier_crevasses():
@@ -14248,42 +14288,58 @@ def field_wheat_lite():
 # it (bandHold), so one over the whole loop stood the road on a step. It
 # DRAPES: the trees stand on the land as drawn. The lite builds (the Android
 # TV's) keep each tree to one lobe and no apples.
-def apple_tree(x, z, seed, lite, apples=6, lite_fruit=False):
+def apple_tree(x, z, seed, lite, apples=4, lite_fruit=False):
     k = 0.8 + 0.4 * hash01(x, z, seed)                     # a quarter either way
     lx, lz = 0.1 * (hash01(x, z, seed, 1) - 0.5), 0.1 * (hash01(z, x, seed, 2) - 0.5)
     trunk = trees_trunk((x, -0.3, z), 0.38 * k, 2.4 * k, 0.28 * k)
     tilted(trunk, math.atan(lz), math.atan(lx))
     cx, cz, cy = x + lx * 3.4 * k, z + lz * 3.4 * k, 3.7 * k
     a = hash01(x, z, seed, 3) * 6.28
-    # faceted, as every lawn tree is, and four lobes as the oak has (shaded
-    # round, the orchard was another make of tree; a fifth on top, faceted,
-    # made it a heap of crystals)
-    trees_lobe(1.9 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.84, 1.0))
     if lite:
+        trees_lobe(1.9 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.84, 1.0))
         # One lobe, and for the scatter's tree a few apples on it, a corner apiece.
         fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
         for j in range(apples if lite_fruit else 0):
             trees_round(box((0.6 * k, 0.6 * k, 0.6 * k), (cx + 1.75 * k * math.cos(a + 2.1 * j), cy + (-0.5, 0.45, -0.1)[j % 3] * k,
                                                            cz + 1.75 * k * math.sin(a + 2.1 * j)), fruit, yaw=a + 2.1 * j))
         return
-    # the crown in lobes round the middle one, each on a bough of its own
-    # showing under it, so the tree is branched, not a ball on a stick
-    for j, (da, r, dy, c) in enumerate(((0.0, 1.5, -0.55, 0x5f9f4a), (2.2, 1.35, 0.35, 0x6cae55), (4.1, 1.25, -0.25, 0x5f9f4a))):
+    # Faceted, as every lawn tree is: a middle lobe and four smaller round
+    # it, close set and each turned its own way so the crown is one faceted
+    # mass, as the oak's is (three big lobes spread out each read as a green
+    # crystal; shaded round, the orchard was another make of tree). Two of
+    # them on a bough showing under it, so the tree is branched, not a ball
+    # on a stick.
+    lobes = [trees_lobe(1.7 * k, (cx, cy, cz), 0x6cae55, scale=(1.0, 0.88, 1.0), yaw=a)]
+    for j, (da, r, dy, off, c) in enumerate(((0.0, 1.3, -0.45, 1.4, 0x5f9f4a), (1.6, 1.2, 0.35, 1.35, 0x6cae55),
+                                             (3.2, 1.25, -0.2, 1.4, 0x5f9f4a), (4.7, 1.15, 1.0, 0.75, 0x6cae55))):
         b = a + da
-        px, pz = cx + 1.55 * k * math.cos(b), cz + 1.55 * k * math.sin(b)
-        trees_lobe(r * k, (px, cy + dy * k, pz), c, scale=(1.0, 0.86, 1.0))
+        px, pz = cx + off * k * math.cos(b), cz + off * k * math.sin(b)
+        lobes.append(trees_lobe(r * k, (px, cy + dy * k, pz), c, scale=(1.0, 0.86, 1.0), yaw=b * 1.7))
         if j < 2:
             with plain_parts():
                 strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, TREES_BARK)
-    # apples a racer can count, out on the crown's skin (its flat faces lie
-    # inside the lobes' round: an apple further out hung clear of them)
+    # apples a racer can count, sat on the crown's skin where a ray in to
+    # its middle first meets it (at a fixed reach they sank into a flat face
+    # and showed as red slivers, or hung clear of it)
     fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
+    bpy.context.view_layer.update()
     with plain_parts():
         for j in range(apples):
             c = a + 0.6 + j * 6.28 / apples
-            rr = (1.95, 2.2, 2.1)[j % 3] * k
-            box((0.56 * k, 0.56 * k, 0.56 * k), (cx + rr * math.cos(c), cy + (-0.75, 0.35, -0.1)[j % 3] * k, cz + rr * math.sin(c)),
-                fruit, yaw=c)
+            d = Vector((math.cos(c), (-0.3, 0.35, 0.0)[j % 3], math.sin(c))).normalized()
+            hit = None
+            for o in lobes:
+                mi = o.matrix_world.inverted()
+                ok, loc, nrm, _ = o.ray_cast(mi @ P(cx + 6 * k * d.x, cy + 6 * k * d.y, cz + 6 * k * d.z),
+                                             mi.to_3x3() @ P(-d.x, -d.y, -d.z))
+                if ok:
+                    w = o.matrix_world @ loc
+                    if hit is None or (w - P(cx, cy, cz)).length > (hit[0] - P(cx, cy, cz)).length:
+                        hit = (w, (mi.to_3x3().transposed() @ nrm).normalized())
+            if hit:
+                (bx, by, bz), (nx, ny, nz) = hit
+                q = 0.18 * k                                # half the apple's side, less what sinks into the skin
+                box((0.56 * k, 0.56 * k, 0.56 * k), (bx + nx * q, bz + nz * q, -by - ny * q), fruit, yaw=c)
 
 ORCH_SP = 8.4   # metres between trees (2.1 u)
 
@@ -27373,7 +27429,9 @@ def own_band(swatch, lo, hi, n, grp, phase=0.0, at=(0.0, 0.0)):
 # Three snowfalls: `a` with snow lying on each tier down to a toothed
 # line; `b` the dark one, green all but a thin roll of snow along each rim
 # and a cap on its point; `c` snowed right over, the green left only under
-# the rims.
+# the rims. The full build's snow sits a third of the way down the snow
+# ramp, toward its blue: the approved (Kenney) fir's snow was a pale blue
+# grey, and at the ramp's white end a single fir read whiter than it.
 # The box's build (lite) is five sides, flat as well: a face owns its
 # corners, so the light breaks at each edge as it does on the full one
 # (shared corners round it into a banded cone). Its snow line is a saw, one
@@ -27434,19 +27492,24 @@ def own_fir_faces(kind, lite):
                 out += band(S, (r2, y2, 10), (rt, yt, 1), g + 'tip')
         elif kind == 'b':
             gb = 23
-            # a thin roll of snow along the rim: out a little, then a shelf in to the skirt
-            (r1, y1) = at(up(0.13 / (yt - yl) if not last else 0.2))
-            out += band(S, (rl, yl, 16), (rl + 0.03, yl + 0.075, 6), g + 'roll')
-            out += band(S, (rl + 0.03, yl + 0.075, 6), (r1, y1, 2), g + 'roll')
+            # a roll of snow along the rim: straight up off it (stood out over
+            # it, its face turned down into the shade and drew a grey band
+            # under a thin white one), then a shelf in to the skirt; a cap on
+            # the point alone (half the top skirt's white made it a snowy fir)
+            (r1, y1) = at(up(0.16 / (yt - yl) if not last else 0.24))
+            out += band(S, (rl, yl, 20), (rl + 0.005, yl + 0.1, 12), g + 'roll')
+            out += band(S, (rl + 0.005, yl + 0.1, 12), (r1, y1, 8), g + 'roll')
             if last:
-                (r2, y2) = at(0.5)
-                out += band(G, (r1, y1, gb), (r2, y2, gb - 11), g + 'skirt')
-                out += band(S, (r2, y2, 16), (r2 + 0.03, y2, 16), g + 'tipunder')
-                out += band(S, (r2 + 0.03, y2, 12), (rt, yt, 5), g + 'tip')
+                (r2, y2) = at(0.64)
+                out += band(G, (r1, y1, gb), (r2, y2, gb - 12), g + 'skirt')
+                out += band(S, (r2, y2, 20), (r2 + 0.03, y2, 20), g + 'tipunder')
+                out += band(S, (r2 + 0.03, y2, 16), (rt, yt, 10), g + 'tip')
             else:
                 out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
         elif kind == 'c':
-            out += band(S, (rl, yl, 26), (rt, yt, 6), g + 'snow')
+            (rc, yc) = at(0.05)                                                  # a dark green edge at the rim, the rest snow
+            out += band(G, (rl, yl, 27), (rc, yc, 25), g + 'edge')
+            out += band(S, (rc, yc, 30), (rt, yt, 15), g + 'snow')
         else:
             lo, hi = own_ring(rl, yl, n), own_ring(rt, yt, n)
             for i in range(n):
@@ -27460,15 +27523,15 @@ def own_fir_faces(kind, lite):
                     out.append((G, own_facing([lo[j] + (31,), lo[i] + (31,), A + (23,), B + (25,)], rad), g + 'skirt' + grp))
                     out.append((S, own_facing([B + (13,), A + (11,)] + ([hi[i] + (2,), hi[j] + (2,)] if rt > 1e-6 else [hi[i] + (1,)]), rad), g + 'snow' + grp))
                 else:
-                    # the snow line low on the skirt, a tooth of green up into it at the middle of each side
-                    f, sag = 0.22, 0.13
+                    # the snow line low on the skirt, a low tooth of green up into it at the middle of each side
+                    f, sag = 0.22, 0.1
                     (rs, ys), (rg, yg) = at(f), at(f + sag / (yt - yl))
                     mid, peak = own_ring(rs, ys, n), own_ring(rg, yg, n)
                     m = tuple((peak[i][k] + peak[j][k]) / 2 for k in range(3))
                     out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), mid[i] + (15,), m + (11,), mid[j] + (15,)], rad), g + 'skirt'))
-                    out.append((S, own_facing([m + (13,), mid[i] + (15,), hi[i] + (2,), hi[j] + (2,), mid[j] + (15,)], rad), g + 'snow'))
+                    out.append((S, own_facing([m + (20,), mid[i] + (22,), hi[i] + (8,), hi[j] + (8,), mid[j] + (22,)], rad), g + 'snow'))
         if last and not lite:
-            out += band(S, (rt, yt, 5 if kind == 'b' else 6), (tip[0], tip[1], 1), g + ('tip' if kind == 'b' else 'snow'))
+            out += band(S, (rt, yt, 10 if kind == 'b' else 12), (tip[0], tip[1], 6), g + ('tip' if kind == 'b' else 'snow'))
     return out
 
 def own_fir(kind, lite=False):
@@ -28022,24 +28085,27 @@ def own_sail(K, S, yaw, z, y0, y1, w, color, belly=0.55, mark=False, brace=0.0, 
     yard braced round the mast by `brace` (a sail square across her is edge
     on to whoever looks at her side, the road's view; `stretch` is her
     hull's, which the turn must not shear); `mark` the camp flag's skull
-    and bones on it (skull_mark), filling the cloth and standing through
-    its flat middle cloths, so both faces carry them."""
+    and bones printed on it (skull_mark), filling the cloth: its middle
+    cloth hangs flat, so the print lies a hair off each face of it (a slab
+    standing through a bellied cloth showed edge on as a white plank)."""
     cols, rows = (-1.0, -0.5, 0.5, 1.0), (0.0, 0.5, 1.0)
     K0, cb, sb = K, math.cos(brace), math.sin(brace)
     def K(x, y, lz):                                      # the sail's own frame, turned about the mast
         return K0(x * cb + (lz - z) * sb, y, z + (-x * sb + (lz - z) * cb) / stretch)
     yaw += brace
     f = -1.0 if aback else 1.0                            # the side of the mast it hangs
+    full = lambda r: 0.35 + 0.65 * math.sin(math.pi * (0.15 + 0.7 * r))   # the belly's run up the cloth
     def at(i, j):
-        bx = belly * (1 - cols[i] ** 2) * (0.35 + 0.65 * math.sin(math.pi * (0.15 + 0.7 * rows[j])))
+        bx = belly * (1 - cols[i] ** 2) * full(0.0 if mark else rows[j])
         return K(cols[i] * w * (1 - 0.06 * (1 - rows[j])), y0 + (y1 - y0) * rows[j], z + f * (0.08 + bx))
     verts = [at(i, j) for j in range(3) for i in range(4)]
     faces = [(j * 4 + i, j * 4 + i + 1, (j + 1) * 4 + i + 1, (j + 1) * 4 + i) for j in range(2) for i in range(3)]
     parts = [poly(verts, faces, color)]
     parts.append(rod(K(-w - 0.15, y1, z), K(w + 0.15, y1, z), 0.11 * S, 'brown', segs=6))
     parts.append(rod(K(-w, y0, z + f * (0.08 + belly * 0.3)), K(w, y0, z + f * (0.08 + belly * 0.3)), 0.09 * S, 'brown', segs=6))
-    if mark:                                              # (the middle cloths lie at 0.64 to 1.0 of the belly, 0.75 across)
-        parts += skull_mark(K(0.0, (y0 + y1) / 2, z + f * (0.08 + belly * 0.7)), 1.4 * (y1 - y0) * S, yaw + math.pi / 2, t=0.22 * S)
+    if mark:                                              # (the middle cloth lies at 0.75 x full(0) of the belly)
+        parts += skull_mark(K(0.0, (y0 + y1) / 2, z + f * (0.08 + belly * 0.75 * full(0.0))), 1.4 * (y1 - y0) * S,
+                            yaw + math.pi / 2, t=0.03)
     return parts
 
 @piece(1.0)
@@ -28267,6 +28333,22 @@ def chamfer(lite=False, grow=1.0):
 
 CHAMFER = 0.05   # the car's 0.02 at its 0.9 length, at this scale and a little over
 
+def unscaled(o):
+    """`o` with its scale applied, before others are joined into it: a join
+    carries their hardened normals into its frame, and a block left square
+    (unchamfered, so its scale was never applied) squashed them there, so
+    the box's snow blocks drew a dark frame round every face. A uniform
+    scale (the piece's GROW) bends no normal, and a part still carrying its
+    chamfer keeps its scale: applied under it, the cut would grow with it."""
+    if max(o.scale) - min(o.scale) < 1e-6 or o.modifiers:
+        return
+    if o.data.users > 1:
+        o.data = o.data.copy()
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
 def join_groups():
     """Each group() becomes one object named after it, its parts' bevels
     applied first (a join keeps only the active object's modifiers)."""
@@ -28281,6 +28363,7 @@ def join_groups():
             bpy.context.view_layer.objects.active = o
             for m in list(o.modifiers):
                 bpy.ops.object.modifier_apply(modifier=m.name)
+        unscaled(objs[0])
         bpy.ops.object.select_all(action='DESELECT')
         for o in objs:
             o.select_set(True)
