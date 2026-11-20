@@ -1162,8 +1162,11 @@ its code:
 - **A model's lite build**: a model with a `<model>-lite.glb` beside it is
   drawn from that file (`ttp/theme.h` `lite_models`, from the generated
   `TTP_LITE_MODELS`), for set pieces, props and scenery alike, recoloured as
-  the model it stands in for. `scripts/bake-lite.mjs model:ratio` decimates a
-  static model into one; a model with moving parts gets one authored in its
+  the model it stands in for. A built piece gets one from its own builder
+  (`lite_too` in `scripts/blender/set_prototypes.py`): the builder's general
+  cuts for a `-lite` piece (`BOX_TIER`: coarser rings, no chamfer on a small
+  block) and whatever the piece leaves out under `LITE`.
+  `scripts/bake-lite.mjs model:ratio` decimates a static model that has no
   builder.
 - **Full-only pieces and land**: a set entry or a `land` form authored
   `lite: false` is left out of the lite tier's list altogether (not a piece
