@@ -884,8 +884,8 @@ private:
     static constexpr uint32_t kDebugLodAll = 0x8000000;
     bool mLodOff = false, mLodAll = false;
     // The pop probe's (ttp_display.h): LOD_HOLD leaves chooseLods' and
-    // chooseCuts' last answers standing, NO_CULL draws the cells unculled,
-    // FOG_WHOLE fogs past the cutoff too.
+    // chooseCuts' last answers standing, NO_CULL draws the cells unculled
+    // (the ambient cloud's frustum test too), FOG_WHOLE fogs past the cutoff too.
     static constexpr uint32_t kDebugLodHold = 0x2000000;
     static constexpr uint32_t kDebugNoCull = 0x20000000;
     static constexpr uint32_t kDebugFogWhole = 0x40000000;
@@ -2361,6 +2361,13 @@ private:
     // by its long half.
     static constexpr float kRainStreak = 24.0f;
     float mAmbStreak = 0;
+    // Rain's wind blows at each cell's camera (vpoint.mat): per cell, the x/z
+    // drift it has carried the cloud so far (.xy) and the wind it rides now
+    // (.zw), handed to that cell's view as material global 1. INTEGRATED,
+    // a frame's heading at a time from mAmbDriftAt, never heading * wind *
+    // t, which would throw the whole field across the box on every turn.
+    std::vector<filament::math::float4> mAmbDrift;
+    float mAmbDriftAt = 0;
     // Per-cell subset of the cloud: each cell draws only the sprites that can
     // reach ITS frustum, as indices into the same vertex buffer in ascending
     // order (cullAmbientCells). One index buffer per ring slot, written once a

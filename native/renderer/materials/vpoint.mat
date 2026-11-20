@@ -57,6 +57,8 @@
 // of its widths along its own velocity (the wind and its fall), turned about
 // that line to face the camera, so the circle the fragment cuts comes out a
 // thin tapering stroke that leans with the wind, faded out near the lens.
+// Its wind is not the world's: it blows at each view's camera, so in every
+// cell the storm drives at the car and the lens (material global 1, below).
 // Same vertices, same draw.
 material {
     name : TtpVpoint,
@@ -121,9 +123,21 @@ vertex {
                 + sin(t * 0.7 + h1 * 61.0) * materialParams.bob * 0.3;
         y = mod(y, materialParams.bandH) + 0.5;
         // x/z: ride the wind, then wrap into a boxXZ-wide column centred on
-        // the camera (GLSL mod is non-negative, so one mod suffices).
+        // the camera (GLSL mod is non-negative, so one mod suffices). Rain's
+        // wind blows at THIS VIEW's lens instead: material global 1 is the
+        // view's own drift (.xy) and the wind it rides (.zw), integrated on
+        // the CPU against its camera's heading (TtpRenderer::renderAmbient).
+        // A per-VIEW value, since a parameter commits once a frame for every
+        // cell; highp, so the per-cell cull replays the same numbers.
+        highp vec2 drift = vec2(materialParams.wind * t, 0.0);
+        highp vec2 windXZ = vec2(materialParams.wind, 0.0);
+        if (materialParams.streak > 0.0) {
+            highp vec4 g = getMaterialGlobal1();
+            drift = g.xy;
+            windXZ = g.zw;
+        }
         highp float bx = materialParams.boxXZ;
-        highp vec2 p = seed.xz + vec2(materialParams.wind * t, 0.0);
+        highp vec2 p = seed.xz + drift;
         highp vec2 rel;
         highp vec3 posU;
         if (materialParams.tile > 0.0) {
@@ -164,7 +178,7 @@ vertex {
         highp vec3 right = w[0].xyz * wide;
         highp vec3 up = w[1].xyz;
         if (materialParams.streak > 0.0) {
-            highp vec3 vel = normalize(vec3(materialParams.wind, -speed * materialParams.fall, 0.0));
+            highp vec3 vel = normalize(vec3(windXZ.x, -speed * materialParams.fall, windXZ.y));
             highp vec3 side = cross(vel, posU - camU);
             right = side / max(length(side), 1e-4);
             up = vel * materialParams.streak;

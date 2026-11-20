@@ -1006,8 +1006,9 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 /* The pop probe's knobs (npm run see:pops). LOD_HOLD keeps every far-form
  * and small-thing choice as the last frame left it, so the same camera drawn
  * held and then free differs by exactly what swapped on that frame. NO_CULL
- * turns the race cells' frustum culling off, so a picture that differs from
- * the culled one names a renderable whose box does not hold what it draws. */
+ * turns the race cells' frustum culling off (the ambient cloud's per-cell
+ * frustum test included), so a picture that differs from the culled one names
+ * a renderable whose box does not hold what it draws. */
 #define TTP_DEBUG_LOD_HOLD 0x2000000
 #define TTP_DEBUG_NO_CULL 0x20000000
 /* SET fogs what stands past the fog's cutoff too (the sky content's exit,

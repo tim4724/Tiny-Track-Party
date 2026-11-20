@@ -2564,6 +2564,8 @@ void TtpRenderer::releaseStatic() {
     mLifeAnchors.clear();
     mLifeCells = 0;
     mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
+    mAmbDrift.clear();
+    mAmbDriftAt = 0;   // mTime restarts at 0 per scene
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
     for (auto*& a : mSceneryAssets) dropAsset(a);

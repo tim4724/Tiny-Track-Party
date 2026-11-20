@@ -30,10 +30,11 @@ void ambientKind(AmbientSpec& a, uint32_t kind) {
     case AMB_POLLEN: a.size = 0.15f; a.opacity = 0.5f;  a.fall = 0.1f;  a.wind = 1.2f; a.bob = 0.6f;  a.band = 0.35f; break;
     // The life's own: a petal sinks slowly and sways, low.
     case AMB_PETAL:  a.size = 0.26f; a.opacity = 0.95f; a.fall = 0.3f;  a.wind = 1.4f; a.bob = 1.0f;  a.band = 0.12f; break;
-    // Rain: thin, fast and driven, from the whole height of the air. `fall`
-    // and `wind` are exact in a half (the per-cell cull's slack grows with
-    // what a mediump load could round off them, times the race's seconds).
-    case AMB_RAIN:   a.size = 0.08f; a.opacity = 0.4f;  a.fall = 8;     a.wind = 4;    a.bob = 0;     a.band = 1;     break;
+    // Rain: thin, fast and driven, from the whole height of the air; the
+    // renderer turns its `wind` at every cell's camera (vpoint.mat). `fall`
+    // is exact in a half (the per-cell cull's slack grows with what a
+    // mediump load could round off it, times the race's seconds).
+    case AMB_RAIN:   a.size = 0.08f; a.opacity = 0.4f;  a.fall = 8;     a.wind = 12;   a.bob = 0;     a.band = 1;     break;
     // An unlisted kind takes the flake preset, exactly as AMB_KINDS[kind] || AMB_KINDS.flake did.
     default:         a.size = 0.3f;  a.opacity = 0.85f; a.fall = 1;     a.wind = 0.7f; a.bob = 0;     a.band = 1;     break;
   }

@@ -2660,6 +2660,34 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
             mPollenMat->setParameter("boxXZ", kAmbBox / std::sqrt((float) vc));
             mPollenMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
         }
+        // Rain blows at each cell's camera: its drift moves on by this
+        // frame's step against that camera's heading, so a turn swings the
+        // wind round and never moves the field. The drift is kept inside one
+        // wrap box, a whole box at a time, which the shader's wrap cannot see
+        // (the same float as the boxXZ uniform). An undrawn frame steps too.
+        if (mAmbStreak > 0 && vc) {
+            const float dt = std::min(0.1f, std::max(0.0f, mTime - mAmbDriftAt));
+            mAmbDriftAt = mTime;
+            const float bx = kAmbBox / std::sqrt((float) vc);
+            mAmbDrift.resize(vc, float4{ 0.0f });
+            const TtpViewInput* views = ttp_frame_views(&input);
+            for (uint32_t i = 0; i < vc; i++) {
+                // The heading: forward's x/z plus up's, which point the same
+                // way at any pitch from level to straight down.
+                const float* w = views[i].world;   // column-major: right, up, back, eye
+                const float hx = w[4] - w[8], hz = w[6] - w[10];
+                const float hl = std::sqrt(hx * hx + hz * hz);
+                float4& d = mAmbDrift[i];
+                if (hl > 1e-4f) {
+                    d.z = -hx / hl * mAmbWind;
+                    d.w = -hz / hl * mAmbWind;
+                }
+                d.x += d.z * dt;
+                d.y += d.w * dt;
+                d.x -= bx * std::floor(d.x / bx);
+                d.y -= bx * std::floor(d.y / bx);
+            }
+        }
     }
     // The cup's ambient life: world-sized, so no rows fit, and culled on its
     // tiles' bounds.
@@ -2750,22 +2778,24 @@ inline double ambMediumpErr(float x) {
 // outside plane j when a_j . lo + b_j < 0.
 struct AmbCullCell {
     double a[5][3], b[5];
-    double xOff, zOff;   // (wind t - camX - epsXZ) and (-camZ - epsXZ), mod bx
+    double xOff, zOff;   // (driftX - camX - epsXZ) and (driftZ - camZ - epsXZ), mod bx
     double yOff;         // -U: the y interval starts U below the replayed height
     double fallT;        // fall t
     double bx, invBx, bandH, invBand;
     double lenXZ, lenY;  // the x/z and y interval lengths
 };
 
-// The replay moves each sprite by fall and wind exactly as given, and widens
-// its x/z and y intervals by the most another reading of them moves it by
-// time t (speed is at most 2.5); halfSize and bob only bound the sprite, so
-// they are rounded UP by what a mediump load can add. Every operation on a
-// uniform has a highp operand (time, speed, sin, the camera axes) and the
-// vertex stage defaults to highp, so those loads are the only fp16 in the
-// position path.
-void ambCullCell(AmbCullCell& c, float t, float fall, float wind, float bob, float halfSize,
-        float bandH, float boxXZ, float seedBox, uint32_t sprites,
+// The replay moves each sprite by fall and its x/z drift exactly as given,
+// and widens its x/z and y intervals by the most another reading of them
+// moves it by time t (speed is at most 2.5); halfSize and bob only bound the
+// sprite, so they are rounded UP by what a mediump load can add. Every
+// operation on a uniform has a highp operand (time, speed, sin, the camera
+// axes) and the vertex stage defaults to highp, so those loads are the only
+// fp16 in the position path. The drift is the world wind's wind t, whose
+// reading moves by driftErr; rain's is the view's own (material global 1),
+// highp and so read exactly (driftErr 0).
+void ambCullCell(AmbCullCell& c, float t, float fall, double driftX, double driftZ, double driftErr,
+        float bob, float halfSize, float bandH, float boxXZ, float seedBox, uint32_t sprites,
         const mat4f& world, float fov, float aspect, float nearZ) {
     c.bx = boxXZ;
     c.invBx = 1.0 / c.bx;
@@ -2778,18 +2808,18 @@ void ambCullCell(AmbCullCell& c, float t, float fall, float wind, float bob, flo
     // The slack of each wrap: the mediump readings' drift, then the fp32
     // error at this frame's magnitudes under any of them. The y term also
     // carries the speed's own rounding times fall t.
-    const double dFall = ambMediumpErr(fall), dWind = ambMediumpErr(wind);
+    const double dFall = ambMediumpErr(fall);
     const double fallT = (std::fabs((double) fall) + dFall) * t;
-    const double windT = (std::fabs((double) wind) + dWind) * t;
-    const double epsXZ = kAmbCullEps + dWind * t
-            + ambUlp16(seedBox + c.bx + windT + std::fabs(cx) + std::fabs(cz));
+    const double driftM = std::fabs(driftX) + std::fabs(driftZ) + driftErr;
+    const double epsXZ = kAmbCullEps + driftErr
+            + ambUlp16(seedBox + c.bx + driftM + std::fabs(cx) + std::fabs(cz));
     // A compiler may also fuse the shader's fract(k * 0.618...) into one fma,
     // which skips the product's rounding: h1 then moves by up to an fp32 ulp
     // of k * 0.618 for the largest k drawn, and speed by 1.4 times that.
     const double dH1 = ((double) sprites * 0.6180339887 + 1.0) * (1.0 / 8388608.0);
     const double epsY = kAmbCullEps + 2.5 * dFall * t + 1.4 * dH1 * fallT
             + ambUlp16(64.0 + c.bandH + 2.5 * fallT + bob03 + std::fabs(cy)) + 2e-6 * fallT;
-    const double sx = (double) wind * t - cx - epsXZ, sz = -cz - epsXZ;
+    const double sx = driftX - cx - epsXZ, sz = driftZ - cz - epsXZ;
     c.xOff = sx - c.bx * ambFloor(sx * c.invBx);
     c.zOff = sz - c.bx * ambFloor(sz * c.invBx);
     const double U = bob03 + epsY;
@@ -2909,9 +2939,14 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
     for (uint32_t i = 0; i < vc; i++) {
         mat4f wf;
         std::memcpy(&wf, views[i].world, sizeof(wf));
-        // The uniforms exactly as renderAmbient and buildStatic set them.
+        // The uniforms exactly as renderAmbient and buildStatic set them,
+        // and rain's drift as this cell's view carries it.
+        const bool own = mAmbStreak > 0 && i < mAmbDrift.size();
         AmbCullCell c;
-        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob,
+        ambCullCell(c, mAmbTime, mAmbFall,
+                own ? (double) mAmbDrift[i].x : (double) mAmbWind * mAmbTime,
+                own ? (double) mAmbDrift[i].y : 0.0,
+                own ? 0.0 : ambMediumpErr(mAmbWind) * mAmbTime, mTrack->ambBob,
                 mAmbHalfSize * std::max(1.0f, mAmbStreak), mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
 
         // A lite cell's particles do not tap the floor (vpoint.mat), so one
@@ -2936,8 +2971,9 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
             const Vertex& s = mPollen.verts[(size_t) k * 3];
             // (which flakes go is a hash of their own: 1 / the plastic number)
             const float pick = (float) k * 0.7548777f;
+            // NO_CULL keeps every sprite the share leaves, frustum or not.
             const bool keep = (share >= 1.0f || pick - (float) (int32_t) pick < share)
-                    && ambSpriteMayReach(c, s.px, s.py, s.pz, k);
+                    && (mNoCull || ambSpriteMayReach(c, s.px, s.py, s.pz, k));
             if (keep) {
                 out->push_back((uint16_t) (k * 3));
                 out->push_back((uint16_t) (k * 3 + 1));
@@ -3081,6 +3117,9 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
                             mFogWhole ? 1e9f : FOG_CUTOFF)
                     : fogFor(1.0f, 0.0f, fogColorGraded(cam)));   // far <= near disables
             applyDebugGlobals(v);
+            // Rain's drift and wind as THIS cell's camera blows them
+            // (renderAmbient; vpoint.mat reads them as global 1).
+            if (mAmbStreak > 0 && i < mAmbDrift.size()) v->setMaterialGlobal(1, mAmbDrift[i]);
             // Per-cell monster fade: a truck looming in front of THIS cell's
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it

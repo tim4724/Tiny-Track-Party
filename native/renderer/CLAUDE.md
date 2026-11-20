@@ -360,6 +360,13 @@ material's own blending. Target preservation comes from `Renderer::ClearOptions`
 > inside it — and price a pass at each panel size, since one priced at 1080 says
 > nothing about 4K.
 
+**A value a shader reads PER CELL rides the cell's view, never a material
+parameter.** A MaterialInstance commits its parameters once a frame, so every
+cell would draw with the last cell's value. A per-cell input is a per-view
+material global (`View::setMaterialGlobal`: 0 the debug knobs, 1 rain's drift,
+3 the folded overlay's cell), set on that cell's view before its `render()`;
+what differs per cell in geometry is swapped between the `render()` calls.
+
 **Skid marks are the same road-shader paint, accumulated — on the CPU.** Rubber
 lands in a per-track R8 texture in track space (u = s / lap, v = lat) that `vroad`
 samples with one tap. **Paint, then rubber, then decals** is the compositing
