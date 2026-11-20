@@ -27360,7 +27360,8 @@ def own_band(swatch, lo, hi, n, grp, phase=0.0, at=(0.0, 0.0)):
 # The box's build (lite) is five sides, flat as well: a face owns its
 # corners, so the light breaks at each edge as it does on the full one
 # (shared corners round it into a banded cone). Its snow line is a saw, one
-# slant to a side, which costs no corner; its point has no shoulder.
+# slant to a side, which costs no corner (`b`'s snow lies under it, along
+# the rim, on the skirt's own slope); its point has no shoulder.
 # (the underside's y and its outer r, the rim's r and y); the last row is the point's shoulder and tip
 OWN_FIR_TIERS = ((0.34, 0.54, 0.60, 0.41), (0.83, 0.41, 0.46, 0.885), (1.27, 0.32, 0.36, 1.315))
 OWN_FIR_POINT = ((0.15, 1.70), (0.0, 1.92))
@@ -27396,27 +27397,35 @@ def own_fir_faces(kind, lite):
             rt = inner = rl - OWN_FIR_SLOPE * (yt - yl)
         at = lambda f: (rl + (rt - rl) * f, yl + (yt - yl) * f)                   # a point up the skirt
         up = (lambda f: f * 0.72) if last and lite else (lambda f: f)             # (the box's top skirt runs on to the tip)
-        if kind == 'b':
-            gb = 25 if lite else 23
+        if kind == 'b' and lite:
+            # the box's: the snow along each rim up to a saw, lying on the
+            # skirt's own slope so each tier stays a cone (a roll stood out
+            # from the rim, the skirt flat off its top, made a far stand of
+            # them a pile of drums)
+            gb = 25
+            (r2, y2) = at(0.38) if last else (rt, yt)
+            lo, hi = own_ring(rl, yl, n), own_ring(r2, y2, n)
+            (ra, ya), (rb, yb) = at(up(0.34)), at(up(0.16))
+            for i in range(n):
+                j = (i + 1) % n
+                rad = (lo[i][0] + lo[j][0], 0.3, lo[i][2] + lo[j][2])
+                A, B = own_ring(ra, ya, n)[i], own_ring(rb, yb, n)[j]
+                out.append((S, own_facing([lo[j] + (12,), lo[i] + (12,), A + (3,), B + (4,)], rad), g + 'roll:%d' % i))
+                out.append((G, own_facing([B + (gb,), A + (gb - 1,), hi[i] + (gb - (11 if last else 13),),
+                                           hi[j] + (gb - (11 if last else 13),)], rad), g + 'skirt:%d' % i))
+            if last:
+                out += band(S, (r2, y2, 10), (rt, yt, 1), g + 'tip')
+        elif kind == 'b':
+            gb = 23
             # a thin roll of snow along the rim: out a little, then a shelf in to the skirt
             (r1, y1) = at(up(0.13 / (yt - yl) if not last else 0.2))
-            if lite:
-                # the box's: the snow a band on the skirt's own slope, so each
-                # tier stays a cone (a roll stood out from the rim, the skirt
-                # flat off its top, made a stand of them a pile of drums)
-                (r1, y1) = at(up(0.3))
-                out += band(S, (rl, yl, 12), (r1, y1, 3), g + 'roll')
-            else:
-                out += band(S, (rl, yl, 16), (rl + 0.03, yl + 0.075, 6), g + 'roll')
-                out += band(S, (rl + 0.03, yl + 0.075, 6), (r1, y1, 2), g + 'roll')
+            out += band(S, (rl, yl, 16), (rl + 0.03, yl + 0.075, 6), g + 'roll')
+            out += band(S, (rl + 0.03, yl + 0.075, 6), (r1, y1, 2), g + 'roll')
             if last:
-                (r2, y2) = at(0.38 if lite else 0.5)                             # (the box's: a bigger cap of snow)
+                (r2, y2) = at(0.5)
                 out += band(G, (r1, y1, gb), (r2, y2, gb - 11), g + 'skirt')
-                if not lite:
-                    out += band(S, (r2, y2, 16), (r2 + 0.03, y2, 16), g + 'tipunder')
-                    out += band(S, (r2 + 0.03, y2, 12), (rt, yt, 5), g + 'tip')
-                else:
-                    out += band(S, (r2, y2, 10), (rt, yt, 1), g + 'tip')
+                out += band(S, (r2, y2, 16), (r2 + 0.03, y2, 16), g + 'tipunder')
+                out += band(S, (r2 + 0.03, y2, 12), (rt, yt, 5), g + 'tip')
             else:
                 out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
         elif kind == 'c':
