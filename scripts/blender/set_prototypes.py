@@ -164,6 +164,8 @@ def box(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     size = [max(s, MIN_T) for s in size]
     o.scale = (size[0], size[2], size[1])
     o['chamfer'] = 1
+    if ROUND_OVER and min(size) * bld_grow() >= ROUND_OVER_T:
+        o['share'], o['segs'], o['round_over'] = ROUND_OVER_SHARE, 2, not BOX_TIER
     place(o, at, yaw, pitch, roll)
     return paint(o, color)
 
@@ -1006,6 +1008,26 @@ def r29edge_round(o):
     square (LITE_CHAMFER)."""
     o['share'], o['segs'] = 0.3, 2
     return o
+
+ROUND_OVER = False
+
+@contextlib.contextmanager
+def rounded_over():
+    """Every block box() makes inside, ROUND_OVER_T or more across in the
+    game, rounded over in two segments, ROUND_OVER_SHARE of its thinnest
+    side (not in the box's tier): a toy's body, cab and roof, where
+    CHAMFER's capped cut on a block a unit across read as a hard edge. A
+    person's three tenths (r29edge_round) blew a tractor's bonnet up into a
+    bolster. Thinner trim (a rail, a window, a slit) keeps the plain
+    chamfer: rounded, it reads as a pill. Also a decorator on a builder."""
+    global ROUND_OVER
+    was, ROUND_OVER = ROUND_OVER, True
+    try:
+        yield
+    finally:
+        ROUND_OVER = was
+
+ROUND_OVER_T, ROUND_OVER_SHARE = 0.08, 0.2
 
 def fig_block(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     """A square-edged block at exactly `size`: an ear, an eye, a horn at an
@@ -4603,6 +4625,7 @@ def scenery_wheel(cx, cy, cz, r, w, yaw=0.0, hub=0xfde4c7):
     cyl(0.56 * r, w + 0.04, at(-w / 2 - 0.02), hub, segs=12, axis='across', yaw=yaw)
     cyl(0.2 * r, w + 0.07, at(-w / 2 - 0.035), 0x9aa1b4, segs=8, axis='across', yaw=yaw, stem=True)
 
+@rounded_over()
 def camper(x, z, yaw, lower, upper=0xfff6eb, boards=(), pop=False, y=0.0):
     """A camper van parked on the sand, its nose to +Z turned by `yaw`: some
     1.5 u long and taller than a racer, two-tone in a colour no racer wears,
@@ -8570,6 +8593,7 @@ def station(x, z, y, ground, yaw, roof=0xff5040, k=1.0):
     if k > 1.0:
         snowy(box((1.8 * k, 0.1, 1.2 * k), (x, top + 0.12 * k + 0.05, z), 0xf3f7fb, yaw=yaw), 0.5)
 
+@rounded_over()
 def snowcat(x, y, z, k=0.45):
     """A piste groomer facing +X, built like the cars: two broad tracks, a red
     body and cab with dark glass, the blade up front, the tiller behind,
@@ -13391,6 +13415,7 @@ def works_wheel(at, yaw, k, r=0.3):
         cyl(r * 0.5 * k, w + 0.06 * k, (x - c * (w / 2 + 0.03 * k), y, z + s2 * (w / 2 + 0.03 * k)), 0x868ba1,
             axis='across', yaw=yaw, segs=8, stem=True)
 
+@rounded_over()
 def rotary_plough(x, z, yaw, k=1.0, y=0.0):
     """A rotary snowplough (a snow blower on a works truck) facing +Z turned
     by `yaw`, `k` times a little over two and a half long, built from `y`:
@@ -13458,6 +13483,7 @@ def rotary_plough(x, z, yaw, k=1.0, y=0.0):
     box(sz(0.4, 0.34, 0.9), at(0.3, 2.3, 1.75), ORANGE, yaw=yaw)
     box(sz(0.46, 0.42, 0.1), at(0.3, 2.3, 2.2), DARK, yaw=yaw)
 
+@rounded_over()
 def plough_truck(x, z, yaw, k=1.0, y=0.0):
     """A highway plough and gritter parked, facing +Z turned by `yaw`, `k`
     times some three long, built from `y`: three axles under dark arches, a
@@ -14131,6 +14157,7 @@ def round_bale(at, yaw=0.0, color='yellow'):
     """A round bale lying on its side, its axis across its local Z."""
     cyl(0.8, 1.3, (at[0], at[1] + 0.8, at[2]), color, segs=10, axis='along', yaw=yaw)
 
+@rounded_over()
 def tractor(at, body=0xcf534f):
     """A little farm tractor facing +X: big rear wheels, small front ones, the
     bonnet ahead, the cab's roof on four posts, an exhaust stack."""
@@ -14148,6 +14175,7 @@ def tractor(at, body=0xcf534f):
     box((1.7, 0.16, 1.6), (x - 0.8, y + 3.3, z), 'white')               # the cab's roof
     box((0.18, 1.0, 0.18), (x + 1.2, y + 2.0, z + 0.3), 0x2a2735)       # the exhaust
 
+@rounded_over()
 def combine_harvester(at, body=0x22c46e):
     """A combine harvester facing +X, a little over two cars long: the wide
     yellow header and its reel low at the front, the cab up over it, the
@@ -16934,36 +16962,37 @@ def park_wheels(x, y, z, k, xs, r, half):
             cyl(r * k, 0.07 * k, (x + dx * k, y + r * k, z0), 'dark', segs=10, axis='along')
             box((r * 0.7 * k, r * 0.7 * k, 0.03 * k), (x + dx * k, y + r * k, z + s * (half + 0.075 * k)), 'red')
 
+@rounded_over()
 def park_engine(at, k=1.0, boiler='red', cab='green'):
     """A little tank engine facing +X on the rails at `at`: six wheels and
     their coupling rod, the footplate, a round boiler with its dome and
     chimney ahead, the cab with its roof and windows behind, buffers and a
-    lamp. Its blocks are rounded over like its riders' (r29edge_round), the
-    thin trim (rod, windows) left with the plain chamfer."""
+    lamp."""
     x, y, z = at
     park_wheels(x, y, z, k, (-0.5, 0.0, 0.5), 0.16, 0.26 * k)
     for s in (-1, 1):
         box((1.1 * k, 0.05 * k, 0.03 * k), (x, y + 0.13 * k, z + s * 0.37 * k), 'grey')        # the coupling rod
-    r29edge_round(box((1.6 * k, 0.1 * k, 0.6 * k), (x, y + 0.34 * k, z), 'dark'))              # the footplate
+    box((1.6 * k, 0.1 * k, 0.6 * k), (x, y + 0.34 * k, z), 'dark')                             # the footplate
     cyl(0.25 * k, 0.9 * k, (x - 0.2 * k, y + 0.64 * k, z), boiler, segs=10, axis='across', smooth=True)
     cyl(0.26 * k, 0.08 * k, (x + 0.7 * k, y + 0.64 * k, z), 'dark', segs=10, axis='across')    # the smokebox door
     cyl(0.09 * k, 0.3 * k, (x + 0.55 * k, y + 0.85 * k, z), 'dark', r2=0.12 * k, segs=8)       # the chimney
     cyl(0.1 * k, 0.14 * k, (x + 0.2 * k, y + 0.86 * k, z), 'yellow', segs=8)                   # the dome
-    r29edge_round(box((0.5 * k, 0.62 * k, 0.6 * k), (x - 0.5 * k, y + 0.7 * k, z), cab))
-    r29edge_round(box((0.62 * k, 0.07 * k, 0.7 * k), (x - 0.5 * k, y + 1.04 * k, z), 'dark'))
+    box((0.5 * k, 0.62 * k, 0.6 * k), (x - 0.5 * k, y + 0.7 * k, z), cab)
+    box((0.62 * k, 0.07 * k, 0.7 * k), (x - 0.5 * k, y + 1.04 * k, z), 'dark')
     for s in (-1, 1):
         box((0.26 * k, 0.2 * k, 0.02 * k), (x - 0.5 * k, y + 0.85 * k, z + s * 0.305 * k), 'sky')  # the cab's windows
-    r29edge_round(box((0.06 * k, 0.12 * k, 0.6 * k), (x + 0.82 * k, y + 0.34 * k, z), 'red'))  # the buffer beam
-    r29edge_round(box((0.1 * k, 0.1 * k, 0.1 * k), (x + 0.78 * k, y + 0.95 * k, z), 'yellow')) # the lamp
+    box((0.06 * k, 0.12 * k, 0.6 * k), (x + 0.82 * k, y + 0.34 * k, z), 'red')                 # the buffer beam
+    box((0.1 * k, 0.1 * k, 0.1 * k), (x + 0.78 * k, y + 0.95 * k, z), 'yellow')                # the lamp
 
+@rounded_over()
 def park_coach(at, color, riders, k=1.0):
     """An open coach facing +X: four wheels, a low panelled body with its
     seat backs, and two people sitting in it, riding (they keep still: the
     coach moves them)."""
     x, y, z = at
     park_wheels(x, y, z, k, (-0.42, 0.42), 0.14, 0.24 * k)
-    r29edge_round(box((1.4 * k, 0.08 * k, 0.54 * k), (x, y + 0.3 * k, z), 'dark'))
-    r29edge_round(box((1.35 * k, 0.26 * k, 0.6 * k), (x, y + 0.47 * k, z), color))
+    box((1.4 * k, 0.08 * k, 0.54 * k), (x, y + 0.3 * k, z), 'dark')
+    box((1.35 * k, 0.26 * k, 0.6 * k), (x, y + 0.47 * k, z), color)
     box((1.37 * k, 0.05 * k, 0.62 * k), (x, y + 0.6 * k, z), 'white')                          # the body's rail
     for n, shirt in enumerate(riders):
         dx = (0.33 - 0.66 * n) * k
@@ -17926,13 +17955,14 @@ class plain_parts:
     simplifies away for a piece's FAR form, though (TtpRenderer::farForm
     keeps none that cuts less than a fifth): a piece that is square all
     through draws whole at any distance, so square its small parts and keep
-    its frame chamfered."""
+    its frame chamfered. A toy's block rounded over (rounded_over) keeps its
+    round in the full tier: a mine train or a tank train in a square piece."""
     def __enter__(self):
         self.before = set(bpy.context.scene.objects)
         return self
     def __exit__(self, *exc):
         for o in bpy.context.scene.objects:
-            if o not in self.before:
+            if o not in self.before and not o.get('round_over'):
                 o['chamfer'] = 0
         return False
 
@@ -17966,6 +17996,7 @@ def footbridge(at, span=4.0, w=1.6):
             box((0.12, 0.12, L), (x + sx * (w / 2 + 0.02), (ya + yb) / 2, (a + b) / 2), TIMBER,
                 pitch=math.atan2(yb - ya, b - a))
 
+@rounded_over()
 def ore_cart(at, yaw=0.0, ore=True, ore_color=0xa8623f, k=1.0):
     """A mine cart on rails along its local Z, 1.9 long at k 1: a tub
     flaring to its rim on a frame, four spoked wheels' worth of disc under
@@ -19980,6 +20011,7 @@ def equine(at, yaw, coat, L=0.62, ears=0.07, life=None, mane=0x5a4632, muzzle=0x
         F.block((0.15, 0.05, 0.19), (-0.01, 0.575), saddle)
         F.block((0.035, 0.07, 0.07), (0.06, 0.615), saddle)
 
+@rounded_over()
 def wagon(at, yaw, body=0x9a7b55, cover=None):
     """A buckboard (or, with a `cover`, a chuck wagon under its canvas), a
     racer and a half long, its tongue to +X turned by `yaw`."""
@@ -20159,6 +20191,7 @@ def miners_camp():
             box((0.04, 0.14, 3.4), (-1.6 + sx * 0.17, 0.66, 6.4), 0x9a7b55, pitch=0.1)
     join_still('camp')
 
+@rounded_over()
 def mine_loco(at, yaw=0.0):
     """A little battery loco for the mine line, along its local Z (its front
     +Z): a low green body on four wheels, a cab at the back with a roof on
@@ -22470,6 +22503,7 @@ def filling_station():
     hawk_circle((0.4, -0.6), 4.6, 3.6, 14.0)
     join_still('station')
 
+@rounded_over()
 def pickup(x, z, color, yaw=0.0):
     """A pickup truck, a racer and a half long (its cab to +Z), standing in
     a colour no racer wears: round wheels with their hubs under arches, a
@@ -22684,6 +22718,7 @@ def sidewinder_samples(name):
         line = line[::2] + ([line[-1]] if (len(line) - 1) % 2 else [])
     return line, i0 * SW_STEP
 
+@rounded_over()
 def sidewinder_tank_car(at, color):
     """A tank car on its bogies, along +Z, its middle at `at` (rail height):
     the barrel in the company's colour with its dome and walkway, the mark
@@ -22708,6 +22743,7 @@ def sidewinder_tank_car(at, color):
         else:
             emblem((x + side, y + 1.05, z), yaw, 0.32, d=0.08)
 
+@rounded_over()
 def sidewinder_loco(at):
     """A diesel in the company's colours, its cab at the back (-Z)."""
     x, y, z = at
@@ -25686,6 +25722,7 @@ def wooden_track(pts, w, t, grooves=True):
         bpy.context.scene.collection.objects.link(g)
         paint(g, 0x9a7b55)
 
+@rounded_over()
 def train_car(x, y, z, kind, color):
     """A wooden toy train's car standing at (x, y, z), its nose to +X (a
     path traveller faces along its path by its +X): the engine with its
@@ -26907,6 +26944,7 @@ def windup_key(x, y, z, tag):
         box((0.1, 0.62, 0.22), (x - 0.5, y + 0.2, z), 0xb0b6c8)
         box((0.1, 0.62, 0.22), (x - 0.5, y - 0.2, z), 0xb0b6c8)
 
+@rounded_over()
 def windup_robot(x, z, body, tag):
     """A tin robot two toy cars tall, facing +X: block feet and legs, a box
     body with its dial panel, a head with yellow eyes and an antenna, its
@@ -26944,6 +26982,7 @@ def windup_duck(x, z, tag):
     box((0.16, 0.22, 0.1), (x + 0.2, 1.88, z), 0xff7e44)
     windup_key(x - 0.5, 0.85, z, tag)
 
+@rounded_over()
 def windup_knight(x, z, tabard, tag):
     """A tin knight two toy cars tall, facing +X, marching: his helmet with
     its visor slit and plume, a tabard of his side's colour, a shield on his
@@ -27013,6 +27052,7 @@ def windup_knights():
                    (lambda x, z, t: windup_knight(x, z, 0x5a8fd8, t), 'waddle:d=5:p=1.0')],
                   L=14.0 / KNIGHT, w=1.8 / KNIGHT, speed=0.85 / KNIGHT)
 
+@rounded_over()
 def windup_bus(x, z, body, tag, decks=2):
     """A tin town bus (two decks) or tram (one, a pantograph on its roof) a
     racer and a bit long, facing +X: its body in one colour, cream window
