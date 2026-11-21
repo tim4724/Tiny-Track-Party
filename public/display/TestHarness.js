@@ -2642,7 +2642,12 @@ export function runDisplayScenario(opts, ctx) {
         seek: (step) => seekFree(step),
         seekBy: (sec) => seekFree(stepAfter(sec)),
         drivePast: (s) => drivePast(s),
-        raceCam: (c) => setRaceCam(c),
+        // `view` ({eye, yaw, pitch}, as a note saves them) places the free cam.
+        raceCam: (c, view) => {
+          setRaceCam(c);
+          if (free && view && view.eye) Object.assign(free, { eye: { ...view.eye }, yaw: view.yaw, pitch: view.pitch });
+          return race.cam;
+        },
         raceCams: () => RACE_CAMS.slice(),
         // A review note's picture and its facts, and what its pins point at.
         shot: () => shot(),

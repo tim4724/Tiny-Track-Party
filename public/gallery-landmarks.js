@@ -716,7 +716,8 @@ fullBtn.addEventListener('click', () => { toggleFull(); frame.focus(); });
 // STOPS are where to judge it from, each naming a `track` and one of: a set
 // piece (`piece`, its model, framed in `view`, orbit by default, at placement
 // `place`), a spot on the lap (`s`, `lat`: the driver's view parked there) or a
-// moment of the race (`step`, paused there, through race cam `cam`). The shape,
+// moment of the race (`step`, paused there, through race cam `cam`; the free
+// one from `eye`, `yaw` and `pitch`, as a note saves its camera). The shape,
 // by example: scripts/review-round.example.json. An item with no stops (an
 // idea, a question) is only read here. Each of an item's `ask` gets an answer
 // field. A verdict (Keep, Rework or Drop, a note and the answers, or the
@@ -918,7 +919,7 @@ async function goStop(k) {
     setView('race');
     lm.pause(true);
     lm.seek(st.step);
-    if (st.cam) lm.raceCam(st.cam);
+    if (st.cam) lm.raceCam(st.cam, st);
     paintRace();
   } else if (st.s != null) {
     lm.park(st.s, st.lat || 0);
