@@ -358,7 +358,7 @@ void ploughBanks(Theme& t) {
 void powderResort(Theme& t) {
   t.props.scatterDensity = 0.18f;
   t.road.kerbA = 0xf2877c; t.road.kerbB = 0x86a9e6;
-  t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
+  t.gantry.pylon = t.road.kerbB; t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
   snowProps(t, { { "snowman", 0.12f, 0.45f, 0.1f, true, true }, { "sled", 0.25f, 0.4f, 0.1f, false, true },
                  { "snow-pile", 0.38f, 1.0f, 0.6f, false, false }, { "set-snow-boulder", 0.25f, 0.6f, 0.3f, false, false } });
 }
@@ -691,7 +691,8 @@ Theme snowTheme() {
   // sheets. Same spin-out, same cones.
   t.hasIce = true; t.ice = { 0xa9d7ee, 0xf0f8fd };
   t.gate = 0xdfe9f6;  // cold-cast gate grade
-  t.gantry.pylon = 0x3f7bd9; t.gantry.finial = 0xfff6eb;  // pops against the white world
+  // The finish gantry keeps its celebration red (GantrySpec): it pops against
+  // the white world, where blue posts were the lap's one saturated dark blue.
   // Bridges on stone piers: pale granite in courses on a footing, under a
   // dressed cap, snow lying on both. Not slate: a pier stands in the deck's
   // shadow, where slate read near-black, a dark tower in a white world.

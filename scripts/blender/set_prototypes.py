@@ -70,8 +70,9 @@ SWATCH = {
     # and the snow cup's lying snow, an icy white whose shade is a pale blue
     # (the white ramp's is a lavender grey: stone, on a fir)
     'snow': (16, 0),
-    # and glacier ice, a lit cyan white down to a muted turquoise (ICE)
-    'ice': (32, 0),
+    # and glacier ice, a lit cyan white down to a muted turquoise (ICE), and
+    # the blocks of it, a pale cyan down to a bright turquoise
+    'ice': (32, 0), 'serac': (48, 0),
     # and the scatter's palms (r29tree_palm): the sun-bleached trunk and the
     # frond green the beach painted the approved (kit) palms (theme.cc's
     # kPalmTall and kPalmBend) at rows 0 and 4 of their ramps (palm-bend's
@@ -11488,7 +11489,7 @@ def glacier_airstrip(lite=False):
 # muted turquoise. In the sky and blue ramps a crevasse's slot and the
 # tongue's bands read as ultramarine painted on the snow (round 35).
 ICE = {'wall': ('ice', 6), 'slot': ('ice', 24), 'lit': ('ice', 6), 'shade': ('ice', 10),
-       'band_lit': ('ice', 16), 'band_shade': ('ice', 20), 'block_lit': ('ice', 3), 'turned': ('ice', 20),
+       'band_lit': ('ice', 16), 'band_shade': ('ice', 20), 'block_lit': ('serac', 3), 'turned': ('serac', 17),
        'water': ('ice', 31)}
 
 def iced(o, part):
@@ -11498,8 +11499,10 @@ def iced(o, part):
 
 def iced_block(o):
     """A block of ice built sky where it is lit and blue where it turns
-    from the sun (stone(rock=('sky', 'blue')), serac()): ICE's tones, its
-    lit side whiter than the tongue's (at row 6 a tower read as sea glass)."""
+    from the sun (stone(rock=('sky', 'blue')), serac()): ICE's tones, on a
+    ramp of their own, more cyan lit and a brighter turquoise turned than
+    the tongue's: on the tongue's a tower read as sea glass, then as white
+    stone with a steel edge."""
     return iced(o, 'block_lit' if o['swatch'] == 'sky' else 'turned')
 
 # The straight after the S-bend runs on a causeway a car's height and more over
