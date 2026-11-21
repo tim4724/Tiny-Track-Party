@@ -31,7 +31,7 @@ const fmtTime = (t) => (Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Mat
 // This page's own memory: the track on stage, the camera, game sound, the open list.
 const STATE_KEY = 'tinytrack_gallery_music_v2';
 const state = (() => {
-  const d = { track: '', cam: 'chase', sfx: true, more: false, raceLen: {} };
+  const d = { track: '', cam: 'chase', sfx: true, more: false, raceLen: {}, rain: 1 };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
@@ -282,6 +282,27 @@ function syncGameSound() {
 }
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => syncGameSound(), true);
 
+// The rain knob: a race whose sky rains plays the game's rain bed; the knob
+// trims it (the display's dev cueTrim) as a share of the game's level, shown
+// only while the race has rain, and saves the share with the track's pick.
+const rainShare = () => (picks[state.track] && picks[state.track].rain != null ? picks[state.track].rain : state.rain);
+function paintRain(share) {
+  el('mu-rain-level').value = String(Math.round(share * 100));
+  const db = share > 0 ? 20 * Math.log10(share) : -Infinity;
+  el('mu-rain-val').textContent = `${Math.round(share * 100)}% (${Number.isFinite(db) ? (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB' : 'off'})`;
+}
+function applyRain() {
+  let a;
+  try { a = hookOf() && frame.contentWindow.__audio; } catch (_) { return; }
+  if (!a || !a.cueTrim) return;
+  a.cueTrim.set('rain', state.rain);
+  const wet = [...(a._voices || new Map()).keys()].some((k) => k.startsWith('rain:'));
+  if (wet && el('mu-rain').hidden) { el('mu-rain').hidden = false; paintRain(state.rain); }
+}
+el('mu-rain-level').addEventListener('input', (e) => { state.rain = Number(e.target.value) / 100; save(); paintRain(state.rain); applyRain(); });
+el('mu-rain-save').addEventListener('click', () => savePick({ rain: state.rain }));
+setInterval(applyRain, 400);
+
 // Lap and place of your car, and how long the race here takes (its winner's
 // time, once one has been seen), a few times a second.
 setInterval(() => {
@@ -502,6 +523,8 @@ function pickTrack(id, auto = false) {
   paintCups();
   paintHead();
   paintSongs();
+  el('mu-rain').hidden = true;
+  state.rain = rainShare();
   loadRace();
   const chosen = (picks[id] && picks[id].song) || (draftFor.get(id) || {}).song;
   if (auto && chosen && songs.has(chosen) && !missing.has(chosen)) playSong(chosen);

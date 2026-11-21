@@ -85,8 +85,10 @@ inline double landHardness(double vh) {
 // for the whole flight (the device glides the pitch in and out).
 inline constexpr double ENGINE_FLARE = 0.15;
 // The rain bed under a race whose sky rains. One steady level: its loudness
-// (well under the engines and the song) is the cue's own gain in cues.js.
-inline constexpr double RAIN_LEVEL = 1;
+// (well under the engines and the song) is the cue's own gain in cues.js times
+// this, set by ear (a bit quieter than the cue's full level, the user's call;
+// the music gallery's rain knob auditions it against a race).
+inline constexpr double RAIN_LEVEL = 0.7;
 
 // The monster-truck engine: the same recorded loop, pitch down, a touch louder,
 // top end muffled.

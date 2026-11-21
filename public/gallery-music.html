@@ -29,6 +29,9 @@
 .mu-transport .mu-now { flex: 0 1 260px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
 .mu-transport .mu-now.is-idle { font-weight: 400; color: #8b93b8; }
 .mu-transport input[type=range] { flex: 1 1 160px; min-width: 80px; }
+.mu-transport .mu-rain { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.mu-transport .mu-rain[hidden] { display: none; }
+.mu-transport .mu-rain input[type=range] { flex: 0 0 110px; min-width: 0; }
 .mu-clock { color: #8b93b8; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The track list: one column per cup, a tile per track saying what it has. */
 .mu-cups { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 16px; }
@@ -150,6 +153,11 @@
       <input type="range" id="mu-seek" min="0" max="1000" value="0" aria-label="Song position" disabled>
       <span class="mu-clock" id="mu-time">0:00</span>
       <span class="mu-clock" id="mu-lap" title="The race under the song: its clock since the grid, your car's lap and place"></span>
+      <span class="mu-rain" id="mu-rain" hidden title="The rain bed under this race, as a share of the game's level: find the level by ear and save it">
+        Rain <input type="range" id="mu-rain-level" min="0" max="150" step="5" value="100" aria-label="Rain level">
+        <span id="mu-rain-val">100%</span>
+        <button class="ctrl" id="mu-rain-save">Save rain level</button>
+      </span>
     </div>
     <div class="mu-cups" id="mu-cups"></div>
   </div>

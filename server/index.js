@@ -303,7 +303,7 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (urlPath === '/api/review-music' && req.method === 'POST') {
-      readJson(64 * 1024, ({ track, song, note }) => {
+      readJson(64 * 1024, ({ track, song, note, rain }) => {
         if (!/^[a-z0-9-]{1,40}$/.test(String(track))) { sendJson(res, 400, { error: 'a track is a catalogue track id' }); return; }
         if (song != null && !/^(candidates\/)?[\w-]+(\.[\w-]+)*\.mp3$/.test(String(song))) {
           sendJson(res, 400, { error: 'a song is a file under /assets/audio/music/' });
@@ -314,7 +314,10 @@ const server = http.createServer((req, res) => {
         const entry = { song: song === undefined ? (was.song || null) : song, at: new Date().toISOString() };
         const said = String(note === undefined ? (was.note || '') : (note || '')).trim().slice(0, 4000);
         if (said) entry.note = said;
-        if (entry.song || entry.note) picks[track] = entry;
+        // The rain knob's level, as a share of the game's (a rain track only).
+        const wet = rain === undefined ? was.rain : rain;
+        if (Number.isFinite(wet) && wet >= 0 && wet <= 2) entry.rain = Math.round(wet * 100) / 100;
+        if (entry.song || entry.note || entry.rain != null) picks[track] = entry;
         else delete picks[track];
         fs.mkdirSync(REVIEW_DIR, { recursive: true });
         fs.writeFileSync(picksFile, JSON.stringify(picks, null, 2) + '\n');

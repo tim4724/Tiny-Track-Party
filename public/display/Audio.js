@@ -56,6 +56,10 @@ export class RaceAudio {
     this.master = null;
     this._picks = null;
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
+    // DEV: a level trim per voice cue, empty in the game. The music gallery sets
+    // one to audition a bed's level against a race (its rain knob); what it
+    // finds is then authored in C++ (audio.h), where the level is decided.
+    this.cueTrim = new Map();
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
     this._muted = storedMuted(); // the display's mute switch, persisted in bus.js
@@ -204,6 +208,7 @@ export class RaceAudio {
     if (!this.ready) return;
     const key = cueId + ':' + id;
     let voice = this._voices.get(key);
+    level *= this.cueTrim.get(cueId) ?? 1;
     if (level <= 0.02) { this._stopVoice(cueId, id); return; }
     if (!voice) {
       const v = this._variant(cueId);
