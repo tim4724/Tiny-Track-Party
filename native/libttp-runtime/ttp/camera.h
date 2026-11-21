@@ -224,10 +224,17 @@ constexpr float FOLLOW_FLOW_RATE = 4.0f;    // 1/s, how fast the carried velocit
 // race, and one that arrives early and waits reads as stiff. So the goals are
 // functions of how far round the battle has got, not of a clock. Over
 // FOLLOW_LOOP_LEAD the yaw and the distance swing over. On the ride the camera works
-// like an operator following the action: the aim goes most of the way to the battle
-// and the eye only leans that way, so the view turns and tilts after the cars,
-// pushing in as they go. It does not arc round the ring instead, because that takes
-// the eye out of the tube and films the near half of the ring from behind.
+// like an operator following the action: the aim goes most of the way ACROSS to the
+// battle and the eye only leans that way, so the view turns after the cars, pushing
+// in as they go. It does not arc round the ring instead, because that takes the eye
+// out of the tube and films the near half of the ring from behind.
+//
+// UP AND DOWN, THE CAMERA HOLDS STILL and the cars climb, go over the top and come
+// down through the picture (decided 2026-11-21: a camera rising and falling with
+// them read as busy). The aim takes only FOLLOW_LOOP_PAN_UP of the battle's height
+// over the ring's middle, carried at that share of its climb, and the eye's HEIGHT
+// is held where it was as the ride began: it eases onto that height and off it
+// again (FOLLOW_LOOP_HOLD_OMEGA), so the hold never steps.
 //
 // The place is worked out once per scene (loopShots). The axis has two ends and
 // something can stand on it: a skyway rolling upright shows its top to only one of
@@ -254,6 +261,10 @@ constexpr float FOLLOW_LOOP_LIFT = 0.12f;     // how far up the picture, in half
 constexpr float FOLLOW_LOOP_ASPECT = 16.0f / 9.0f;   // built with the scene, before any cell
 // How much of the battle's offset from the ring's middle the aim and the eye take.
 constexpr float FOLLOW_LOOP_PAN = 0.7f, FOLLOW_LOOP_LEAN = 0.2f;
+constexpr float FOLLOW_LOOP_PAN_UP = 0.15f;    // ...and of its height over it, the aim
+// rad/s, the springs onto the held eye height (quick: it is held before the cars
+// climb) and off it after the ride (slow: the rig's own height may be units away).
+constexpr float FOLLOW_LOOP_HOLD_OMEGA = 8.0f, FOLLOW_LOOP_RELEASE_OMEGA = 2.5f;
 constexpr float FOLLOW_LOOP_YAW_OMEGA = 5.0f;  // riding: the yaw has to keep up with the aim
 constexpr float FOLLOW_LOOP_REACH = 5.0f;     // how far from the ring's middle the battle counts
 constexpr float FOLLOW_LOOP_PUSH = 0.1f;      // of the distance, either side of the fit
@@ -275,8 +286,12 @@ struct LoopShot {
     float rideFrom, rideTo;  // the whole stretch this is part of: one swing and one push
 };
 
+// `scenery` hides what it stands in front of, like the deck and the ground: the
+// lens holds still on a looping (LensPlan does not lift there), so its place
+// is chosen clear of it here, once per scene.
 std::vector<LoopShot> loopShots(const std::vector<OutSample>& samples, float lap,
-                                const NameTagDeck& deck, const GroundGrid& ground);
+                                const NameTagDeck& deck, const GroundGrid& ground,
+                                const Obstacles& scenery);
 // The shot whose stretch covers track position `trackS`, -1 for none.
 int loopAt(const std::vector<LoopShot>& loops, float trackS);
 
@@ -295,6 +310,8 @@ struct FollowCam {
     bool init = false;
     int loop = -1, loopEnd = 0;   // the looping it is on, and the end of it that it chose
     float entryYaw = 0, entryDist = 0;   // where the swing began
+    // The eye height held through a ride, and how far onto it the eye is (0..1).
+    float holdY = 0, hold = 0, holdVel = 0;
     std::vector<V3> last;    // each slot's position last frame (the leader's displacement)...
     std::vector<bool> seen;  // ...valid only where the slot held a car last frame
     std::vector<int> battle; // the slots in the battle this frame (LensPlan films them)
@@ -422,8 +439,9 @@ struct CoverChase {
 // next LENS_AHEAD seconds has no level that is a shot, and once it is up,
 // when the drawn eye has been no shot for LENS_LATE. Coverage then cuts
 // past it or away from it rather than fly the lens round: hard cuts are the
-// lobby's language. Never on a looping, though: its swing and ride are one
-// unbroken move (FollowCam), so there the lens lifts and nothing cuts.
+// lobby's language. Not on a looping: its swing and ride are one unbroken
+// move whose height holds still (FollowCam), so there the lens comes home
+// and nothing cuts.
 // ---------------------------------------------------------------------------
 constexpr float LENS_ELEV_MAX = 0.75f;    // rad over level at u = 1 (~43 degrees)
 constexpr int LENS_LEVELS = 6;            // the u tried: 0, 0.2 .. 1
@@ -466,7 +484,9 @@ struct LensPlan {
     std::vector<TtpCarInput> field;
 
     // The eye to draw for the first `n` of `views` (1 <= n <= 1 + LENS_AHEAD's).
-    V3 apply(const Obstacles& o, const NameTagDeck& deck, size_t n, float dt);
+    // `settle`: the rig is on a looping, which it films alone: the lens comes
+    // home at once (at LENS_RATE) and asks nothing.
+    V3 apply(const Obstacles& o, const NameTagDeck& deck, size_t n, bool settle, float dt);
 };
 
 }  // namespace rt

@@ -298,7 +298,8 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         // the shell already waits on, and not on a frame: on a TV box the fill
         // would be a visible hitch.
         r.fillObstacles(g_disp->obstacles);
-        g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground);
+        g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground,
+                                           g_disp->obstacles);
         g_disp->sceneT = 0;
         solveFraming(*g_disp);
         // Start the turntable on the still view's own bearing, so a preview's

@@ -92,9 +92,10 @@ V3 coverFollow(DisplayState& d, const std::vector<const Car*>& cars, const Game*
         const TtpCarInput& c = outCars[i];
         lens.views[0].subjects.push_back(V3{ c.pos.x, c.pos.y, c.pos.z } + V3{ c.up.x, c.up.y, c.up.z } * FOLLOW_AIM_UP);
     }
-    // Only a live field runs on (a held one is a still), and only past scenery.
+    // Only a live field runs on (a held one is a still), only past scenery, and
+    // never on a looping, where the lens stays home.
     Centerline* cl = eng && !d.hold ? eng->centerline() : nullptr;
-    bool runs = cl && !f.battle.empty() && !d.obstacles.empty();
+    bool runs = cl && !f.battle.empty() && !d.obstacles.empty() && f.loop < 0;
     for (const int i : f.battle) runs = runs && (size_t) i < cars.size() && cars[(size_t) i];
     size_t n = 1;
     if (runs) {
@@ -128,7 +129,7 @@ V3 coverFollow(DisplayState& d, const std::vector<const Car*>& cars, const Game*
             v.aim = run.target;
         }
     }
-    return lens.apply(d.obstacles, d.tagDeck, n, dt);
+    return lens.apply(d.obstacles, d.tagDeck, n, f.loop >= 0, dt);
 }
 
 }  // namespace

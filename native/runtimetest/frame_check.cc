@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -1237,7 +1238,7 @@ void testFollowOnLoopings() {
     const rt::NameTagDeck deck = rt::nameTagDeck(geo.samples, geo.closed);
     rt::GroundGrid ground;
     ground.flatY = -20;
-    const std::vector<rt::LoopShot> loops = rt::loopShots(geo.samples, (float) geo.length, deck, ground);
+    const std::vector<rt::LoopShot> loops = rt::loopShots(geo.samples, (float) geo.length, deck, ground, rt::Obstacles());
     check(!loops.empty(), id + ": has a looping");
     V3 mid;
     for (const OutSample& o : geo.samples) mid = mid + rt::v3(o.pos);
@@ -1259,6 +1260,8 @@ void testFollowOnLoopings() {
     const float speed = 18.0f;
     int ride = 0, hidden = 0, behind = 0, outOfFrame = 0;
     float maxStep = 0;
+    std::map<float, float> heightLo, heightHi;   // per stretch (rideFrom); lo > hi: unseen
+    for (const rt::LoopShot& l : loops) heightLo[l.rideFrom] = 1, heightHi[l.rideFrom] = 0;
     V3 prev;
     bool have = false;
     for (float at = 2; at < (float) geo.length; at += speed * DT) {
@@ -1273,6 +1276,15 @@ void testFollowOnLoopings() {
       have = cam.loop >= 0;
       bool onRide = false;
       for (const rt::LoopShot& l : loops) onRide = onRide || (at >= l.start && at < l.to);
+      // The eye's height over each whole stretch: held, the cars go up and
+      // down through the picture and the camera does not.
+      for (size_t l = 0; l < loops.size(); l++) {
+        if (at < loops[l].rideFrom || at >= loops[l].rideTo) continue;
+        float& lo = heightLo[loops[l].rideFrom], & hi = heightHi[loops[l].rideFrom];
+        if (lo > hi) lo = hi = cam.pos.y;
+        lo = std::fmin(lo, cam.pos.y);
+        hi = std::fmax(hi, cam.pos.y);
+      }
       if (!onRide) continue;
       ride++;
       const V3 p{cars[0].pos.x, cars[0].pos.y, cars[0].pos.z}, up{cars[0].up.x, cars[0].up.y, cars[0].up.z};
@@ -1290,9 +1302,13 @@ void testFollowOnLoopings() {
     check(behind <= 0.1f * ride, id + ": the camera stays on the deck's top side round the ring" + counts);
     check(outOfFrame == 0, id + ": the leader stays in the picture round the ring");
     check(maxStep < 1.0f, id + ": the camera never jumps on its way to a looping or round it");
+    float range = 0;
+    for (const auto& kv : heightLo) range = std::fmax(range, heightHi[kv.first] - kv.second);
+    std::printf("  %s: eye height range over a ride %.3f\n", t.id, range);
+    check(range < 0.05f, id + ": the eye holds its height through a looping (" + std::to_string(range) + ")");
   }
   const RaceTrack flat = build_catalogue_track(*find_track_def("cove"), 1, 0u);
-  check(rt::loopShots(flat.samples, (float) flat.length, rt::nameTagDeck(flat.samples, flat.closed), rt::GroundGrid()).empty(),
+  check(rt::loopShots(flat.samples, (float) flat.length, rt::nameTagDeck(flat.samples, flat.closed), rt::GroundGrid(), rt::Obstacles()).empty(),
         "a track with no looping has no place for one");
 }
 
@@ -1473,7 +1489,7 @@ void testLensPlan(const GameTrack& track) {
       const float t = i * DT;
       view(t, lens.views[0]);
       for (size_t k = 0; k < std::size(rt::LENS_AHEAD); k++) view(t + rt::LENS_AHEAD[k], lens.views[k + 1]);
-      const V3 eye = lens.apply(town, rt::NameTagDeck{}, lens.views.size(), DT);
+      const V3 eye = lens.apply(town, rt::NameTagDeck{}, lens.views.size(), false, DT);
       const rt::LensView& now = lens.views[0];
       rigBlind += rt::lensCrowded(town, now.eye) || rt::wallBlocks(town, now.eye, now.aim);
       lensBlind += rt::lensCrowded(town, eye) || rt::wallBlocks(town, eye, now.aim);
@@ -1519,7 +1535,7 @@ void testLensPlan(const GameTrack& track) {
     lens.views[0] = {{-7, 2, 3}, {0, 0.25f, 5}, {{0, 0.25f, 5}}};
     bool same = true;
     for (int i = 0; i < 10; i++) {
-      const V3 e = lens.apply(rt::Obstacles{}, rt::NameTagDeck{}, 1, DT);
+      const V3 e = lens.apply(rt::Obstacles{}, rt::NameTagDeck{}, 1, false, DT);
       same = same && e.x == lens.views[0].eye.x && e.y == lens.views[0].eye.y && e.z == lens.views[0].eye.z;
     }
     check(same && lens.u == 0 && !lens.blind, "no scenery: the lens leaves the rig alone");
