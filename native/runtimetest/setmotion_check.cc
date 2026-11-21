@@ -198,6 +198,12 @@ int main(int argc, char** argv) {
     const float u = ttp::rt::set_motion_path_at(m, t);
     check(u >= 0 && u < 1, "a path position stays in [0, 1) at t=" + std::to_string(t));
   }
+  check(ttp::rt::parse_set_motion("anim_path:c=parrots:p=17:f=3", m) && m.pathFace == 3, "a flier banks");
+  check(ttp::rt::set_motion_bank(0, 1, 3) == 0, "flying straight, no bank");
+  // a turn of radius 2 at 3 u/s pulls 4.5 u/s^2: tan(bank) = 4.5 / 9.81
+  check(near(ttp::rt::set_motion_bank(0.5f, 1, 3), std::atan(4.5f / 9.81f), 1e-5f), "a turn to the right leans right");
+  check(ttp::rt::set_motion_bank(-0.5f, 1, 3) == -ttp::rt::set_motion_bank(0.5f, 1, 3), "and to the left, left");
+  check(near(ttp::rt::set_motion_bank(3, 0.2f, 9), 60 * DEG, 1e-5f), "a bank holds at 60 degrees");
 
   // 3. Watching.
   ttp::rt::parse_set_motion("anim_watch:r=20:d=60", m);

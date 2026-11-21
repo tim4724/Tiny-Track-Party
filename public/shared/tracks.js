@@ -606,6 +606,10 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.675, lat: 20, len: 10, r: 13, h: 1.0, top: 0.55, near: 0.4, w: 5 },
       // the hard the crab fishers' landing stands on, at the hop's height
       { kind: 'ridge', u: 0.64, lat: 17, len: 6, r: 13, h: 1.15, top: 0.55, near: 0.4, w: 5 },
+      // the shellfish shack's sand, raised from the low ground between the
+      // downs to stand a little over the road (round 34: down there the
+      // kerb hid its foot and the seat saw a roof in a hollow)
+      { kind: 'ridge', u: 0.798, lat: -10.5, len: 6, r: 8, h: 1.4, top: 0.55, near: 0.5 },
       // the sand the tide has just left, darker and cooler round the reef
       { kind: 'paint', u: 0.31, lat: 13, len: 44, r: 5, w: 5, tint: 0xc4bcae },
       // the east run's pool on a terrace of its own, like the big one's

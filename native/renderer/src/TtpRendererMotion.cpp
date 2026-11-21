@@ -616,7 +616,7 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
             float3 fwd = pathPoint(p, s + 0.4f) - pathPoint(p, s - 0.4f);
             mat3f rot{ mv.rest[0].xyz / mv.scale, mv.rest[1].xyz / mv.scale,
                        mv.rest[2].xyz / mv.scale };
-            if (m.pathFace == 1) fwd.y = 0;
+            if (m.pathFace == 1 || m.pathFace == 3) fwd.y = 0;
             if (m.pathFace > 0 && dot(fwd, fwd) > 1e-8f) {
                 const float3 x = normalize(fwd);
                 // Back up; straight up or down, the back faces the way the
@@ -624,7 +624,17 @@ void TtpRenderer::stepSetMovers(const std::vector<float3>& carPosW) {
                 // a dive), which is where world-up's projection was heading.
                 float3 up{ 0, 1, 0 };
                 if (std::fabs(x.y) > 0.995f) up = rot[0] * (x.y > 0 ? -1.0f : 1.0f);
-                const float3 y = normalize(up - x * dot(up, x));
+                float3 y = normalize(up - x * dot(up, x));
+                if (m.pathFace == 3) {
+                    // A flier banked into its turn (set_motion_bank), the
+                    // turn read across a stride either side, wider than the
+                    // heading's window so the lean comes and goes smoothly.
+                    constexpr float STRIDE = 1.0f;
+                    const float3 back = at - pathPoint(p, s - STRIDE), on = pathPoint(p, s + STRIDE) - at;
+                    const float turn = std::atan2(back.x * on.z - back.z * on.x, back.x * on.x + back.z * on.z);
+                    const float bank = ttp::rt::set_motion_bank(turn, STRIDE, p.at.back() / m.pathPeriod);
+                    y = y * std::cos(bank) + cross(x, y) * std::sin(bank);
+                }
                 rot = mat3f{ x, y, cross(x, y) };
             }
             mat4f w{ float4{ rot[0] * mv.scale, 0 }, float4{ rot[1] * mv.scale, 0 },

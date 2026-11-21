@@ -42,7 +42,8 @@
 // node's own units (a GLB's grow and the placement's scale carry them); radii
 // are WORLD units, because they are about cars. Keys: a axis (x|y|z), w rad/s,
 // d degrees, p seconds, h height, r radius (watch, hop), c chain, o phase
-// offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full), s size (smoke),
+// offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full, 3 yaw and banked
+// into its turns: a flier, set_motion_bank), s size (smoke),
 // n segments (flutter).
 //
 // FLUTTER is the one verb that bends its part. The part is a cloth built flat
@@ -507,6 +508,18 @@ inline void set_motion_flutter_joints(const SetMotion& m, const SetFlutterFrame&
 inline float set_motion_path_at(const SetMotion& m, float t) {
   const float u = t / m.pathPeriod + m.pathOffset;
   return u - std::floor(u);
+}
+
+// A flier's bank (`f=3`), in radians about its heading, + its right side
+// down: it leans into a turn as a bird or a plane does, by the angle whose
+// tangent is the turn's pull over gravity's (v^2 k / g). `turn` is how far
+// its heading swings, + to the right, from the chord `stride` behind it to
+// the chord `stride` on; `speed` its pace along the path. Held to 60
+// degrees: a turn that would ask for more is tighter than any flier makes.
+inline float set_motion_bank(float turn, float stride, float speed) {
+  constexpr float G = 9.81f, LIMIT = 1.04719755f;
+  const float pull = stride > 0 ? speed * speed * turn / stride : 0.0f;
+  return std::min(LIMIT, std::max(-LIMIT, std::atan(pull / G)));
 }
 
 }  // namespace rt
