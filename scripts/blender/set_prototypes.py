@@ -19629,7 +19629,7 @@ lite_too('hull-arch', 'dune-foot', 'tide-wrack', 'wreck-buoy', 'storm-adrift')
 
 # ---- round 24: Cove's own gun, its treasure, a gate, a prize, parrots ----
 
-def cove_cannon(at, yaw=0.0, k=1.0):
+def cove_cannon(at, yaw=0.0, k=1.0, prop=False):
     """Cove's gun, the one model wherever the crew have one (round 24: the
     kit's two cannon and a third of ours stood on one lap; round 34: the
     scatter's by the road too, which stood without its trunnions, its
@@ -19643,11 +19643,13 @@ def cove_cannon(at, yaw=0.0, k=1.0):
     gun's), crisp at their ends; round 28 fix: each wheel's faces rounded
     over into its tread (fixprop_wheel), ten sides to the iron, the bore
     dark in the muzzle (an eight-sided cap on each read as a flat facet).
-    The box's (LITE) leaves out the bands, the hubs, the cascabel and the
-    axles under the bed, and rounds the iron in eight sides."""
+    The box's (LITE) leaves out the bands and the hubs; the box's `prop`
+    (the scatter's, stood many times a lap) its cascabel and the axles
+    under its bed too, and it rounds the iron in eight sides."""
     x0, y0, z0 = at
     iron, band, wood = 0x38383d, 0x4f5260, 0xb06041
-    segs = 8 if LITE else 10                              # (shaded round, ten sides cost what six flat ones did)
+    spare = LITE and prop
+    segs = 8 if spare else 10                             # (shaded round, ten sides cost what six flat ones did)
     def W(lx, ly, lz):
         x, z = turned(x0, z0, yaw, lx * k, lz * k)
         return (x, y0 + ly * k, z)
@@ -19659,14 +19661,14 @@ def cove_cannon(at, yaw=0.0, k=1.0):
         b((0.11, 0.14, 0.52), sx * 0.235, 0.47, 0.19, wood)
     with plain_parts():
         for lz in (-0.4, 0.3):
-            if not LITE:
+            if not spare:
                 b((0.7, 0.07, 0.07), 0.0, 0.18, lz, iron)                        # an axle
             for sx in (-1, 1):
                 own_shell('wheel', fixprop_wheel(W(sx * 0.375, 0.18, lz), 0.18 * k, 0.055 * k, 'bark', 'wheel', yaw, 8 if LITE else 10, (5, 7)), smooth=True)
                 if not LITE:
                     b((0.14, 0.08, 0.08), sx * 0.375, 0.18, lz, iron)
         b((0.64, 0.09, 0.09), 0.0, 0.58, 0.1, iron)                              # the trunnions, seated on the steps (their tops 0.54)
-        if not LITE:
+        if not spare:
             b((0.12, 0.12, 0.12), 0.0, 0.62, -0.61, iron)                        # the cascabel, against the breech
     Z0, Z1, Y0, Y1 = -0.56, 0.8, 0.62, 0.71
     def bore(lz):
@@ -19977,15 +19979,33 @@ def smooth_loop(ctrl, step):
         out.append(mix(dense[j], dense[(j + 1) % len(dense)], run[j], run[j + 1], d))
     return out
 
+def beside(loop, side, up, pull):
+    """The closed `loop` [(x, y, z)] moved `side` to its right and `up` over
+    it, drawn in toward it where it turns hard: never more than `pull` of
+    the turn's radius out, so a second flier on it keeps near the first's
+    pace round a hairpin instead of swinging wide of it."""
+    n, out = len(loop), []
+    for i in range(n):
+        a, p, b = loop[i - 1], loop[i], loop[(i + 1) % n]
+        h0, h1 = (p[0] - a[0], p[2] - a[2]), (b[0] - p[0], b[2] - p[2])
+        turn = abs(math.atan2(h0[0] * h1[1] - h0[1] * h1[0], h0[0] * h1[0] + h0[1] * h1[1]))
+        hard = turn / (0.5 * (math.hypot(*h0) + math.hypot(*h1)))          # how hard it turns here (1 / radius)
+        d = min(side, pull / hard) if hard > 1e-6 else side
+        hx, hz = b[0] - a[0], b[2] - a[2]
+        h = math.hypot(hx, hz)
+        out.append((p[0] - hz / h * d, p[1] + up, p[2] + hx / h * d))
+    return out
+
 # The parrots' way in their piece's frame (tracks.js stands it astride the
 # road where two of the island's groves face each other over it): out of the
 # palms on the island's side, over the road well clear of a car and its
-# camera, into the palms on the beach's, and back a little further on.
+# camera, and round over the palms on the beach's, climbing to clear their
+# crowns (round 34: the beach end ran through three of them).
 # (x, y over the plain, z), the points a closed curve runs through.
 # (Round 25: two units higher they were red specks from the seat. The road's
 # crossing clears the highest eye the chase rig takes, 2.1, by two units.)
-COVE_PARROTS = ((11.4, 6.6, -2.0), (7.5, 5.4, -1.0), (2.0, 4.3, 1.0), (-3.5, 4.0, 3.4), (-7.6, 4.1, 5.6), (-9.2, 4.5, 7.6),
-                (-8.0, 4.7, 9.2), (-4.0, 4.3, 7.4), (1.5, 4.4, 4.4), (7.0, 5.5, 1.6), (11.0, 6.7, 0.8), (12.6, 7.0, -0.8))
+COVE_PARROTS = ((11.4, 6.6, -2.0), (7.5, 5.4, -1.0), (2.0, 4.3, 1.0), (-3.5, 5.1, 3.4), (-7.6, 6.5, 5.6), (-9.2, 6.8, 7.6),
+                (-8.0, 6.9, 9.2), (-4.0, 6.0, 7.4), (1.5, 4.6, 4.4), (7.0, 5.9, 1.6), (11.0, 6.7, 0.8), (12.6, 7.0, -0.8))
 
 @piece(1.0)
 def parrot_crossing():
@@ -19997,21 +20017,25 @@ def parrot_crossing():
     # They fly as birds do: along a smooth curve, banked into its turns
     # (f=3), the body lifting a little on each downstroke (the bob, a
     # quarter of a beat on from its wings); a pair side by side, the second
-    # a little back and higher (round 34: on a line of straight legs they
-    # swung flat round each corner in a blink, the pair one behind the other
-    # in the same track).
+    # on a loop of its own a stride to the right, a little behind and
+    # higher, closing in to fly the hairpins in line (round 34: on a line of
+    # straight legs they swung flat round each corner in a blink, the pair
+    # one behind the other in the same track; held to the first's side as
+    # one piece, the second swung round the hairpins at twice its pace).
     loop = smooth_loop(COVE_PARROTS, 0.4)
-    for i, p in enumerate(loop):
-        marker('path_parrots_%d' % i, p)
-    x0, _, z0 = loop[0]
-    # (how far on, how much higher, how far to the right; each bird is built
-    # on the floor, a higher one's pivot sunk under it)
-    birds = ((0.0, 0.0, 0.0), (0.012, 0.15, 1.2), (0.5, 0.0, 0.0))
-    for n, (o, up, side) in enumerate(birds[::2] if LITE else birds):
+    ways = {'parrots': loop} if LITE else {'parrots': loop, 'pair': smooth_loop(beside(loop, 1.2, 0.15, 0.15), 0.4)}
+    for chain, way in ways.items():
+        for i, p in enumerate(way):
+            marker('path_%s_%d' % (chain, i), p)
+    behind = 1.6 / sum(math.dist(p, q) for p, q in zip(loop, loop[1:] + loop[:1]))
+    birds = (('parrots', 0.0), ('pair', 1.0 - behind), ('parrots', 0.5))   # (its loop, how far round it)
+    for n, (chain, o) in enumerate(birds[::2] if LITE else birds):
+        bx, _, bz = ways[chain][0]
         beat = 0.37 * n
-        with animated('anim_path:c=parrots:p=17:f=3:o=%.3f+bob:h=0.035:p=0.24:o=%.3f#p%d' % (o, (beat + 0.25) % 1.0, n),
-                      (x0, 0.07 - up, z0)):
-            macaw_on_the_wing((x0, 0.07, z0 + side), k=1.8, tag='w%d' % n, beat=beat)
+        with animated('anim_path:c=%s:p=17:f=3:o=%.3f+bob:h=0.035:p=0.24:o=%.3f#p%d' % (chain, o, (beat + 0.25) % 1.0, n),
+                      (bx, 0.07, bz)):
+            macaw_on_the_wing((bx, 0.07, bz), k=1.8, tag='w%d' % n, beat=beat)
+    x0, _, z0 = loop[0]
     def foot():
         with plain_parts():
             box((0.3, 0.3, 0.3), (x0, -0.6, z0), 'slate')
@@ -28395,7 +28419,7 @@ def own_pirate_crate():
 def own_pirate_cannon():
     # the bay battery's gun, the one model (round 34: a barer one, its
     # barrel hung over the truck, read as a lesser cannon)
-    cove_cannon((0.0, 0.0, 0.0), k=1.25)
+    cove_cannon((0.0, 0.0, 0.0), k=1.25, prop=True)
     join_still('cannon')
 
 @own_model('pirate-chest')
