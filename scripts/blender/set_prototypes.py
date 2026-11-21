@@ -18135,23 +18135,26 @@ def footbridge(at, span=4.0, w=1.6):
                 pitch=math.atan2(yb - ya, b - a))
 
 @rounded_over()
-def ore_cart(at, yaw=0.0, ore=True, ore_color=0xa8623f, k=1.0):
+def ore_cart(at, yaw=0.0, ore=True, ore_color=0xa8623f, k=1.0, parts='both'):
     """A mine cart on rails along its local Z, 1.9 long at k 1: a tub
     flaring to its rim on a frame, four spoked wheels' worth of disc under
-    it, ore heaped in it."""
+    it, ore heaped in it. `parts` 'tub' or 'chassis' builds one half (the
+    tub tips on its chassis at the headframe's landing)."""
     x, y, z = at
     c, sn = math.cos(yaw), math.sin(yaw)
     def at2(dx, dy, dz):
         return (x + (dx * c + dz * sn) * k, y + dy * k, z + (-dx * sn + dz * c) * k)
-    lo, hi = ((0.42, 0.62), 0.5), ((0.66, 0.96), 1.22)
-    verts = [at2(sx * hx, hy, sz * hz) for (hx, hz), hy in (lo, hi) for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-    solid(verts, [(3, 2, 1, 0), (4, 5, 6, 7)] + [(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i) for i in range(4)], 'grey')
-    box((1.4 * k, 0.1 * k, 2.0 * k), at2(0, 1.25, 0), 'slate', yaw=yaw)                     # the rim
-    box((0.86 * k, 0.14 * k, 1.7 * k), at2(0, 0.44, 0), 'slate', yaw=yaw)                   # the frame
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            cyl(0.28 * k, 0.14 * k, at2(sx * 0.52 - (0.14 if sx > 0 else 0), 0.28, sz * 0.58), ROPE, segs=10, axis='across', yaw=yaw)
-    if ore:
+    if parts != 'chassis':
+        lo, hi = ((0.42, 0.62), 0.5), ((0.66, 0.96), 1.22)
+        verts = [at2(sx * hx, hy, sz * hz) for (hx, hz), hy in (lo, hi) for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        solid(verts, [(3, 2, 1, 0), (4, 5, 6, 7)] + [(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i) for i in range(4)], 'grey')
+        box((1.4 * k, 0.1 * k, 2.0 * k), at2(0, 1.25, 0), 'slate', yaw=yaw)                     # the rim
+    if parts != 'tub':
+        box((0.86 * k, 0.14 * k, 1.7 * k), at2(0, 0.44, 0), 'slate', yaw=yaw)                   # the frame
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                cyl(0.28 * k, 0.14 * k, at2(sx * 0.52 - (0.14 if sx > 0 else 0), 0.28, sz * 0.58), ROPE, segs=10, axis='across', yaw=yaw)
+    if ore and parts != 'chassis':
         rock_lump(0.58 * k, at2(0, 1.3, 0), ore_color, (0.9, 0.5, 1.35), yaw, seed=x)
 
 def ground_poly(verts, faces, color):
@@ -23637,13 +23640,14 @@ def headframe():
     # left, the bend's inside), its legs on both verges leaning in to a deck
     # of two girders over the road six units up, braced in X's down each
     # side; the red sheave wheel on the deck over the right-hand kerb, the
-    # rope down from it winding a skip up out of the collar house over the
-    # shaft between the right-hand legs to tip into a chute and back down
-    # (THE HOIST, below), and over it and away across the road to the hoist
-    # house on the inside verge. The
+    # rope down from it winding a cage up out of the collar house over the
+    # shaft between the right-hand legs with a cart of ore that rolls out
+    # onto the landing and tips into the ore bin (THE HOIST, below), and
+    # over it and away across the road to the hoist house on the inside
+    # verge. The
     # backstays lean from the deck's far end down to the inside verge, so
     # the racers pass under the wheel, the girders, the backstays and the
-    # cable in turn. The skip tips down a chute into the ore bin standing on
+    # cable in turn. The carts tip into the ore bin standing on
     # its own legs over the loading shed behind the right-hand legs, where
     # the ore line (set-ore-line) ends: its train comes out of the shed
     # loaded. The hoist house is a boarded engine house under a tin roof,
@@ -23672,49 +23676,113 @@ def headframe():
     for sz in (-0.6, 0.6):                                                       # the wheel's posts and axle
         box((0.22, 1.2, 0.22), (WX, H + 0.95, ZC + sz), TIMBER)
     box((0.2, 0.2, 1.4), (WX, cy, ZC), 'slate')
-    # THE HOIST. A skip winds up out of the shaft through the collar house's
-    # roof to the chute's head, stands there while it tips into the chute,
-    # comes down again and stands in the shaft while it fills: one timing
-    # (anim_bob/anim_sway with a rest r and a hold t, `o` 0 so every part of
-    # it keeps step) for the skip, the rope and the wheel. The rope comes off
-    # the wheel's outer side (RX) straight down to the skip's bail, in three
-    # lengths sliding one into the next, each moving its share of the skip's
-    # climb (the top one fixed, the middle half, the bottom with the skip),
-    # each a little thinner than the one it slides into: the rope reaches
-    # from the wheel to the bail at every moment, no end of it ever shows,
-    # and it never stretches. The wheel turns as far as the rope runs, the
-    # rope's speed the rim's. The wheel stands out over the deck's end so the
-    # skip climbs clear of the frame's side (its girts and braces).
-    RX, CLIMB, PERIOD, REST, HOLD = WX - 0.86, 3.55, 14.0, 0.25, 0.25
+    # THE HOIST, the old Western way. A cage (an open timber frame with a
+    # little roof bonnet, running between two guides) winds a loaded ore
+    # cart, the ore line's own, up out of the shaft through the collar
+    # house's roof and stops with its floor level with the landing, a short
+    # track on the tipple deck out over the ore bin. The cart rolls out to
+    # the stop block, tips sideways over the bin, its ore pouring out of it,
+    # rights itself, rolls back into the cage and the cage lowers it into
+    # the shaft, where it is loaded again while it stands. One clock runs
+    # it all: in-step sways and bobs (`o`) with a rest r and a hold t, each
+    # part's move set inside the hold of the one it rides (the cart's roll
+    # inside the cage's stop at the top, the tip inside the cart's stop at
+    # the stop block, the ore sinking into the cart's closed tub while it is
+    # tipped and rising again while the cage is down in the shaft). The
+    # rope comes off the wheel's outer side (RX) straight down to the cage's
+    # shackle in three lengths sliding one into the next, each moving its
+    # share of the cage's climb (the top one fixed, the middle half, the
+    # bottom with the cage), each a hair thinner than the one it slides
+    # into: it reaches from the wheel to the cage at every moment, no end of
+    # it ever shows and it never stretches. The wheel turns as far as the
+    # rope runs (its rim's speed the rope's) and stands when the cage
+    # stands. The wheel stands out over the deck's end so the cage climbs
+    # clear of the frame's side (its girts and braces).
+    PERIOD, FLOOR = 20.0, 0.1                                                    # a cycle; the cage's floor in the shaft
+    RAIL0 = FLOOR + 0.08                                                         # its rails' top: where the cart stands
+    LAND = 3.36                                                                  # the landing's rails' top
+    RX, CLIMB = WX - 0.86, LAND - RAIL0
+    REST, HOLD = 0.15, 0.55                                                      # the cage: 3 s in the shaft, 11 s at the top
+    ROLL, OUT = 1.48, (0.175, 0.3, 0.1)                                          # the cart: how far, and (start, its stop, each way) in cycles
+    TIP = (0.30, 0.1, 0.075)                                                     # the tip: start, held, each way
+    SINK = (0.38, 0.49, 0.05)                                                    # the ore sinking: start, held, each way
     def hoist(verb, amount, tag):
         return 'anim_%s:%s:p=%.0f:r=%.2f:t=%.2f:o=0#%s' % (verb, amount, PERIOD, REST, HOLD, tag)
+    def inside(verb, amount, span, tag):
+        """A move in step with the cage, starting `span`[0] of a cycle in,
+        held `span`[1], each way `span`[2]."""
+        start, hold, way = span
+        return 'anim_%s:%s:p=%.0f:r=%.3f:t=%.3f:o=%.3f#%s' % (verb, amount, PERIOD, 1 - hold - 2 * way, hold,
+                                                             (1 - start) % 1.0, tag)
+    def unlean(block):
+        """Undo the lean `animated` gives a block built upright, so its node
+        alone is turned: the cart's roll is a bob along its node's up,
+        aimed down the landing (-Z), the cart itself still upright."""
+        bpy.context.view_layer.update()
+        back = Matrix.Translation(P(*block.pivot)) @ Matrix.Rotation(-block.tilt, 4, 'X') \
+            @ Matrix.Translation(-P(*block.pivot))
+        for o in bpy.context.scene.objects:
+            if o not in block.before and o.parent is None:
+                o.matrix_world = back @ o.matrix_world
     with animated(hoist('sway', 'a=z:d=%.1f' % -math.degrees(CLIMB / 0.86), 'wheel'), (WX, cy, ZC)):
         torus(0.88, 0.09, (WX, cy, ZC), 'red', segs=12, axis='along')           # (the rope at 0.86 runs in its rim)
         for k in range(4):
             box((0.12, 1.7, 0.12), (WX, cy, ZC), 'red', roll=k * math.pi / 4)
         box((0.34, 0.34, 0.3), (WX, cy, ZC), 'slate')
-    # (Each length a hair thinner than the one it slides into: the three
-    # 0.11, 0.09 and 0.07 across read as an aerial pulled out.)
-    BAIL, PIN = 1.005, 0.5                                                       # the bail's bar and the skip's pins, standing in the shaft
-    rowed(strut((RX, 5.15, ZC), (RX, cy, ZC), 0.09, ROPE), 6)                    # the rope's fixed length off the wheel
-    with animated(hoist('bob', 'h=%.3f' % (CLIMB / 2), 'rope'), (RX, 3.15, ZC)):
-        rowed(strut((RX, 3.15, ZC), (RX, 5.5, ZC), 0.085, ROPE), 6)              # the middle length, half the climb
-    with animated(hoist('bob', 'h=%.2f' % CLIMB, 'skip'), (RX, BAIL, ZC)):
-        rowed(strut((RX, BAIL - 0.005, ZC), (RX, 3.5, ZC), 0.08, ROPE), 6)       # the bottom length, on the bail
-        rowed(box((0.1, 0.05, 0.62), (RX, BAIL, ZC), 'slate'), 10)               # the bail: its bar across the
-        for sz in (-1, 1):                                                       # road's way, its arms down to the
-            rowed(box((0.06, 0.53, 0.04), (RX, 0.745, ZC + sz * 0.27), 'slate'), 10)   # skip's pins
-        rowed(cyl(0.04, 0.62, (RX, PIN, ZC - 0.31), 'slate', segs=8, axis='along', stem=True), 10)
-        # The skip, rust red and heaped with the yellow ore, tips on its pins
-        # outward (-X) while it stands at the top, a little after it arrives
-        # and back before it leaves, its mouth over the chute's head: a tip
-        # broadside to the road and to the yard's side (tipped toward the
-        # bin, -Z, it was edge on to both).
-        with animated('anim_sway:a=z:d=45:p=%.0f:r=0.8:o=%.3f#tip' % (PERIOD, 1 - (0.5 * (1 - REST - HOLD) + 0.025)),
-                      (RX, PIN, ZC)):
-            with rounded_over():
-                rowed(box((0.5, 0.55, 0.48), (RX, 0.575, ZC), RUST), 12)
-            rock_lump(0.19, (RX, 0.85, ZC), 'yellow', (1.2, 0.45, 1.1), 0.3, seed=4.0)
+    # (0.11, 0.09 and 0.07 across read as an aerial pulled out)
+    SHACKLE = FLOOR + 0.885                                                     # where the rope takes the cage, in the shaft
+    rowed(strut((RX, 5.0, ZC), (RX, cy, ZC), 0.09, ROPE), 6)                     # the rope's fixed length off the wheel
+    with animated(hoist('bob', 'h=%.3f' % (CLIMB / 2), 'rope'), (RX, 3.0, ZC)):
+        rowed(strut((RX, 3.0, ZC), (RX, 5.6, ZC), 0.085, ROPE), 6)               # the middle length, half the climb
+    CX, CZ = 0.33, 0.43                                                          # the cage's half width and depth
+    with animated(hoist('bob', 'h=%.2f' % CLIMB, 'cage'), (RX, FLOOR, ZC)):
+        rowed(strut((RX, SHACKLE, ZC), (RX, 3.5, ZC), 0.08, ROPE), 6)            # the bottom length, on its shackle
+        box((2 * CX, 0.05, 2 * CZ), (RX, FLOOR + 0.025, ZC), TIMBER)            # its floor
+        for sx in (-1, 1):
+            box((0.04, 0.03, 2 * CZ), (RX + sx * 0.157, FLOOR + 0.065, ZC), 'slate')   # its rails
+            for sz in (-1, 1):                                                   # its corner posts
+                box((0.05, 0.75, 0.05), (RX + sx * (CX - 0.025), FLOOR + 0.425, ZC + sz * (CZ - 0.025)), TIMBER)
+            box((0.04, 0.04, 2 * CZ), (RX + sx * (CX - 0.025), FLOOR + 0.45, ZC), TIMBER)   # a side bar
+        box((2 * CX, 0.04, 0.04), (RX, FLOOR + 0.45, ZC + CZ - 0.025), TIMBER)   # the back bar (the cart goes out at -Z)
+        box((2 * CX, 0.05, 2 * CZ), (RX, FLOOR + 0.825, ZC), RUST)              # the bonnet
+        box((0.1, 0.07, 0.1), (RX, FLOOR + 0.885, ZC), 'slate')                 # the shackle
+        # the cart on the cage's rails, along Z: a side-tipping cart, its tub
+        # pivoted on the outer edge of its chassis. The chassis rolls out down
+        # the landing (-Z, its node's up aimed there) on its wheels, the tub
+        # tips over the bin (-X) and rights itself, and its ore sinks into
+        # its closed tub while it is tipped
+        with animated(inside('bob', 'h=%.2f' % ROLL, OUT, 'cart'), (RX, RAIL0, ZC), tilt=-math.pi / 2) as cart:
+            ore_cart((RX, RAIL0, ZC), ore=False, k=0.35, parts='chassis')
+            with animated(inside('sway', 'a=z:d=55', TIP, 'tip'), (RX - 0.15, RAIL0 + 0.18, ZC)):
+                ore_cart((RX, RAIL0, ZC), ore=False, k=0.35, parts='tub')
+                with animated(inside('bob', 'h=-0.14', SINK, 'ore'), (RX, RAIL0 + 0.455, ZC)):
+                    rock_lump(0.17, (RX, RAIL0 + 0.455, ZC), 'yellow', (0.9, 0.5, 1.3), 0.0, seed=4.0)
+            unlean(cart)
+    # its guides: two timbers either side of it from the collar house's roof
+    # to over its stop, tied across the top (either side of the rope) and
+    # off to the frame's upper girt; the near one meets the lower girt
+    GX, GTOP = CX + 0.06, LAND + 1.1
+    for sx in (-1, 1):
+        box((0.06, GTOP - 1.16, 0.14), (RX + sx * GX, (GTOP + 1.16) / 2, ZC), TIMBER)
+    for sz in (-1, 1):
+        box((2 * GX + 0.06, 0.1, 0.08), (RX, GTOP - 0.1, ZC + sz * 0.1), TIMBER)
+    gx = XR + (XR * 0.82 - XR) * (4.2 + 0.3) / (H + 0.3)                         # the upper girt's middle
+    box((gx - (RX + GX), 0.08, 0.08), ((gx + RX + GX) / 2, 4.2, ZC), TIMBER)
+    # the landing: a short track on the tipple deck from the cage's mouth
+    # (-Z) out over the ore bin's side to a stop block, on two stringers
+    # borne by posts on the collar house's roof, a bearer off the near
+    # right-hand leg and a post to the ground at its far end
+    LZ0, LZ1 = ZC - CZ - 0.015, 0.1
+    for sx in (-1, 1):
+        box((0.04, 0.03, LZ0 - LZ1), (RX + sx * 0.157, LAND - 0.015, (LZ0 + LZ1) / 2), 'slate')   # its rails
+        box((0.06, 0.08, LZ0 - LZ1 + 0.02), (RX + sx * 0.2, LAND - 0.1, (LZ0 + LZ1) / 2 - 0.01), TIMBER)   # stringers
+        box((0.08, LAND - 0.14 - 1.16, 0.08), (RX + sx * 0.2, (LAND - 0.14 + 1.16) / 2, 1.45), TIMBER)    # posts on the roof
+    for k in range(6):
+        box((0.5, 0.03, 0.07), (RX, LAND - 0.045, LZ1 + 0.1 + k * 0.25), TIMBER)  # sleepers
+    box((0.5, 0.12, 0.08), (RX, LAND + 0.03, LZ1 + 0.01), TIMBER)                # the stop block
+    box((0.1, LAND - 0.14 + 0.05, 0.1), (RX + 0.2, (LAND - 0.14 - 0.05) / 2, LZ1 + 0.12), TIMBER)   # its far post
+    bx = XR + (XR * 0.82 - XR) * (LAND - 0.19 + 0.3) / (H + 0.3)                 # the near leg, where the bearer meets it
+    box((bx + 0.08 - (RX - 0.25), 0.1, 0.14), ((bx + 0.08 + RX - 0.25) / 2, LAND - 0.19, ZC - 1.3 + 0.45 * (LAND - 0.19 + 0.3) / (H + 0.3)), TIMBER)
     HX = 10.6                                                                    # the hoist house, its drum's window
     strut((WX + 0.1, cy + 0.88, ZC), (HX - 1.3, 1.2, ZC), 0.09, ROPE)            # and the rope away over the road to the drum
     for sz in (-1, 1):                                                           # the backstays, to the inside verge
@@ -23724,7 +23792,7 @@ def headframe():
     box((1.3, 1.3, 1.5), (-4.25, 0.45, ZC), BOARD)
     box((1.42, 0.12, 1.62), (-4.25, 1.15, ZC), RUST)
     box((0.06, 0.9, 0.6), (-3.58, 0.35, ZC), 'dark')                             # its gate, toward the road
-    box((0.62, 0.03, 0.68), (RX, 1.215, ZC), 'dark')                             # the shaft's mouth in its roof, the skip's way
+    box((2 * CX + 0.08, 0.03, 2 * CZ + 0.1), (RX, 1.215, ZC), 'dark')            # the shaft's mouth in its roof, the cage's way
     # the ore bin over the loading shed behind the right-hand legs, where
     # the ore line ends, open along the line (-Z) for the train
     SX, SZ = -5.5, -0.2
@@ -23742,31 +23810,6 @@ def headframe():
         f = (y - 2.0) / 1.1
         box((1.62 + 0.3 * f, 0.08, 1.92 + 0.3 * f), (SX, y, SZ), 'slate')
     rock_lump(0.75, (SX, 3.1, SZ), 'yellow', (1.1, 0.35, 1.25), 0.3, seed=2.0)   # ore heaped in it
-    # The chute: an open trough, a floor and two sides and a board across
-    # its head, from under the tipped skip's lip down into the bin, ore
-    # lying in it; borne by a bearer off the near right-hand leg and a knee
-    # brace from lower down the leg (a solid plank, its head in the air).
-    head, foot = (RX - 0.54, PIN + CLIMB - 0.22, ZC), (SX + 0.25, 3.38, SZ + 0.55)
-    v = [b - a for a, b in zip(head, foot)]
-    n = math.sqrt(sum(c * c for c in v))
-    vh = math.hypot(v[0], v[2])
-    lat = (-v[2] / vh, 0.0, v[0] / vh)                                           # across it, level
-    up = [-v[0] * v[1] / n / n, 1 - v[1] * v[1] / n / n, -v[2] * v[1] / n / n]  # its floor's normal
-    upn = math.sqrt(sum(c * c for c in up))
-    up = [c / upn for c in up]
-    def on(t, a=0.0, u=0.0):
-        return tuple(head[i] + v[i] * t + lat[i] * a + up[i] * u for i in range(3))
-    beam(on(0, 0, -0.025), on(1, 0, -0.025), 0.4, TIMBER, d=0.05)                # its floor
-    for sd in (-1, 1):
-        beam(on(0, sd * 0.205, 0.035), on(1, sd * 0.205, 0.035), 0.05, TIMBER, d=0.19)   # its sides
-    beam(on(0, -0.23, 0.04), on(0, 0.23, 0.04), 0.05, TIMBER, d=0.18)             # the board across its head
-    for k, t in enumerate((0.3, 0.58, 0.84)):                                    # ore lying in it
-        rock_lump(0.08, on(t, 0.05 * (k - 1), 0.03), 'yellow', (1.2, 0.6, 1.0), 0.7 * k, seed=11.0 + k)
-    tb = (ZC - 1.025 - head[2]) / v[2]                                           # where it crosses the leg
-    lx = XR + (XR * 0.82 - XR) * (on(tb)[1] - 0.12 + 0.3) / (H + 0.3)
-    box((lx + 0.05 - (on(tb)[0] - 0.3), 0.12, 0.14), ((on(tb)[0] - 0.3 + lx + 0.05) / 2, on(tb)[1] - 0.1, on(tb)[2]), TIMBER)   # the bearer
-    strut((XR + (XR * 0.82 - XR) * 3.0 / (H + 0.3), 2.7, ZC - 1.3 + 0.45 * 3.0 / (H + 0.3)),
-          on(0.2, 0, -0.04), 0.1, TIMBER)                                         # the knee brace
     for s in (-1, 1):                                                            # a ladder up a right-hand leg
         box((0.08, 3.6, 0.08), (XR + 0.05, 1.8, ZC + 1.55 + s * 0.16), TIMBER)
     for i in range(7):
