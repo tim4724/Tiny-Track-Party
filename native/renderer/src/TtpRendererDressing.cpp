@@ -3072,6 +3072,77 @@ void TtpRenderer::buildDressingMerge() {
     layAmbientRoofs();
 }
 
+void TtpRenderer::fillObstacles(ttp::rt::Obstacles& out) {
+    out = {};
+    if (!mScene || !mEngine) return;
+    // What lies on the land is no obstacle, and a shot along the road would
+    // graze it: a face counts only where it stands kClear over the ground.
+    // A face longer than kBackdrop is the room or the horizon, not scenery.
+    constexpr float kClear = 0.3f, kBackdrop = 60.0f;
+    std::vector<float3> at;      // one mesh's vertices in the world...
+    std::vector<uint8_t> low;    // ...and whether each lies on the land
+    const auto vertex = [&](float3 p) {
+        at.push_back(p);
+        low.push_back(p.y < mGroundGrid.at(p.x, p.z) + kClear);
+    };
+    const auto faces = [&](const std::vector<uint32_t>& idx) {
+        for (size_t i = 0; i + 2 < idx.size(); i += 3) {
+            const uint32_t a = idx[i], b = idx[i + 1], c = idx[i + 2];
+            if (low[a] && low[b] && low[c]) continue;
+            if (std::max({ distance(at[a], at[b]), distance(at[b], at[c]), distance(at[c], at[a]) }) > kBackdrop) continue;
+            out.add({ at[a].x, at[a].y, at[a].z }, { at[b].x, at[b].y, at[b].z }, { at[c].x, at[c].y, at[c].z });
+        }
+        at.clear();
+        low.clear();
+    };
+    for (const Mesh* m : { &mStructures, &mBerms, &mBoulders, &mLandmarks, &mGantry }) {
+        for (const Vertex& v : m->verts) vertex({ v.px, v.py, v.pz });
+        faces(m->idx);
+    }
+    auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
+    const auto family = [&](const std::vector<gltfio::FilamentAsset*>& assets,
+            const std::vector<std::vector<gltfio::FilamentInstance*>>& insts, bool set) {
+        for (size_t m = 0; m < assets.size() && m < insts.size(); m++) {
+            const gltfio::FilamentAsset* asset = assets[m];
+            if (!asset) continue;
+            if (set && mTrack && m < mTrack->setModels.size() && isRoomPiece(mTrack->setModels[m])) continue;
+            const auto keyIt = mAssetMeshKey.find(asset);
+            if (keyIt == mAssetMeshKey.end()) continue;
+            const auto meshIt = mGlbMeshCache.find(keyIt->second);
+            if (meshIt == mGlbMeshCache.end()) continue;
+            for (const gltfio::FilamentInstance* in : insts[m]) {
+                if (!in) continue;
+                for (size_t e = 0; e < in->getEntityCount(); e++) {
+                    const utils::Entity ent = in->getEntities()[e];
+                    const char* nm = asset->getName(ent);
+                    // Not what lies on the land or is lifted onto it, and not
+                    // what moves: a train is somewhere else by the next frame.
+                    if (!nm || !rcm.getInstance(ent) || isDrapeName(nm) || isFloorName(nm)) continue;
+                    if (set && !setAnimRoot(asset, ent).isNull()) continue;
+                    if (hangsUnder(asset, tcm, ent, isSpin)) continue;
+                    const ttp::rt::GlbMeshNode* node = nullptr;
+                    for (const auto& n : meshIt->second) {
+                        if (n.name == nm) { node = &n; break; }
+                    }
+                    if (!node) continue;
+                    const mat4f xf = tcm.getWorldTransform(tcm.getInstance(ent));
+                    for (const ttp::rt::GlbMeshPrim& sp : node->prims) {
+                        for (size_t i = 0; i + 2 < sp.pos.size(); i += 3) {
+                            vertex((xf * float4{ sp.pos[i], sp.pos[i + 1], sp.pos[i + 2], 1.0f }).xyz);
+                        }
+                        faces(sp.idx);
+                    }
+                }
+            }
+        }
+    };
+    family(mSceneryAssets, mSceneryInstances, false);
+    family(mPropAssets, mPropInstances, false);
+    family(mSetAssets, mSetInstances, true);
+    out.seal();
+}
+
 void TtpRenderer::addCut(utils::Entity e, float size, bool sheet) {
     auto& rcm = mEngine->getRenderableManager();
     const auto ri = e.isNull() ? RenderableManager::Instance{} : rcm.getInstance(e);

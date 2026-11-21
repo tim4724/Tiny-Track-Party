@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 
 #include "ttp/audio.h"
 #include "ttp/game.h"
@@ -23,6 +24,7 @@ void newField(DisplayState& d) {
     d.follow = {};
     d.coverage = {};   // a new field starts the cycle over
     d.coverChase = {};
+    d.lens = {};
     d.steerBar.clear();
 }
 
@@ -70,6 +72,67 @@ std::vector<ScalarId> parseIds(const char* json) {
     }
     return out;
 }
+
+namespace {
+
+// A battle shot's eye: the follow cam stepped, and the lobby's lens planned
+// over it (LensPlan) off where the rig will stand as its battle drives on.
+V3 coverFollow(DisplayState& d, const std::vector<const Car*>& cars, const Game* eng,
+               const TtpCarInput* outCars, const std::vector<bool>& live, float dt) {
+    std::vector<bool> filmed = live;
+    d.coverage.battleField(outCars, filmed);
+    FollowCam& f = d.follow;
+    f.update(outCars, filmed, d.framing.center, d.tagDeck, d.ground, d.loops, dt);
+    LensPlan& lens = d.lens;
+    lens.views.resize(1 + std::size(LENS_AHEAD));
+    for (LensView& v : lens.views) v.subjects.clear();
+    lens.views[0].eye = f.pos;
+    lens.views[0].aim = f.target;
+    for (const int i : f.battle) {
+        const TtpCarInput& c = outCars[i];
+        lens.views[0].subjects.push_back(V3{ c.pos.x, c.pos.y, c.pos.z } + V3{ c.up.x, c.up.y, c.up.z } * FOLLOW_AIM_UP);
+    }
+    // Only a live field runs on (a held one is a still), only past scenery, and
+    // never on a looping, where the lens stays home.
+    Centerline* cl = eng && !d.hold ? eng->centerline() : nullptr;
+    bool runs = cl && !f.battle.empty() && !d.obstacles.empty() && f.loop < 0;
+    for (const int i : f.battle) runs = runs && (size_t) i < cars.size() && cars[(size_t) i];
+    size_t n = 1;
+    if (runs) {
+        // The rig itself, run on over its battle driven on: each car along the
+        // road at its speed and its lateral. A copy, so the springs and a
+        // looping's swing are the rig's own; it keeps its pitch (`steady`).
+        FollowCam& run = lens.rig;
+        run = f;
+        run.steady = true;
+        lens.field.assign(outCars, outCars + live.size());
+        std::vector<bool> battle(live.size(), false);
+        for (const int i : f.battle) battle[(size_t) i] = true;
+        float t = 0;
+        for (const float secs : LENS_AHEAD) {
+            LensView& v = lens.views[n++];
+            for (const int i : f.battle) {
+                const Car& c = *cars[(size_t) i];
+                const double s = c.totalS + c.v * secs;
+                const Frame fr = cl->sampleAt(s);
+                const V3 p = v3(fr.pos) + v3(fr.lateral) * (float) c.lat;
+                TtpCarInput& o = lens.field[(size_t) i];
+                o.pos = { p.x, p.y, p.z };
+                o.forward = { (float) fr.tangent.x, (float) fr.tangent.y, (float) fr.tangent.z };
+                o.up = { (float) fr.up.x, (float) fr.up.y, (float) fr.up.z };
+                o.trackS = (float) s;
+                v.subjects.push_back(p + v3(fr.up) * FOLLOW_AIM_UP);
+            }
+            run.update(lens.field.data(), battle, d.framing.center, d.tagDeck, d.ground, d.loops, secs - t);
+            t = secs;
+            v.eye = run.pos;
+            v.aim = run.target;
+        }
+    }
+    return lens.apply(d.obstacles, d.tagDeck, n, f.loop >= 0, dt);
+}
+
+}  // namespace
 
 TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                           float cellAspect) {
@@ -286,6 +349,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         if (d.coverage.cut) {
             d.follow = {};
             d.coverChase = {};
+            d.lens = {};
         }
         const Shot shot = d.coverage.shot;
         chase = shot == Shot::CHASE;
@@ -293,7 +357,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     }
     // The follow cam and the chase work at race distances, so they take the
     // race fog band.
-    const bool follow = !raceCams && !chase && mode == CAM_FOLLOW;
+    bool follow = !raceCams && !chase && mode == CAM_FOLLOW;
     const float fogNear = !d.fog ? 0
             : raceCams || follow || chase ? d.framing.raceFogNear
             : mode == CAM_BBOX ? d.framing.bbFogNear
@@ -406,6 +470,26 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         const Framing& f = d.framing;
         V3 eye, target = f.center, up = { 0, 1, 0 };
         int32_t subject = -1;   // an overview follows nobody, a chase its car
+        if (covered && follow) {
+            eye = coverFollow(d, cars, eng, outCars, live, dt);
+            target = d.follow.target;
+            // A battle shot the lens has no place for at its cut is passed
+            // over at once: the lobby cuts to a clear shot rather than open
+            // on a wall. Once a shot is up, its next step cuts away from it.
+            // Never on a looping: that is one unbroken move.
+            for (int tries = 0; d.coverage.cut && d.lens.blind && d.follow.loop < 0 && tries < 3; tries++) {
+                d.coverage.blind = true;
+                d.coverage.step(0, outCars, live, d.rosterPlayers, d.loops);
+                d.follow = {};
+                d.lens = {};
+                chase = d.coverage.shot == Shot::CHASE;
+                follow = !chase;
+                if (chase) break;
+                eye = coverFollow(d, cars, eng, outCars, live, dt);
+                target = d.follow.target;
+            }
+            d.coverage.blind = follow && d.lens.blind && d.follow.loop < 0;
+        }
         if (mode == CAM_FREE) {
             eye = d.freeEye;
             target = d.freeTarget;
@@ -419,11 +503,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             target = d.coverChase.target;
             up = { c.up.x, c.up.y, c.up.z };
         } else if (follow) {
-            std::vector<bool> filmed = live;
-            if (covered) d.coverage.battleField(outCars, filmed);
-            d.follow.update(outCars, filmed, f.center, d.tagDeck, d.ground, d.loops, dt);
-            eye = d.follow.pos;
-            target = d.follow.target;
+            // The lobby's is drawn above; CAM_FOLLOW, the trailer's, as the rig has it.
+            if (!covered) {
+                d.follow.update(outCars, live, f.center, d.tagDeck, d.ground, d.loops, dt);
+                eye = d.follow.pos;
+                target = d.follow.target;
+            }
         } else if (mode == CAM_BBOX) {
             d.orbitAngle += BBOX_ORBIT_SPEED * dt;
             eye = { f.center.x + std::cos(d.orbitAngle) * f.bbAx,

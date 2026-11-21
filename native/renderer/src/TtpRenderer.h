@@ -34,6 +34,7 @@
 namespace ttp { namespace kitcolors { struct Mesh; struct Model; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
+#include "ttp/obstacles.h"
 #include "ttp/name_tags.h"
 #include "ttp/set_motion.h"
 
@@ -333,6 +334,10 @@ public:
 
     // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
     const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
+    // The built scene's standing scenery as solid volume (ttp/obstacles.h),
+    // filled into `out` off the triangles it is drawn from. Asked once per
+    // build, inside it: the fill is too slow for a drawn frame on a TV box.
+    void fillObstacles(ttp::rt::Obstacles& out);
 
     // Slot i as the name tags see it (ttp/name_tags.h), measured off the model
     // at load: its roof over its origin as drawn — in the monster rig while

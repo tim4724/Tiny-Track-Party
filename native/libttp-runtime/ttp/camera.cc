@@ -1,6 +1,8 @@
 #include "ttp/camera.h"
 
+#include <algorithm>
 #include <climits>
+#include <iterator>
 #include <cmath>
 #include <utility>
 
@@ -169,7 +171,7 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
             const V3 eye = V3{ place->aim.x - std::sin(place->yaw) * out, place->aim.y + rideDist * std::sin(place->pitch),
                                place->aim.z - std::cos(place->yaw) * out }
                          + V3{ off.x, 0, off.z } * FOLLOW_LOOP_LEAN;   // not up or down: it would dive behind what crosses the ring
-            aimGoal = place->aim + off * FOLLOW_LOOP_PAN;
+            aimGoal = place->aim + V3{ off.x * FOLLOW_LOOP_PAN, off.y * FOLLOW_LOOP_PAN_UP, off.z * FOLLOW_LOOP_PAN };
             const V3 sight = aimGoal - eye;
             rideDist = std::sqrt(dot(sight, sight));
             rideYaw = std::atan2(sight.x, sight.z);
@@ -179,7 +181,7 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         goalDist = entryDist + (rideDist - entryDist) * swung;
     }
     // Riding, the aim is carried at the share of the battle's speed it is pulled toward.
-    const float flowShare = riding ? FOLLOW_LOOP_PAN : 1.0f;
+    const V3 flowShare = riding ? V3{ FOLLOW_LOOP_PAN, FOLLOW_LOOP_PAN_UP, FOLLOW_LOOP_PAN } : V3{ 1, 1, 1 };
 
     // The eye a pitch puts us at, from the aim and the eased yaw and distance.
     auto eyeAt = [&](float p) {
@@ -259,11 +261,15 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         target = aimGoal;
         yaw = wantYaw;
         dist = goalDist;
-        pitch = riding ? ridePitch : clearPitch().pitch;
+        pitch = pitchGoal = riding ? ridePitch : clearPitch().pitch;
+        hold = riding ? 1.0f : 0.0f;
+        holdVel = 0;
+        holdY = eyeAt(pitch).y;   // a cut onto a ride holds the height it lands at
         init = true;
     } else if (dt > 0) {
         if (lead < (int) seen.size() && seen[lead]) {
-            flow = lerp(flow, (at(lead) - last[lead]) * (flowShare / dt), 1 - std::exp(-FOLLOW_FLOW_RATE * dt));
+            const V3 v = (at(lead) - last[lead]) * (1.0f / dt);
+            flow = lerp(flow, V3{ v.x * flowShare.x, v.y * flowShare.y, v.z * flowShare.z }, 1 - std::exp(-FOLLOW_FLOW_RATE * dt));
         }
         target = target + flow * dt;
         spring(target.x, aimVel.x, aimGoal.x, FOLLOW_AIM_OMEGA, dt);
@@ -273,7 +279,8 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         spring(dist, distVel, goalDist, FOLLOW_DIST_OMEGA, dt);
         // Riding, the pitch is the place's: every pitch but that looks through the
         // deck somewhere round the ring.
-        const Pick want = riding ? Pick{ ridePitch, false } : clearPitch();
+        const Pick want = riding ? Pick{ ridePitch, false } : steady ? Pick{ pitchGoal, false } : clearPitch();
+        pitchGoal = want.pitch;
         if (want.across && !place) {   // a looping's way in is one unbroken swing
             pitch = want.pitch;  // cut, never through
             pitchVel = 0;
@@ -283,9 +290,19 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
     }
     last.resize(n);
     seen.assign(live.begin(), live.end());
+    battle.clear();
+    for (size_t i = 0; i < n; i++) if (inBattle(i)) battle.push_back((int) i);
     for (size_t i = 0; i < n; i++) if (live[i]) last[i] = at(i);
 
     pos = eyeAt(pitch);
+    // The ride's held eye height: taken as the eye starts onto it, so the move
+    // onto it and off it again is the spring's, and never a step.
+    if (dt > 0 && init) {
+        if (riding && hold < 1e-4f && holdVel <= 0) holdY = pos.y;
+        spring(hold, holdVel, riding ? 1.0f : 0.0f, riding ? FOLLOW_LOOP_HOLD_OMEGA : FOLLOW_LOOP_RELEASE_OMEGA, dt);
+        if (!riding && hold < 1e-4f) hold = holdVel = 0;
+    }
+    pos.y += (holdY - pos.y) * hold;
 }
 
 void CoverChase::update(const ttp::Pose& pose, float dt) {
@@ -295,6 +312,128 @@ void CoverChase::update(const ttp::Pose& pose, float dt) {
     const float a = 1 - std::exp(-CAM_POS_RATE * dt);
     if (!init) { pos = want; target = wantTgt; init = true; }
     else { pos = lerp(pos, want, a); target = lerp(target, wantTgt, a); }
+}
+
+bool lensCrowded(const Obstacles& o, V3 p) {
+    // Its own voxel and the 26 around it, then the 26 a voxel further out,
+    // and so on to LENS_RADIUS: spaced wider, a probe would step over a wall.
+    for (float r = Obstacles::kVoxel; r <= LENS_RADIUS + 1e-3f; r += Obstacles::kVoxel) {
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int z = -1; z <= 1; z++) {
+                    if ((x || y || z || r == Obstacles::kVoxel) && o.solid(p + V3{ (float) x, (float) y, (float) z } * r)) return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool wallBlocks(const Obstacles& o, V3 eye, V3 p) {
+    const V3 d = p - eye;
+    const float len = std::sqrt(dot(d, d));
+    if (o.empty() || len <= FOLLOW_CAR_CLEAR) return false;
+    const V3 dir = d * (1.0f / len);
+    V3 right = cross(dir, V3{ 0, 1, 0 });
+    right = dot(right, right) > 1e-6f ? norm(right) : V3{ 1, 0, 0 };
+    const V3 up = cross(right, dir);
+    // The line itself first, then to either side of `p` and over it. Not
+    // under it: that is the road.
+    const V3 around[] = { {}, right * LENS_WALL_RADIUS, right * -LENS_WALL_RADIUS, up * LENS_WALL_RADIUS };
+    const float share = 1 - FOLLOW_CAR_CLEAR / len;
+    // Half-voxel steps: the fill can miss a voxel a face only clips.
+    const int steps = (int) std::ceil(len * share / (0.5f * Obstacles::kVoxel));
+    int blocked = 0;
+    for (int i = 0; i < 4; i++) {
+        const V3 line = (p + around[i] - eye) * share;
+        bool hit = false;
+        for (int k = 0; k <= steps && !hit; k++) hit = o.solid(eye + line * ((float) k / (float) steps));
+        if (!hit && i == 0) return false;   // the line itself is clear
+        blocked += hit;
+    }
+    return blocked >= 3;
+}
+
+V3 lensEye(V3 eye, V3 aim, float u) {
+    if (u <= 0) return eye;
+    const V3 d = eye - aim;
+    const float flat = std::sqrt(d.x * d.x + d.z * d.z), len = std::sqrt(dot(d, d));
+    const float from = std::atan2(d.y, flat);
+    const float elev = from + (std::fmax(from, LENS_ELEV_MAX) - from) * u;   // never lowered
+    const V3 out = flat > 1e-4f ? V3{ d.x / flat, 0, d.z / flat } : V3{ 0, 0, 1 };
+    return aim + (out * std::cos(elev) + V3{ 0, std::sin(elev), 0 }) * len;
+}
+
+V3 LensPlan::apply(const Obstacles& o, const NameTagDeck& deck, size_t n, bool settle, float dt) {
+    if (o.empty()) {   // no scenery, or not yet: the rig's own eye
+        u = uVel = uIn = goal = lowFor = late = 0;
+        blind = false;
+        init = true;
+        return views[0].eye;
+    }
+    // Is the eye `at` along view v's path a shot? The deck faults of the rig's
+    // own eye are forgiven (camera.h): `deckNear` and `deckHides` hold them
+    // for `asked`, the view they were worked out for.
+    std::vector<bool> deckHides;
+    bool deckNear = false;
+    const LensView* asked = nullptr;
+    const V3 lift = { 0, FOLLOW_LENS_CLEAR * 0.5f, 0 };
+    const auto clear = [&](const LensView& v, float at) {
+        if (asked != &v) {
+            asked = &v;
+            deckNear = deckBlocks(deck, v.eye - lift, v.eye + lift, 0, 0);
+            deckHides.resize(v.subjects.size());
+            for (size_t s = 0; s < v.subjects.size(); s++) deckHides[s] = deckBlocks(deck, v.eye, v.subjects[s], 0, FOLLOW_CAR_CLEAR);
+        }
+        const V3 eye = lensEye(v.eye, v.aim, at);
+        if (lensCrowded(o, eye)) return false;
+        if (at > 0 && !deckNear && deckBlocks(deck, eye - lift, eye + lift, 0, 0)) return false;
+        size_t seen = 0;
+        for (size_t s = 0; s < v.subjects.size(); s++) {
+            if (wallBlocks(o, eye, v.subjects[s])) continue;
+            if (at > 0 && !deckHides[s] && deckBlocks(deck, eye, v.subjects[s], 0, FOLLOW_CAR_CLEAR)) continue;
+            if (2 * ++seen >= v.subjects.size()) return true;
+        }
+        return v.subjects.empty();
+    };
+    const auto level = [](int k) { return (float) k / (LENS_LEVELS - 1); };
+    // Each view's lowest level that is a shot (LENS_LEVELS: none), and the
+    // highest of those: where the eye has to be by the time it gets there...
+    int need[1 + std::size(LENS_AHEAD)] = {};
+    int want = 0;
+    for (size_t i = 0; !settle && i < n; i++) {
+        int k = 0;
+        while (k < LENS_LEVELS && !clear(views[i], level(k))) k++;
+        need[i] = k;
+        if (k < LENS_LEVELS) want = std::max(want, k);
+    }
+    // ...but no higher than now and LENS_AHEAD[0] on still take.
+    for (size_t i = 0; !settle && i < 2 && i < n; i++) {
+        while (want > std::max(need[0], need[i]) && !clear(views[i], level(want))) want--;
+    }
+    const float wanted = level(want);
+    const bool opening = !init;
+    if (!init) {
+        u = uIn = goal = wanted;
+        uVel = lowFor = 0;
+        init = true;
+    } else if (dt > 0) {
+        // Up at once, down after LENS_HOLD, and a level is held only while it
+        // is still a shot.
+        if (wanted >= goal || settle || !clear(views[0], goal)) {
+            goal = wanted;
+            lowFor = 0;
+        } else if ((lowFor += dt) >= LENS_HOLD) {
+            goal = wanted;
+            lowFor = 0;
+        }
+        uIn += (goal - uIn) * (1 - std::exp(-(goal < uIn && !settle ? LENS_RATE_DOWN : LENS_RATE) * dt));
+        spring(u, uVel, uIn, LENS_RATE, dt);
+        if (goal == 0 && u < 1e-4f && uIn < 1e-4f) u = uVel = uIn = 0;   // home: the rig's own eye, to the bit
+    }
+    late = settle || clear(views[0], u) ? 0 : late + dt;
+    blind = !settle && (opening ? std::count(need, need + n, LENS_LEVELS) > 0 : late > LENS_LATE);
+    return lensEye(views[0].eye, views[0].aim, u);
 }
 
 int packFocus(const TtpCarInput* cars, const std::vector<bool>& live) {
@@ -323,9 +462,15 @@ int packFocus(const TtpCarInput* cars, const std::vector<bool>& live) {
 
 namespace {
 
-// The looping for the steep stretch of samples first..last.
+// The places off a ring's axis an end may take: FOLLOW_LOOP_YAWS x FOLLOW_LOOP_RISES.
+constexpr size_t LOOP_PLACES = std::size(FOLLOW_LOOP_YAWS) * std::size(FOLLOW_LOOP_RISES);
+
+// The looping for the steep stretch of samples first..last, each end at place
+// `chosen[e]` (an index into the yaws x rises). `hidden[e][c]`, when asked
+// for, is how much of it each place c hides, in STRETCH_WEIGHTs.
 LoopShot loopShot(const std::vector<OutSample>& samples, size_t first, size_t last, float lap,
-                  const NameTagDeck& deck, const GroundGrid& ground) {
+                  const NameTagDeck& deck, const GroundGrid& ground, const Obstacles& scenery,
+                  const size_t chosen[2], int (*hiddenBy)[LOOP_PLACES]) {
     // The ring's axis is the AVERAGE lateral: a drifting ring's swings to either
     // side of it as the car climbs and comes back down.
     V3 axis;
@@ -372,7 +517,8 @@ LoopShot loopShot(const std::vector<OutSample>& samples, size_t first, size_t la
     // Can this eye not see the top of the deck at sample k?
     auto blockedAt = [&](V3 eye, size_t k) {
         const V3 p = v3(samples[k].pos), up = v3(samples[k].up), car = p + up * FOLLOW_AIM_UP;
-        bool blocked = dot(eye - p, up) < 0 || deckBlocks(deck, eye, car, 0, FOLLOW_CAR_CLEAR);
+        bool blocked = dot(eye - p, up) < 0 || deckBlocks(deck, eye, car, 0, FOLLOW_CAR_CLEAR)
+                    || wallBlocks(scenery, eye, car);
         for (int j = 1; j < FOLLOW_SIGHT_STEPS && !blocked; j++) {
             const V3 q = lerp(eye, car, (float) j / FOLLOW_SIGHT_STEPS);
             blocked = q.y < ground.at(q.x, q.z);
@@ -383,6 +529,7 @@ LoopShot loopShot(const std::vector<OutSample>& samples, size_t first, size_t la
     // count in STRETCH_WEIGHTs, the way in in ones.
     constexpr int STRETCH_WEIGHT = 1000;
     auto hidden = [&](V3 eye) {
+        if (lensCrowded(scenery, eye)) return STRETCH_WEIGHT * (int) (last - first + 1);
         int count = 0;
         for (size_t k = settled; k <= last; k++) {
             count += blockedAt(eye, k) ? (k >= first ? STRETCH_WEIGHT : 1) : 0;
@@ -396,23 +543,23 @@ LoopShot loopShot(const std::vector<OutSample>& samples, size_t first, size_t la
     shot.to = (float) samples[last].s + FOLLOW_LOOP_TAIL;
     shot.lap = lap;
     for (int e = 0; e < 2; e++) {
-        int fewest = INT_MAX;
-        for (float yaw : FOLLOW_LOOP_YAWS) {
-            for (float rise : FOLLOW_LOOP_RISES) {
-                const V3 flat = axis * ((e == 0 ? 1.0f : -1.0f) * std::cos(yaw)) + side * std::sin(yaw);
-                const V3 look = flat * std::cos(rise) + V3{ 0, -std::sin(rise), 0 };
-                const float dist = fit(look);
-                const V3 eye = target - look * dist;
-                const int count = fewest > 0 ? hidden(eye) : INT_MAX;
-                if (count >= fewest) continue;
-                fewest = count;
-                // Aimed a little under the middle, which lifts the ring off the seat cards.
-                const V3 aim = target - V3{ 0, FOLLOW_LOOP_LIFT * tanV * dist, 0 };
-                const V3 d = aim - eye;
-                const float len = std::sqrt(dot(d, d));
-                shot.ends[e] = { aim, std::atan2(d.x, d.z), std::asin(-d.y / len), len,
-                                 (float) (count / STRETCH_WEIGHT) / (float) (last - first + 1) };
-            }
+        for (size_t c = 0; c < LOOP_PLACES; c++) {
+            if (!hiddenBy && c != chosen[e]) continue;
+            const float yaw = FOLLOW_LOOP_YAWS[c / std::size(FOLLOW_LOOP_RISES)];
+            const float rise = FOLLOW_LOOP_RISES[c % std::size(FOLLOW_LOOP_RISES)];
+            const V3 flat = axis * ((e == 0 ? 1.0f : -1.0f) * std::cos(yaw)) + side * std::sin(yaw);
+            const V3 look = flat * std::cos(rise) + V3{ 0, -std::sin(rise), 0 };
+            const float dist = fit(look);
+            const V3 eye = target - look * dist;
+            const int count = hidden(eye);
+            if (hiddenBy) hiddenBy[e][c] = count;
+            if (c != chosen[e]) continue;
+            // Aimed a little under the middle, which lifts the ring off the seat cards.
+            const V3 aim = target - V3{ 0, FOLLOW_LOOP_LIFT * tanV * dist, 0 };
+            const V3 d = aim - eye;
+            const float len = std::sqrt(dot(d, d));
+            shot.ends[e] = { aim, std::atan2(d.x, d.z), std::asin(-d.y / len), len,
+                             (float) (count / STRETCH_WEIGHT) / (float) (last - first + 1) };
         }
     }
     return shot;
@@ -421,7 +568,8 @@ LoopShot loopShot(const std::vector<OutSample>& samples, size_t first, size_t la
 }  // namespace
 
 std::vector<LoopShot> loopShots(const std::vector<OutSample>& samples, float lap,
-                                const NameTagDeck& deck, const GroundGrid& ground) {
+                                const NameTagDeck& deck, const GroundGrid& ground,
+                                const Obstacles& scenery) {
     std::vector<LoopShot> out;
     for (size_t i = 0; i < samples.size(); i++) {
         if (samples[i].up.y >= FOLLOW_LOOP_STEEP) continue;
@@ -432,14 +580,28 @@ std::vector<LoopShot> loopShots(const std::vector<OutSample>& samples, float lap
             if (samples[i].up.y < samples[top].up.y) top = i;
         }
         if (samples[top].up.y >= 0) continue;
-        // A long stretch is several places, each fitted to its own part.
+        // A long stretch is several places, each fitted to its own part, all
+        // swung and risen off the axis alike: each end takes the place that hides
+        // least over the whole stretch, ties to the earlier, because the swing
+        // from one part's place to the next is a move of its own.
         const size_t count = (size_t) std::ceil((samples[i].s - samples[first].s) / FOLLOW_LOOP_MAX_LEN);
         const size_t span = i - first + 1;
+        const auto part = [&](size_t w) { return std::make_pair(first + span * w / count, first + span * (w + 1) / count - 1); };
+        long total[2][LOOP_PLACES] = {};
+        for (size_t w = 0; w < count; w++) {
+            int hiddenBy[2][LOOP_PLACES];
+            const size_t none[2] = { LOOP_PLACES, LOOP_PLACES };
+            loopShot(samples, part(w).first, part(w).second, lap, deck, ground, scenery, none, hiddenBy);
+            for (int e = 0; e < 2; e++) for (size_t c = 0; c < LOOP_PLACES; c++) total[e][c] += hiddenBy[e][c];
+        }
+        size_t chosen[2] = { 0, 0 };
+        for (int e = 0; e < 2; e++) {
+            for (size_t c = 1; c < LOOP_PLACES; c++) if (total[e][c] < total[e][chosen[e]]) chosen[e] = c;
+        }
         const size_t base = out.size();
         float worst[2] = { 0, 0 };
         for (size_t w = 0; w < count; w++) {
-            out.push_back(loopShot(samples, first + span * w / count, first + span * (w + 1) / count - 1, lap,
-                                   deck, ground));
+            out.push_back(loopShot(samples, part(w).first, part(w).second, lap, deck, ground, scenery, chosen, nullptr));
             for (int e = 0; e < 2; e++) worst[e] = std::fmax(worst[e], out.back().ends[e].hidden);
         }
         // One stretch is filmed from one end, so an end answers for all its parts.
@@ -471,6 +633,8 @@ void Coverage::step(float dt, const TtpCarInput* cars, const std::vector<bool>& 
     const auto cutTo = [&](Shot s) { shot = s; held = 0; cut = true; };
     const int pick = featured;
     featured = -1;
+    const bool noPlace = blind;
+    blind = false;
     if (isLive(pick)) {
         // Already chasing this car: restart the hold only. A cut would reset
         // the chase spring to zero lag, which shows as the car jumping back.
@@ -491,9 +655,10 @@ void Coverage::step(float dt, const TtpCarInput* cars, const std::vector<bool>& 
     }
     held += dt;
     const float hold = shot == Shot::CHASE ? COVER_HOLD_CHASE : COVER_HOLD_BATTLE;
-    // A shot whose car or fight has left ends at once. PACK's -1 is the whole
-    // field, which cannot leave.
-    const bool lost = (shot == Shot::CHASE && !isLive(subject))
+    // A shot whose car or fight has left ends at once, and so does one whose
+    // lens has no place (LensPlan). PACK's -1 is the whole field, which
+    // cannot leave.
+    const bool lost = noPlace || (shot == Shot::CHASE && !isLive(subject))
             || (shot == Shot::PACK && subject >= 0 && !isLive(subject));
     // A battle shot does not end on a looping: it waits for the ride to finish.
     if (!lost && (shot == Shot::LEAD || shot == Shot::PACK) && battleOnLoop(cars, live, loops)) return;

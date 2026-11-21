@@ -34,9 +34,12 @@
 // does. Nothing in this file needs the 4-significant-digit treatment
 // runtime_check's corpus needs, so nothing in it takes it.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -1235,7 +1238,7 @@ void testFollowOnLoopings() {
     const rt::NameTagDeck deck = rt::nameTagDeck(geo.samples, geo.closed);
     rt::GroundGrid ground;
     ground.flatY = -20;
-    const std::vector<rt::LoopShot> loops = rt::loopShots(geo.samples, (float) geo.length, deck, ground);
+    const std::vector<rt::LoopShot> loops = rt::loopShots(geo.samples, (float) geo.length, deck, ground, rt::Obstacles());
     check(!loops.empty(), id + ": has a looping");
     V3 mid;
     for (const OutSample& o : geo.samples) mid = mid + rt::v3(o.pos);
@@ -1257,6 +1260,8 @@ void testFollowOnLoopings() {
     const float speed = 18.0f;
     int ride = 0, hidden = 0, behind = 0, outOfFrame = 0;
     float maxStep = 0;
+    std::map<float, float> heightLo, heightHi;   // per stretch (rideFrom); lo > hi: unseen
+    for (const rt::LoopShot& l : loops) heightLo[l.rideFrom] = 1, heightHi[l.rideFrom] = 0;
     V3 prev;
     bool have = false;
     for (float at = 2; at < (float) geo.length; at += speed * DT) {
@@ -1271,6 +1276,15 @@ void testFollowOnLoopings() {
       have = cam.loop >= 0;
       bool onRide = false;
       for (const rt::LoopShot& l : loops) onRide = onRide || (at >= l.start && at < l.to);
+      // The eye's height over each whole stretch: held, the cars go up and
+      // down through the picture and the camera does not.
+      for (size_t l = 0; l < loops.size(); l++) {
+        if (at < loops[l].rideFrom || at >= loops[l].rideTo) continue;
+        float& lo = heightLo[loops[l].rideFrom], & hi = heightHi[loops[l].rideFrom];
+        if (lo > hi) lo = hi = cam.pos.y;
+        lo = std::fmin(lo, cam.pos.y);
+        hi = std::fmax(hi, cam.pos.y);
+      }
       if (!onRide) continue;
       ride++;
       const V3 p{cars[0].pos.x, cars[0].pos.y, cars[0].pos.z}, up{cars[0].up.x, cars[0].up.y, cars[0].up.z};
@@ -1288,9 +1302,13 @@ void testFollowOnLoopings() {
     check(behind <= 0.1f * ride, id + ": the camera stays on the deck's top side round the ring" + counts);
     check(outOfFrame == 0, id + ": the leader stays in the picture round the ring");
     check(maxStep < 1.0f, id + ": the camera never jumps on its way to a looping or round it");
+    float range = 0;
+    for (const auto& kv : heightLo) range = std::fmax(range, heightHi[kv.first] - kv.second);
+    std::printf("  %s: eye height range over a ride %.3f\n", t.id, range);
+    check(range < 0.05f, id + ": the eye holds its height through a looping (" + std::to_string(range) + ")");
   }
   const RaceTrack flat = build_catalogue_track(*find_track_def("cove"), 1, 0u);
-  check(rt::loopShots(flat.samples, (float) flat.length, rt::nameTagDeck(flat.samples, flat.closed), rt::GroundGrid()).empty(),
+  check(rt::loopShots(flat.samples, (float) flat.length, rt::nameTagDeck(flat.samples, flat.closed), rt::GroundGrid(), rt::Obstacles()).empty(),
         "a track with no looping has no place for one");
 }
 
@@ -1402,6 +1420,194 @@ void testCoverageView(const GameTrack& track) {
   const rt::Coverage before = d.coverage;
   rt::buildFrame(d, &game, DT, caseAspect(d));
   check(d.coverage.held == before.held, "coverage: a frame with race cells does not step it");
+}
+
+// The six faces of a box, as the renderer would hand a block's triangles over.
+void addBox(rt::Obstacles& o, V3 lo, V3 hi) {
+  const auto quad = [&](V3 a, V3 b, V3 c, V3 d) { o.add(a, b, c); o.add(a, c, d); };
+  const V3 p[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, lo.y, hi.z}, {lo.x, lo.y, hi.z},
+                   {lo.x, hi.y, lo.z}, {hi.x, hi.y, lo.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+  quad(p[0], p[1], p[2], p[3]);
+  quad(p[4], p[5], p[6], p[7]);
+  quad(p[0], p[1], p[5], p[4]);
+  quad(p[3], p[2], p[6], p[7]);
+  quad(p[0], p[3], p[7], p[4]);
+  quad(p[1], p[2], p[6], p[5]);
+}
+
+// The lobby's lens against the scenery (LensPlan): never in a block or
+// behind one, and getting there SMOOTHLY, which is the whole of the design:
+// the eye's acceleration never steps, so it never lurches.
+void testLensPlan(const GameTrack& track) {
+  // The volume: a shell, so a block is solid at its faces and a gate's
+  // opening is not; and what a wall is to a sight line.
+  {
+    rt::Obstacles gate;
+    addBox(gate, {-2, 0, 10}, {-1.5f, 3, 10.5f});
+    addBox(gate, {1.5f, 0, 10}, {2, 3, 10.5f});
+    addBox(gate, {-2, 2.5f, 10}, {2, 3, 10.5f});
+    gate.seal();
+    check(gate.solid({-1.75f, 1, 10}) && gate.solid({0, 2.5f, 10.2f}), "obstacles: a face is solid");
+    check(!gate.solid({0, 1, 10.2f}), "obstacles: the opening of a gate is not");
+    check(!gate.solid({0, 1, 5}), "obstacles: nor is the open air");
+    check(!rt::wallBlocks(gate, {0, 1, 6}, {0, 1, 14}), "the line through the gate is clear");
+    rt::Obstacles house;
+    addBox(house, {-2, 0, 10}, {2, 4, 12});
+    house.seal();
+    check(rt::wallBlocks(house, {0, 1, 6}, {0, 1, 14}), "a house is a wall");
+    check(!rt::wallBlocks(house, {3, 1, 6}, {3, 1, 14}), "…to the line through it, not the one past it");
+    rt::Obstacles mast;
+    addBox(mast, {-0.2f, 0, 12}, {0.2f, 6, 12.4f});
+    mast.seal();
+    check(mast.solid({0, 1, 12.1f}), "premise: the mast is there");
+    check(!rt::wallBlocks(mast, {0, 1, 6}, {0, 1, 14}), "a mast beside the subject is not a wall");
+    check(rt::wallBlocks(mast, {0, 1, 11.3f}, {0, 1, 20}), "a mast before the lens is");
+    check(rt::lensCrowded(mast, {0.6f, 1, 12.2f}) && !rt::lensCrowded(mast, {1.5f, 1, 12.2f}),
+          "the lens keeps LENS_RADIUS off a face");
+  }
+
+  // A battle drives along a street at a steady speed, the rig standing off
+  // its side; a block stands between them for a stretch. The views ahead are
+  // exact here, which is the planner's ideal: what is left to judge is the
+  // move itself.
+  {
+    rt::Obstacles town;
+    addBox(town, {-5, 0, 30}, {-2, 1.5f, 40});
+    town.seal();
+    const float speed = 10;
+    const auto view = [&](float t, rt::LensView& v) {
+      v.aim = {0, 0.25f, speed * t};
+      v.eye = v.aim + V3{-7, 2, -2};
+      v.subjects = {v.aim};
+    };
+    rt::LensPlan lens;
+    lens.views.resize(1 + std::size(rt::LENS_AHEAD));
+    std::vector<float> u;
+    int rigBlind = 0, lensBlind = 0, cuts = 0;
+    float distErr = 0;
+    for (int i = 0; i < 1200; i++) {
+      const float t = i * DT;
+      view(t, lens.views[0]);
+      for (size_t k = 0; k < std::size(rt::LENS_AHEAD); k++) view(t + rt::LENS_AHEAD[k], lens.views[k + 1]);
+      const V3 eye = lens.apply(town, rt::NameTagDeck{}, lens.views.size(), false, DT);
+      const rt::LensView& now = lens.views[0];
+      rigBlind += rt::lensCrowded(town, now.eye) || rt::wallBlocks(town, now.eye, now.aim);
+      lensBlind += rt::lensCrowded(town, eye) || rt::wallBlocks(town, eye, now.aim);
+      cuts += lens.blind;
+      const V3 a = eye - now.aim, b = now.eye - now.aim;
+      distErr = std::max(distErr, std::fabs(std::sqrt(rt::dot(a, a)) - std::sqrt(rt::dot(b, b))));
+      u.push_back(lens.u);
+    }
+    check(rigBlind > 20, "premise: the rig's own eye goes behind the block");
+    check(lensBlind == 0, "the lens is never in the block or behind it");
+    check(cuts == 0, "…and the shot is never blind: a lift clears it");
+    check(distErr < 1e-3f, "the lift keeps the rig's distance, so the battle stays framed");
+    check(u.back() == 0, "past the block the lens is home: the rig's own eye, to the bit");
+    // Smooth: the third difference of u is bounded by a full-range step into
+    // the three poles, so its acceleration never steps (a plain ease, the
+    // first attempt's, steps its SPEED, and that is the lurch).
+    float jerk = 0, accel = 0;
+    for (size_t i = 2; i + 1 < u.size(); i++) {
+      const float a0 = (u[i] - 2 * u[i - 1] + u[i - 2]) / (DT * DT);
+      const float a1 = (u[i + 1] - 2 * u[i] + u[i - 1]) / (DT * DT);
+      accel = std::max(accel, std::fabs(a1));
+      jerk = std::max(jerk, std::fabs(a1 - a0) / DT);
+    }
+    const float r = rt::LENS_RATE;
+    check(jerk <= 1.05f * r * r * r, "the lift's acceleration never steps: jerk " + std::to_string(jerk));
+    check(accel <= 0.25f * r * r, "…and stays under a full move's peak: " + std::to_string(accel));
+    // ...and it began before the block reached the line: anticipation, not a reaction.
+    int firstLift = -1, firstRigBlind = -1;
+    for (int i = 0; i < 1200; i++) {
+      rt::LensView v;
+      view(i * DT, v);
+      if (firstRigBlind < 0 && (rt::lensCrowded(town, v.eye) || rt::wallBlocks(town, v.eye, v.aim))) firstRigBlind = i;
+      if (firstLift < 0 && u[(size_t) i] > 0) firstLift = i;
+    }
+    check(firstLift >= 0 && firstRigBlind - firstLift > (int) (1.0f / DT),
+          "the lens starts up a second or more before the wall arrives");
+  }
+
+  // No scenery: the rig's eye, to the bit.
+  {
+    rt::LensPlan lens;
+    lens.views.resize(1);
+    lens.views[0] = {{-7, 2, 3}, {0, 0.25f, 5}, {{0, 0.25f, 5}}};
+    bool same = true;
+    for (int i = 0; i < 10; i++) {
+      const V3 e = lens.apply(rt::Obstacles{}, rt::NameTagDeck{}, 1, false, DT);
+      same = same && e.x == lens.views[0].eye.x && e.y == lens.views[0].eye.y && e.z == lens.views[0].eye.z;
+    }
+    check(same && lens.u == 0 && !lens.blind, "no scenery: the lens leaves the rig alone");
+  }
+
+  // Through the frame builder: a block standing on the battle shot's own eye
+  // lifts the view's eye clear of it; a battle no level can see is passed
+  // over at its cut for the CHASE; the CHASE is the rig's own.
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+  placeCar(*game.cars()[0], {0, 0, 0}, {0, 0, 1}, 100);
+  placeCar(*game.cars()[1], {0.5f, 0, -1.5f}, {0, 0, 1}, 98.5);
+  placeCar(*game.cars()[2], {-0.5f, 0, -3}, {0, 0, 1}, 97);
+  const auto viewEye = [](const TtpFrameInput* h) {
+    const float* w = ttp_frame_views(h)[0].world;
+    return V3{w[12], w[13], w[14]};
+  };
+  {
+    DisplayState bare = freshState();
+    bare.roster = {P0, P1, P2};
+    bare.camMode = TTP_CAM_COVERAGE;
+    const TtpFrameInput* b = rt::buildFrame(bare, &game, DT, caseAspect(bare));
+    check(bare.coverage.shot == rt::Shot::LEAD, "premise: the lead battle");
+    const V3 rigEye = bare.follow.pos, aim = bare.follow.target;
+    checkNear(viewEye(b), rigEye, "coverage lead: no scenery, the rig's own eye");
+
+    DisplayState d = freshState();
+    d.roster = bare.roster;
+    d.camMode = TTP_CAM_COVERAGE;
+    addBox(d.obstacles, rigEye - V3{0.5f, 0.5f, 0.5f}, rigEye + V3{0.5f, 0.5f, 0.5f});
+    d.obstacles.seal();
+    check(rt::wallBlocks(d.obstacles, rigEye, aim), "premise: the block hides the battle from the rig");
+    const V3 eye = viewEye(rt::buildFrame(d, &game, DT, caseAspect(d)));
+    check(d.coverage.shot == rt::Shot::LEAD, "a battle a lift can clear is filmed");
+    check(!rt::lensCrowded(d.obstacles, eye) && !rt::wallBlocks(d.obstacles, eye, aim),
+          "coverage lead: the view's eye is lifted clear of the block");
+  }
+  {
+    DisplayState d = freshState();
+    d.roster = {P0, P1, P2};
+    d.camMode = TTP_CAM_COVERAGE;
+    // A lid over the battle: no lift sees in.
+    addBox(d.obstacles, {-3, -1, -5}, {3, 1.2f, 2});
+    d.obstacles.seal();
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
+    check(d.coverage.cut && d.coverage.shot == rt::Shot::CHASE,
+          "a battle no lift can see is passed over at its cut, for the CHASE");
+    const TtpCarInput& car = ttp_frame_cars(h)[d.coverage.subject];
+    const V3 up{car.up.x, car.up.y, car.up.z};
+    checkNear(viewEye(h), V3{car.pos.x, car.pos.y, car.pos.z} + V3{car.forward.x, car.forward.y, car.forward.z} * -rt::COVER_CHASE_DIST
+              + up * rt::COVER_CHASE_HEIGHT, "…which is the chase rig's own, scenery or not");
+  }
+  // The same lid over a battle on a looping: no skip and no cut. A looping
+  // is one unbroken move, however blind.
+  {
+    DisplayState d = freshState();
+    d.roster = {P0, P1, P2};
+    d.camMode = TTP_CAM_COVERAGE;
+    const rt::LoopPlace end{{0, 2, 0}, 0, 0.1f, 8, 0};
+    d.loops = {{80, 105, 120, 1000, {end, end}, 105, 120}};
+    addBox(d.obstacles, {-3, -1, -5}, {3, 1.2f, 2});
+    d.obstacles.seal();
+    rt::buildFrame(d, &game, DT, caseAspect(d));
+    check(d.coverage.shot == rt::Shot::LEAD && d.follow.loop == 0, "premise: a battle on a looping opens");
+    bool cut = false, finite = true;
+    for (int i = 0; i < 120; i++) {
+      const V3 e = viewEye(rt::buildFrame(d, &game, DT, caseAspect(d)));
+      cut = cut || d.coverage.cut;
+      finite = finite && std::isfinite(e.x) && std::isfinite(e.y) && std::isfinite(e.z);
+    }
+    check(!cut && d.coverage.shot == rt::Shot::LEAD && finite, "a battle on a looping is never cut, blind or not");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2739,6 +2945,7 @@ int main() {
   testCoverageHoldsThroughALoop();
   testFollowOnLoopings();
   testCoverageView(bt.game);
+  testLensPlan(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);
   testCellLook(bt.game);

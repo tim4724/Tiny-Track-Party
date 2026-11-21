@@ -109,6 +109,10 @@ struct DisplayState {
     // The built scene's ground surface, handed over by the renderer after each
     // build (it alone samples the relief): the follow cam keeps above it.
     GroundGrid ground;
+    // The built scene's standing scenery, handed over by the renderer once it
+    // has merged its dressing: the lobby's lens keeps out of it (LensPlan).
+    Obstacles obstacles;
+    LensPlan lens;                      // the coverage shot's; reset with `chase` and at every cut
 
     // Where each cell car's steer bar is actually DRAWN, eased toward the live
     // tilt (STEER_BAR_TAU). Keyed and cleared exactly like `chase`, and for the
