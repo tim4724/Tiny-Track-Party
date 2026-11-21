@@ -19768,14 +19768,14 @@ def prize_at_anchor():
         return (px, y * S - 0.08, pz)
     with animated('anim_sway:a=z:d=4:p=8.5+bob:h=0.1:p=5.6#prize', (0.0, 0.0, 0.0), yaw=YAW):
         own_ship((0.0, -0.08, 0.0), YAW, S, 'blue', 'cream')                      # her topsides blue, to the rail
-        for (y, z, w) in ((7.7, 0.67, 2.1), (8.0, -4.01, 1.9)):                   # each yard, its sail furled along it
+        for (y, z, w) in ((7.3, OWN_SHIP_MASTS[0][0], 1.8), (7.7, OWN_SHIP_MASTS[1][0], 2.1)):   # each yard, its sail furled along it
             rprop_round(rod(K(-w - 0.1, y, z), K(w + 0.1, y, z), 0.12 * S, wood, segs=6))       # (round, round 28)
             rprop_round(rod(K(-w + 0.2, y - 0.36, z + 0.1), K(w - 0.2, y - 0.36, z + 0.1), 0.3 * S, cream, segs=6))
             for i in () if LITE else range(4):
                 gx = -w + 0.6 + i * (2 * w - 1.2) / 3
                 rprop_round(rod(K(gx - 0.07, y - 0.36, z + 0.1), K(gx + 0.07, y - 0.36, z + 0.1), 0.33 * S, 0x38383d, segs=6))
-        flag_on_pole(K(0.0, 9.6, 0.68), 0.7, (0xcf534f, 0xfff6eb, 0xcf534f, 0xfff6eb), 'anim_flutter:p=2.3#pennant', w=1.1, fh=0.5)
-        poly([K(0.0, 4.5, 5.15), K(0.0, 3.5, 1.5), K(0.0, 8.6, 0.85)], [(0, 1, 2)], 0xfff6eb)   # her jib, left set
+        flag_on_pole(K(0.0, 9.6, OWN_SHIP_MASTS[1][0] + 0.01), 0.7, (0xcf534f, 0xfff6eb, 0xcf534f, 0xfff6eb), 'anim_flutter:p=2.3#pennant', w=1.1, fh=0.5)
+        poly([K(0.0, 4.5, 5.15), K(0.0, 3.4, 3.6), K(0.0, 7.4, 2.75)], [(0, 1, 2)], 0xfff6eb)   # her jib to the foremast, left set
         beam(K(0.3, 2.5, 5.0), K(1.3, -0.6, 8.8), 0.07, cream)                     # her cable, from the bow
     # her boat, bow to local +X (the way its path faces it), under her sail
     for i, (x, z) in enumerate(COVE_TENDER):
@@ -28468,7 +28468,9 @@ def own_rowboat(at, yaw=0.0, scale=1.0, large=False, oars=True, hull=None, rim=N
 # to +z), ten and a half long, masts at OWN_SHIP_MASTS. FIXPROP_CASTLE is how
 # much higher her stern castle stands than round 27's quarterdeck did.
 FIXPROP_CASTLE = 0.45
-OWN_SHIP_MASTS = ((0.67, 2.85, 9.9), (-4.0, 4.1 + FIXPROP_CASTLE, 9.2))   # (z, the deck it is stepped on, its head): main, mizzen
+OWN_SHIP_MASTS = ((2.6, 2.85, 9.0), (-1.0, 2.85, 9.9))   # (z, the deck it is stepped on, its head): fore, main
+# A brig's two masts, the stern castle clear of both (the user's pick over a
+# mizzen stepped on the castle, which read as standing far aft).
 
 def fixprop_ship_secs():
     """The hull's sections (z, keel half-breadth, its y, waterline
@@ -28567,7 +28569,7 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
             if not LITE:
                 box((0.7 * S, 0.14 * S, 1.9 * S), K(sx * 1.4, 3.65, -1.65), wood, yaw=yaw, pitch=0.72)
         b((0.16, 1.4, 0.32), 0.0, 1.95, -4.96, wood)      # the rudder, against her sternpost from her keel up
-        b((1.1, 0.2, 1.0), 0.0, 2.97, -0.9, wood)         # the hatch: its coaming, the dark of the hold
+        b((1.1, 0.2, 1.0), 0.0, 2.97, 0.8, wood)          # the hatch, between the masts: its coaming, the dark of the hold
         b((0.8, 0.06, 0.7), 0.0, 3.06, -0.9, dark)
         if not LITE:
             b((0.14, 0.7, 0.14), 0.0, 4.5 + Q, -3.3, wood)                               # her wheel on its post
@@ -28679,11 +28681,13 @@ def pirate_ship():
     LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; each sail hangs before its mast, the road's side
     with animated('anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2', (0.0, 0.0, 0.0), yaw=YAW):
         K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True)
-        own_sail(K, S, YAW, 0.67, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG)   # (under her top: braced, a yard swings clear of it)
-        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.55, brace=BRACE, stretch=LONG)
-        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=0.3, stretch=LONG)   # (squarer: braced as far, it swung out past her stern)
-        poly([K(0.0, 4.5, 5.15), K(0.0, 3.4, 2.3), K(0.0, 6.6, 2.3)], [(0, 1, 2)], black)   # her jib, clear of the skull
-        for (z, _, head), k, p in zip(OWN_SHIP_MASTS, (0.55, 0.45), ('2.2#mast', '2.4#mizzen')):   # her colours at each masthead
+        (fore, _, _), (main, _, _) = OWN_SHIP_MASTS
+        own_sail(K, S, YAW, fore, 3.5, 6.3, 1.8, black, belly=0.45, brace=BRACE, stretch=LONG)   # the fore course and topsail
+        own_sail(K, S, YAW, fore, 7.2, 8.5, 1.3, black, belly=0.45, brace=BRACE, stretch=LONG)
+        own_sail(K, S, YAW, main, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG)   # the main course, the skull (under her top: braced, a yard swings clear of it)
+        own_sail(K, S, YAW, main, 7.95, 9.3, 1.5, black, belly=0.55, brace=BRACE, stretch=LONG)
+        poly([K(0.0, 4.5, 5.15), K(0.0, 3.4, 3.6), K(0.0, 7.4, 2.75)], [(0, 1, 2)], black)   # her jib, to the foremast
+        for (z, _, head), k, p in zip(OWN_SHIP_MASTS, (0.45, 0.55), ('2.4#fore', '2.2#main')):   # her colours at each masthead
             fx, fy, fz = K(0.0, head, z)
             own_jolly_roger((fx, fy - 0.3, fz), YAW + math.pi / 2, k, 'anim_flutter:p=' + p)
         if not LITE:
