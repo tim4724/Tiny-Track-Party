@@ -27655,10 +27655,16 @@ def own_fir_faces(kind, lite):
             out += band(S, (rl, yl, 20), (rl + 0.005, yl + 0.1, 12), g + 'roll')
             out += band(S, (rl + 0.005, yl + 0.1, 12), (r1, y1, 8), g + 'roll')
             if last:
-                (r2, y2) = at(0.64)
-                out += band(G, (r1, y1, gb), (r2, y2, gb - 12), g + 'skirt')
-                out += band(G, (r2, y2, 27), (r2 + 0.03, y2, 27), g + 'tipunder')   # (the cap's lip from below: a rim's dark green, as every rim's; in snow it drew a grey ring)
-                out += band(S, (r2 + 0.03, y2, 16), (rt, yt, 10), g + 'tip')
+                # the cap, the approved fir's: snow over the point, its foot
+                # tucked in under it against the skirt, out to a blunt band
+                # that overhangs the green, then a cone in to a small round
+                # top: convex all the way (a flared cone on a green lip read
+                # as a hat, a dome as a snowball). The skirt runs on up
+                # inside it.
+                out += band(G, (r1, y1, gb), at(0.78) + (gb - 12,), g + 'skirt')
+                cap = ((0.2, 1.572, 20), (0.232, 1.615, 15), (0.222, 1.685, 11), (0.11, 1.89, 8), (0.05, 1.94, 7), (0.0, 1.95, 6))
+                for lo, hi in zip(cap, cap[1:]):
+                    out += band(S, lo, hi, g + 'tip')
             else:
                 out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
         elif kind == 'c' and lite:
@@ -27696,13 +27702,7 @@ def own_fir_faces(kind, lite):
                 out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), cusp[i] + (11,)] + foot + [cusp[j] + (11,)], rad), g + 'skirt'))
                 out.append((S, own_facing([cusp[i] + (20,), hi[i] + (8,), hi[j] + (8,), cusp[j] + (20,)]
                                           + [q[:3] + (20 if q[3] == 11 else 22,) for q in foot[::-1]], rad), g + 'snow'))
-        if last and not lite and kind == 'b':
-            # `b`'s cap rounded over at its top, the approved fir's blunt
-            # snow cap (to a point, it read as a cone stood on the fir)
-            blunt = (0.075, tip[1] - 0.05)
-            out += band(S, (rt, yt, 10), blunt + (7,), g + 'tip')
-            out += band(S, blunt + (7,), (tip[0], tip[1] - 0.015, 6), g + 'tip')
-        elif last and not lite:
+        if last and not lite and kind != 'b':
             out += band(S, (rt, yt, 12), (tip[0], tip[1], 6), g + 'snow')
     return out
 
@@ -28255,29 +28255,32 @@ def own_snowman_lite():
 # The scatter's palms, built to the approved (Nature Kit) palms' look and
 # size about the same origin (round 29: the user liked them better than the
 # groves' palm at a prop's size). A square trunk in four lengths, flared at
-# its foot, kinked as it climbs (palm-tall bows out once, palm-bend zigzags);
-# on its head a block, and over it ONE crown: palm-tall's a cross of four
+# its foot, kinked as it climbs (palm-tall bows out once, palm-bend zigzags),
+# its top length run on, unbent, into ONE crown: palm-tall's a cross of four
 # broad fronds round a flat middle, each a slab arching down in three
 # lengths and narrowing to its tip; palm-bend's six sheets round a small
 # plate, every other one carried higher. Faceted, as the kit's were, each in
 # one colour the light shades (the beach's tint of the kit palms, palmwood
 # and palmleaf). The crown is one shape, so the box's far form keeps it
-# (palm() says why); the box's build leaves out the head block.
+# (palm() says why); the box's build stops the trunk under the crown. (A
+# block on the trunk's head showed under the crown as a slab wider than the
+# trunk, which the kit palm never had.)
 R29TREE_PALMS = {
     # trunk rings (x, z, half side, y); crown: arm angles (degrees), and per
     # arm its sections (r along it, half width, top y, under y) for the low
-    # arms and the high ones; the head block (half side, foot, top)
+    # arms and the high ones; head: the height inside the crown's hub that
+    # the trunk's top length runs on up to
     'palm-tall': dict(
         trunk=((0, 0, 0.073, 0.0), (0, 0, 0.085, 0.067), (0, 0, 0.065, 0.357), (0, -0.072, 0.048, 0.868), (0, 0.003, 0.038, 1.248)),
         arms=(0, 90, 180, 270),
         low=((0.132, 0.081, 1.356, 1.277), (0.273, 0.081, 1.356, 1.277), (0.417, 0.081, 1.281, 1.231), (0.517, 0.049, 1.186, 1.162)),
-        high=None, head=(0.061, 1.248, 1.302), wood=0, leaf=4),
+        high=None, head=1.302, wood=0, leaf=4),
     'palm-bend': dict(
         trunk=((0, 0, 0.05, 0.0), (0, 0, 0.065, 0.1), (0.1, 0.1, 0.05, 0.6), (0.1, -0.1, 0.05, 1.0), (0, 0, 0.035, 1.3)),
         arms=(90, 150, 210, 270, 330, 30),
         low=((0.14, 0.081, 1.354, 1.334), (0.262, 0.081, 1.354, 1.334), (0.406, 0.081, 1.28, 1.262), (0.506, 0.049, 1.135, 1.12)),
         high=((0.14, 0.081, 1.38, 1.36), (0.262, 0.081, 1.38, 1.36), (0.406, 0.081, 1.32, 1.302), (0.506, 0.049, 1.155, 1.14)),
-        head=(0.079, 1.29, 1.33), wood=4, leaf=22),
+        head=1.357, wood=4, leaf=22),
 }
 R29TREE_PALM_SINK = 0.05        # the kit palm's foot under its origin
 
@@ -28289,6 +28292,10 @@ def r29tree_palm(kind, lite):
     def quad(sw, pts, out):
         faces.append((sw[0], own_facing([(x, y + dy, z, sw[1]) for x, y, z in pts], out), 'f%d' % len(faces)))
     rings = P_['trunk']
+    if not lite:
+        (xa, za, ha, ya), (xb, zb, hb, yb) = rings[-2:]
+        f = (P_['head'] - ya) / (yb - ya)
+        rings = rings[:-1] + ((xa + (xb - xa) * f, za + (zb - za) * f, ha + (hb - ha) * f, P_['head']),)
     for (xa, za, ha, ya), (xb, zb, hb, yb) in zip(rings, rings[1:]):
         for sx, sz in ((1, 0), (0, 1), (-1, 0), (0, -1)):              # a side facing (sx, sz)
             ex, ez = -sz, sx                                          # along it
@@ -28297,13 +28304,6 @@ def r29tree_palm(kind, lite):
             b0 = (xb + (sx - ex) * hb, yb, zb + (sz - ez) * hb)
             b1 = (xb + (sx + ex) * hb, yb, zb + (sz + ez) * hb)
             quad(W, (a0, a1, b1, b0), (sx, 0.0, sz))
-    if not lite:
-        hs, y0, y1 = P_['head']
-        c = [(sx * hs, sz * hs) for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-        for i in range(4):
-            (ax, az), (bx, bz) = c[i], c[(i + 1) % 4]
-            quad(W, ((ax, y0, az), (bx, y0, bz), (bx, y1, bz), (ax, y1, az)), (ax + bx, 0.0, az + bz))
-        quad(W, [(x, y0, z) for x, z in c], (0.0, -1.0, 0.0))
     # the crown: each arm from the hub's edge out to its tip; the hub the
     # polygon through every arm's inner corners
     hub_top, hub_under = [], []
