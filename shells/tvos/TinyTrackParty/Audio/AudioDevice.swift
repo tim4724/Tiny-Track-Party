@@ -6,8 +6,8 @@ import os
 /// The DEVICE half of the big screen's sound. It decides nothing.
 ///
 /// Which cue, at what gain, which sustained voice at what level, the audibility
-/// curve, the curb-scrub throttle, the rocket jet lifecycle, the music pool and
-/// its no-repeat shuffle are all `native/libttp-runtime/ttp/audio.cc` behind
+/// curve, the curb-scrub throttle, the rocket jet lifecycle, each track's song
+/// and the fallback's shuffle are all `native/libttp-runtime/ttp/audio.cc` behind
 /// `ttp_audio.h`, and arrive here as a stream of COMMANDS that `perform` walks
 /// in order. This is the Swift counterpart of `public/display/Audio.js`, and it
 /// holds exactly what names a platform API: the graph, the limiter, the sample
@@ -286,13 +286,13 @@ final class AudioDevice {
         drain()
     }
 
-    /// Start the biome's music, or stop it when `biome` is nil.
+    /// Start the track's own song, or stop the music when `track` is nil.
     ///
-    /// An unknown or empty biome takes the fallback pool rather than silence —
-    /// that rule is `audio.cc`'s, not this file's.
-    func music(biome: String?) {
-        if let biome {
-            ttp_audio_music(Int32(TTP_AUD_MUSIC_START), biome)
+    /// A track with no song of its own takes a fallback one rather than
+    /// silence — that rule is `audio.cc`'s, not this file's.
+    func music(track: String?) {
+        if let track {
+            ttp_audio_music(Int32(TTP_AUD_MUSIC_START), track)
         } else {
             ttp_audio_music(Int32(TTP_AUD_MUSIC_STOP), nil)
         }

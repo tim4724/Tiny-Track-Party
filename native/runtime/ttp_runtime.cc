@@ -283,6 +283,7 @@ static void audio_forget_session(int handle);
 
 struct RuntimeSession {
   int handle = 0;
+  std::string trackId;  // the catalogue/dev id it was begun on
   std::unique_ptr<Centerline> centerline;
   GameTrack track;
   std::string forceItem;
@@ -699,27 +700,16 @@ int32_t audioMusicOp(const char* name) {
   return 0;
 }
 
-// A song's flat catalogue index: pools in table order, songs in pool order.
+// A song's catalogue index: its row in TRACK_MUSIC.
 int32_t audioSongIndex(const au::Song* s) {
-  int32_t n = 0;
-  for (int i = 0; i < au::RACE_MUSIC_COUNT; i++) {
-    const au::MusicPool& p = au::RACE_MUSIC[i];
-    for (int j = 0; j < p.count; j++, n++) {
-      if (&p.songs[j] == s) return n;
-    }
+  for (int i = 0; i < au::TRACK_MUSIC_COUNT; i++) {
+    if (&au::TRACK_MUSIC[i].song == s) return i;
   }
   return -1;
 }
 
 const au::Song* audioSongAt(int index) {
-  int32_t n = 0;
-  for (int i = 0; i < au::RACE_MUSIC_COUNT; i++) {
-    const au::MusicPool& p = au::RACE_MUSIC[i];
-    for (int j = 0; j < p.count; j++, n++) {
-      if (n == index) return &p.songs[j];
-    }
-  }
-  return nullptr;
+  return index >= 0 && index < au::TRACK_MUSIC_COUNT ? &au::TRACK_MUSIC[index].song : nullptr;
 }
 
 }  // namespace
@@ -838,12 +828,12 @@ void ttp_audio_stop_car(const char* idJson) {
   b.dec.stopCar(parse_scalar_id(idJson), b.cmds);
 }
 
-void ttp_audio_music(int op, const char* biomeOrNull) {
+void ttp_audio_music(int op, const char* trackIdOrNull) {
   AudioBus& b = bus();
   audioFlush();
   switch (op) {
     case TTP_AUD_MUSIC_START:
-      b.dec.startMusic(biomeOrNull ? std::string(biomeOrNull) : std::string(), b.cmds);
+      b.dec.startMusic(trackIdOrNull ? std::string(trackIdOrNull) : std::string(), b.cmds);
       break;
     case TTP_AUD_MUSIC_STOP: b.dec.stopMusic(b.cmds); break;
     case TTP_AUD_MUSIC_PAUSE: b.dec.pauseMusic(b.cmds); break;
@@ -962,6 +952,7 @@ int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* 
                    + " was refused");
     return 0;
   }
+  rs->trackId = trackId;
   rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
   int h = g_next++;
   rs->handle = h;
@@ -1202,6 +1193,11 @@ extern "C++" Value ttp_session_drain_events(int h) {
   for (auto& e : rs->outQueue) arr.push(std::move(e));
   rs->outQueue.clear();
   return arr;
+}
+
+extern "C++" const char* ttp_session_track_id(int h) {
+  RuntimeSession* rs = get(h);
+  return rs ? rs->trackId.c_str() : "";
 }
 
 const char* ttp_events_json(int h) {

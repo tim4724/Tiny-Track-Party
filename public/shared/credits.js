@@ -12,7 +12,7 @@
 // what tests/credits.test.js holds us to: an entry whose license demands a
 // notice must ship one.
 //
-// Songs are NOT listed here — they derive from musicCatalogue.js RACE_MUSIC via
+// Songs are NOT listed here — they derive from musicCatalogue.js TRACK_MUSIC via
 // creditsFor(), so a change to the picks can never desync the page.
 import { assetUrl } from './assetUrl.js';
 
@@ -211,22 +211,21 @@ export const ASSET_CREDITS = [
 // long-form credit still lives in the static music/CREDITS.txt, which is what
 // the no-JS fallback points at.
 
-// Flatten a RACE_MUSIC map (audio/musicCatalogue.js) + the static entries into
+// Flatten a TRACK_MUSIC map (audio/musicCatalogue.js) + the static entries into
 // the page's shape: [{ section, entries: [{title, author, license, url,
 // notice?, obligation, required}] }], sections in SECTION_ORDER. An entry with
 // no `license` credits no shipped file (a courtesy), and the page shows no chip. Songs dedup by
-// title (a song may sit in several biome pools) and sort alphabetically.
+// title (two tracks may share one) and sort alphabetically. The fallback pool
+// points into the same map, so every song that can play is credited.
 // `obligation` and `required` are stamped from the license here, so no entry
 // carries its own claim.
-export function creditsFor(raceMusic) {
+export function creditsFor(trackMusic) {
   const byTitle = new Map();
-  for (const pool of Object.values(raceMusic)) {
-    for (const s of pool) {
-      byTitle.set(s.title, {
-        section: 'Music', title: s.title, author: s.artist,
-        license: s.license, url: s.source,
-      });
-    }
+  for (const s of Object.values(trackMusic)) {
+    byTitle.set(s.title, {
+      section: 'Music', title: s.title, author: s.artist,
+      license: s.license, url: s.source,
+    });
   }
   const music = [...byTitle.values()].sort((a, b) => a.title.localeCompare(b.title));
 

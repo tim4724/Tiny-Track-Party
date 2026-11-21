@@ -210,8 +210,16 @@ has no signal, not a free frame.
 
 `ttp/audio.{h,cc}` behind `runtime/ttp_audio.h` decides which cue at what gain,
 which sustained voice at what level, the audibility curve, the scrub throttle, the
-rocket jet lifecycle and the music shuffle. The device half is browser code — see
+rocket jet lifecycle and the race music. The device half is browser code — see
 `public/display/CLAUDE.md`.
+
+**Every catalogue track races to its own song** (`TRACK_MUSIC`, picked by ear on
+the music gallery); any other id — a dev track — draws a no-repeat fallback
+song, never silence. The GO beat's `start-music` effect carries the SESSION's
+track (`ttp_session_track_id`) and the shell hands it to `ttp_audio_music` as
+is, so no shell looks a track (or a biome) up for the music. A new catalogue
+track needs its song: `tests/audio-abi.test.js` holds the table's keys to the
+catalogue.
 
 **Nothing about a car crosses to decide a sound.** `ttp_audio_frame(nowMs)` reads
 the bound session's Game itself, so the shell hands over a clock and takes back

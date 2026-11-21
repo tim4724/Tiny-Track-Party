@@ -13,7 +13,7 @@ import org.json.JSONObject
  * `shells/androidtv/scripts/gen-legal.mjs` — the same two modules the web's
  * /licenses.html renders — with the delta between what a browser ships and what
  * an .apk ships applied in one place, and the notice texts it names staged
- * beside it. A song added to a biome pool appears on the board after the next
+ * beside it. A song given to a track appears on the board after the next
  * stage with nothing edited. See the generator's header for that delta and
  * `tests/androidtv-legal.test.js` for what holds it honest.
  *

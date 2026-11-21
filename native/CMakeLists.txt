@@ -1101,7 +1101,7 @@ endif()
 # ANativeWindow) sits behind the SDK gate.
 set(TTP_APP_SOURCES
   runtime/ttp_runtime.cc runtime/ttp_party.cc
-  # The biome ABI: naming a biome (for the music pool, for the ?biome= list) is
+  # The biome ABI: naming a biome (for the ?biome= list, the HUD accent) is
   # not rendering, and CI's Filament-less wasm leg is where the browser's link
   # to it gets checked.
   runtime/ttp_theme.cc

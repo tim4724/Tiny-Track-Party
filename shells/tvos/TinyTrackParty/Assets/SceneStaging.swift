@@ -53,8 +53,8 @@ struct RosterSlot {
 /// Four members, and nothing else: `provide(_:_:)` (one asset's bytes, throwing
 /// when `ttp_display_asset` refuses them), `hasScene`, `release()`, and
 /// `sceneBuilt(rosterIds:biome:)` — the host owns "is a scene up", the
-/// slot-ordered id list its HUD readback maps by, and the biome name the GO
-/// beat keys its music pool off, and this is where all three become true.
+/// slot-ordered id list its HUD readback maps by, and the biome name the HUD's
+/// boost accent keys off, and this is where all three become true.
 @MainActor
 enum SceneStaging {
 

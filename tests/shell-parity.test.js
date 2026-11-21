@@ -99,7 +99,7 @@ function slice(src, rel, from, to) {
  * same shape. Taking every literal would read `welcome`/`lobby`/`race` as race
  * ops. Only the arm's HEAD counts — one arm may list several ops
  * (`case "reveal-chrome", "hold-chrome":`), while its BODY routinely quotes keys
- * off the effect (`game.audio.music(e.optString("biome"))`) that are not ops.
+ * off the effect (`game.audio.music(TtpJson.optStr(e, "track"))`) that are not ops.
  */
 function arms(body, rel, armLine) {
   const heads = body.split('\n')

@@ -7,18 +7,19 @@
 // frame plays the race's own sound (?sfx=1: engines, cues, no music of its
 // own) and the song sits at the game's music level under it, as in a race.
 //
-// What a track is offered: the DRAFT's pick and options (/gallery-music-draft.json,
-// absent is fine), the songs its cup ships TODAY (RACE_MUSIC, the pool a race
-// picks from at random), and every other song, shipped or candidate. The
-// shipped pools are read live from the game's catalogue, so the page cannot
-// claim the game plays something it does not. Picks go to the local dev
-// server (/api/review-music, scratch/review/music-picks.json); nothing here
-// changes what the game plays.
+// What a track is offered: the song it races to in the game (TRACK_MUSIC, one
+// per track), the DRAFT's pick and options (/gallery-music-draft.json, absent is
+// fine), and every other song, shipped or candidate. The game's songs are read
+// live from its catalogue, so the page cannot claim the game plays something it
+// does not. Picks go to the local dev server (/api/review-music,
+// scratch/review/music-picks.json); nothing here changes what the game plays —
+// the game was moved onto the picks by hand, and the page says where the two
+// still differ.
 import * as Gallery from './gallery-common.js';
 import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 import { loadBiomes, cssHex } from '/shared/biomes.js';
 // Straight from the catalogue's own file: this page is a dev surface.
-import { RACE_MUSIC, MUSIC_FALLBACK, MUSIC_LEVEL } from '/display/audio/musicCatalogue.js';
+import { TRACK_MUSIC, MUSIC_LEVEL } from '/display/audio/musicCatalogue.js';
 import { storedVolume, saveVolumePercent } from '/display/audio/bus.js';
 
 const MUSIC_DIR = '/assets/audio/music/';
@@ -37,17 +38,16 @@ const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)
 
 // ---- the songs, by file (relative to MUSIC_DIR, the draft's own key) ----
 const songs = new Map();
-const cupsOfBiome = new Map();
-for (const c of CUPS) {
-  const b = biomes.forCup(c.id);
-  cupsOfBiome.set(b, [...(cupsOfBiome.get(b) || []), c]);
-}
-for (const [biome, pool] of Object.entries(RACE_MUSIC)) {
-  for (const s of pool) {
-    const key = s.file.slice(MUSIC_DIR.length);
+const keyOf = (s) => s.file.slice(MUSIC_DIR.length);
+// The song each track races to in the game.
+const gameSong = (trackId) => keyOf(TRACK_MUSIC[trackId]);
+for (const [track, s] of Object.entries(TRACK_MUSIC)) {
+  const key = keyOf(s);
+  if (!songs.has(key)) {
     songs.set(key, { key, url: s.file, title: s.title, artist: s.artist, license: s.license, dur: s.duration,
-                     gain: s.gain, link: s.source, biome, shipped: true });
+                     gain: s.gain, link: s.source, tracks: [], shipped: true });
   }
+  songs.get(key).tracks.push(track);
 }
 // The draft, when it is there: per track { song, why, options }, and the
 // candidate files it auditions.
@@ -55,6 +55,9 @@ const draft = await fetch('/gallery-music-draft.json').then((r) => (r.ok ? r.jso
 const draftFor = new Map(((draft && draft.tracks) || []).map((t) => [t.track, t]));
 for (const c of (draft && draft.candidates) || []) {
   if (!c || !c.file || songs.has(c.file)) continue;
+  // A candidate that has since shipped IS the shipped song, under either name.
+  const shipped = songs.get(c.file.replace(/^candidates\//, ''));
+  if (shipped) { songs.set(c.file, shipped); continue; }
   songs.set(c.file, { key: c.file, url: MUSIC_DIR + c.file, title: c.title || c.file, artist: c.artist,
                       license: c.license, dur: c.dur, gain: c.gain || 1, link: c.page || c.url,
                       feel: c.feel, for: c.for || [], candidate: true });
@@ -299,10 +302,6 @@ setInterval(() => {
 
 // ---- painting ----
 const cupOf = (trackId) => CUPS.find((c) => c.tracks.includes(trackId));
-const poolOf = (cup) => {
-  const pool = RACE_MUSIC[biomes.forCup(cup.id)] || [];
-  return { songs: (pool.length ? pool : MUSIC_FALLBACK).map((s) => s.file.slice(MUSIC_DIR.length)), fallback: !pool.length };
-};
 
 function paintCups() {
   const box = el('mu-cups');
@@ -324,10 +323,8 @@ function paintCups() {
       name.textContent = trackById.get(id).name;
       const sub = document.createElement('span');
       const pick = picks[id] && picks[id].song;
-      const d = draftFor.get(id);
       if (pick) { sub.textContent = `✓ ${songOf(pick).title}`; sub.className = 'is-picked'; }
-      else if (d && d.song) sub.textContent = `draft: ${songOf(d.song).title}`;
-      else sub.textContent = 'cup pool (random)';
+      else sub.textContent = songOf(gameSong(id)).title;
       b.append(name, sub);
       b.addEventListener('click', () => pickTrack(id, true));
       col.appendChild(b);
@@ -339,18 +336,18 @@ function paintCups() {
 function paintHead() {
   const t = trackById.get(state.track);
   const cup = cupOf(state.track);
-  const pool = poolOf(cup);
   el('mu-title').textContent = `${t.name} · ${cup.name}`;
   const len = state.raceLen[state.track];
-  el('mu-today').textContent = `In the game today: one of the ${pool.songs.length} ${pool.fallback ? 'fallback' : cup.name} songs, `
-    + 'at random per race.' + (len ? ` A race here: the winner is home at ${fmtTime(len)}.` : '');
+  el('mu-today').textContent = `In the game: ${songOf(gameSong(state.track)).title}, this track's own song.`
+    + (len ? ` A race here: the winner is home at ${fmtTime(len)}.` : '');
   const pick = picks[state.track];
   const p = el('mu-pick');
   p.replaceChildren();
   if (pick && pick.song) {
     const b = document.createElement('b');
     b.textContent = songOf(pick.song).title;
-    p.append('Picked: ', b, ` (${new Date(pick.at).toLocaleString()})`);
+    p.append('Picked: ', b, ` (${new Date(pick.at).toLocaleString()})`,
+             songOf(pick.song).key === gameSong(state.track) ? ', and the game plays it.' : ', not in the game yet.');
   } else {
     p.textContent = canSave ? 'No pick saved for this track yet.' : 'Picks save only on a local dev server; this one cannot.';
   }
@@ -365,7 +362,8 @@ function songRow(key, tags) {
   const row = document.createElement('div');
   row.className = 'mu-song' + (gone ? ' is-missing' : '');
   row.dataset.song = key;
-  const picked = picks[state.track] && picks[state.track].song === key;
+  const pickedKey = picks[state.track] && picks[state.track].song;
+  const picked = !!pickedKey && songOf(pickedKey).key === s.key;
   if (picked) row.classList.add('is-picked');
 
   const play = document.createElement('button');
@@ -390,7 +388,7 @@ function songRow(key, tags) {
   };
   if (gone) tag('missing', 'missing');
   for (const [cls, text] of tags) tag(cls, text);
-  if (s.shipped) tag('shipped', `shipped · ${(cupsOfBiome.get(s.biome) || []).map((c) => c.name).join(', ') || s.biome}`);
+  if (s.shipped) tag('shipped', `shipped · ${s.tracks.map((id) => (trackById.get(id) || { name: id }).name).join(', ')}`);
   else if (s.candidate) tag('cand', 'candidate');
   else tag('missing', 'not in the catalogue');
   if (s.dur) sub.append(fmtTime(s.dur));
@@ -427,9 +425,7 @@ function paintSongs() {
   const body = el('mu-songs');
   const scroll = body.scrollTop;
   body.replaceChildren();
-  const cup = cupOf(state.track);
   const d = draftFor.get(state.track);
-  const pool = poolOf(cup);
   const shown = new Set();
   const section = (title, keys, tags, before) => {
     const h = document.createElement('h3');
@@ -440,31 +436,14 @@ function paintSongs() {
   };
   const para = (cls, text) => { const p = document.createElement('p'); p.className = cls; p.textContent = text; return p; };
 
+  section('In the game', [gameSong(state.track)], [],
+          [para('mu-aside', 'Every race on this track plays this song: the picks made here, moved into the game.')]);
   if (d && d.song) {
-    section('Draft pick · not in the game', [d.song], [['draft', 'draft pick']], d.why ? [para('mu-why', d.why)] : []);
+    section('Draft pick', [d.song], [['draft', 'draft pick']], d.why ? [para('mu-why', d.why)] : []);
     const opts = (d.options || []).filter((k) => k !== d.song);
     if (opts.length) section('Draft options', opts, [['draft', 'option']]);
   } else if (draft) {
     body.appendChild(para('mu-aside', 'The draft has no pick for this track.'));
-  }
-  // Each shipped song's fate under one song per track: the track(s) it goes to
-  // (a saved pick, else the draft's), or REMOVED when no track keeps it.
-  const goesTo = new Map();
-  for (const t of TRACK_LIST) {
-    const k = (picks[t.id] && picks[t.id].song) || (draftFor.get(t.id) || {}).song;
-    if (k) goesTo.set(k, [...(goesTo.get(k) || []), t.name]);
-  }
-  const h = document.createElement('h3');
-  h.textContent = `Shipped today · ${pool.fallback ? 'fallback' : cup.name} pool`;
-  body.appendChild(h);
-  body.appendChild(para('mu-aside', pool.fallback ? 'This cup has no songs of its own: a race plays the fallback pool.'
-    : 'A race on this track plays one of these, at random. With one song per track, each goes where a pick (or the draft) puts it; "removed" means no track keeps it.'));
-  for (const k of pool.songs) {
-    const to = goesTo.get(k);
-    const row = songRow(k, to ? [['shipped', `→ ${to.join(', ')}`]] : [['missing', 'removed']]);
-    if (!to) row.classList.add('is-dropped');
-    body.appendChild(row);
-    shown.add(k);
   }
 
   // Everything else, a click away.
@@ -483,10 +462,7 @@ function paintSongs() {
   };
   let n = 0;
   n += group('Candidates', [...songs.values()].filter((s) => s.candidate && !shown.has(s.key)).map((s) => s.key));
-  for (const c of CUPS) {
-    if (c.id === cup.id) continue;
-    n += group(`Shipped for ${c.name}`, poolOf(c).songs.filter((k) => !shown.has(k)));
-  }
+  for (const c of CUPS) n += group(`Shipped for ${c.name}`, c.tracks.map(gameSong).filter((k) => !shown.has(k)));
   sum.textContent = `Every other song (${n})`;
   body.appendChild(more);
   if (draft && draft.note) body.appendChild(para('mu-aside', `About the draft: ${draft.note}`));

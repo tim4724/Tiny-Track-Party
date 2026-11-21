@@ -630,24 +630,26 @@ re-open them as work.
   `tests/config-drift.test.js` pins the export to `public/shared/protocol.js`.
 - **Asset delivery: everything ships, including the music.** A fourth shell
   stages a list rather than pointing a packager at `public/assets/` (see either
-  `stage-assets.sh`), and the race-music catalogue — ~62 MB, most of what it
+  `stage-assets.sh`), and the race-music catalogue — most of what it
   stages — is now part of that list on both TV legs. It streamed from the origin
   until 2026-08; the argument for that ("the app depends on the origin anyway")
   conflated a page load at the start of a night with a continuous stream for the
   length of every race.
   **Bundling costs no ABI change, and that is the part worth copying.**
   `audio.cc`'s SONG table bakes an ORIGIN-ABSOLUTE path including its `.mp3`
-  extension, and `audio-corpus.jsonl` froze those strings with its JS oracle
-  deleted. So a shell keeps the string exactly as given and only chooses what to
-  resolve it against: the staged root first (dropping the leading `/assets/`,
-  which the root already is), `baseURL` if nothing is staged. Keep that
-  fallback — it is what lets a build stage no music and still play.
-  What IS still corpus-locked (the R1 that was here): changing the extension, or
-  trimming the pool, which shifts every index. Both mean making `Song::file` a
-  stem, and `ttp_audio_song_json`'s index has to resolve to whatever you pick.
-  Moving off mp3 is worse than it looks besides — Apple decodes Opus only inside
-  CAF (ffmpeg cannot mux it) and `MediaPlayer` reads Ogg Opus only from API 29
-  against minSdk 24, so a stem buys three artifacts per song rather than one.
+  extension, and `audio-corpus.jsonl` records those strings. So a shell keeps
+  the string exactly as given and only chooses what to resolve it against: the
+  staged root first (dropping the leading `/assets/`, which the root already
+  is), `baseURL` if nothing is staged. Keep that fallback — it is what lets a
+  build stage no music and still play.
+  Adding or dropping a song costs a shell nothing (it stages whatever `.mp3`s
+  the directory holds and resolves whatever index it is handed); it moves the
+  recorded picks, so the audio corpus is re-recorded on purpose
+  (`tests/CLAUDE.md`). Moving off mp3 is the expensive one: Apple decodes Opus
+  only inside CAF (ffmpeg cannot mux it) and `MediaPlayer` reads Ogg Opus only
+  from API 29 against minSdk 24, so `Song::file` would have to become a stem
+  each shell appends its own extension to — three artifacts per song rather
+  than one.
   Changing the BITRATE is free of all of it: `SOURCES.json`'s `encode.args` plus
   `npm run check:music-loudness`, and nothing in the corpus moves.
 - **CI's Android legs are compile/link-only** (`.github/workflows/native.yml` —

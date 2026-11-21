@@ -1731,20 +1731,22 @@ void audioThroughAbi() {
   ttp_audio_stop_voices();
   check(count(TTP_AUD_STOP_ALL) == 1, "stop_voices answers with no session bound");
 
-  // Music needs no race at all — it is picked by BIOME.
-  ttp_audio_music(TTP_AUD_MUSIC_START, "beach");
-  {
+  // Music needs no race at all — it is picked by TRACK ID: a catalogue track
+  // plays its own song, any other id a fallback one.
+  const auto startedSong = [&](const char* track) -> Value {
+    ttp_audio_music(TTP_AUD_MUSIC_START, track);
     const TtpAudioBlock* b = ttp_audio_drain();
     const TtpAudioCmd* cmds = ttp_audio_cmds(b);
     check(b->count == 1 && cmds[0].kind == TTP_AUD_MUSIC
           && cmds[0].code == TTP_AUD_MUSIC_START,
           "a music start is one command");
-    if (b->count == 1) {
-      Value song = parseOrNull(ttp_audio_song_json(cmds[0].subject), "the picked song");
-      check(song.type == Value::OBJ, "the picked song resolves through its index");
-      check(cmds[0].level > 0 && cmds[0].level < 1, "and comes with a bed level");
-    }
-  }
+    if (b->count != 1) return Value::Null();
+    check(cmds[0].level > 0 && cmds[0].level < 1, "and comes with a bed level");
+    return parseOrNull(ttp_audio_song_json(cmds[0].subject), "the picked song");
+  };
+  check(json::str_field(startedSong("driftwood"), "file") == "/assets/audio/music/spy_groove.mp3",
+        "a catalogue track plays its own song");
+  check(startedSong("gym").type == Value::OBJ, "a dev track plays a fallback song, not silence");
   ttp_audio_music(TTP_AUD_MUSIC_STOP, nullptr);
   ttp_audio_drain();
 }
@@ -5228,7 +5230,7 @@ void raceLiveWalks() {
     // The expected effects for whatever the twin drained, routed the way the
     // walk routes them — the three lifecycle beats to their own rules, the rest
     // through the ordinary-event filter.
-    const auto expectedFor = [&](const Value& events, const char* biome, int audioReady,
+    const auto expectedFor = [&](const Value& events, int audioReady,
                                  int fastForwarding, double nowMs) {
       race::Effects all;
       for (const Value& e : events.arr) {
@@ -5237,7 +5239,7 @@ void raceLiveWalks() {
         if (type == "_countdown") {
           es = race::countdownTick(json::num_field(e, "n"));
         } else if (type == "_raceStart") {
-          es = race::raceStart(biome, audioReady != 0);
+          es = race::raceStart("tidepool", audioReady != 0);
         } else if (type == "_raceEnd") {
           race::EndRaceInput ei;
           ei.hasSeries = hasSeries;
@@ -5255,15 +5257,23 @@ void raceLiveWalks() {
       return all;
     };
 
-    int beats = 0, gos = 0;
+    int beats = 0, gos = 0, songs = 0;
     for (int f = 0; f < 120; f++) {
       ttp_update(live, 1000.0 / 60.0);
       ttp_update(twin, 1000.0 / 60.0);
       const Value drained = parseOrNull(ttp_events_json(twin), "twin events");
       const Value got = parseOrNull(
-          ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, f * 16.0),
+          ttp_race_events_live_json(live, room, 1, 0, kInterMs, f * 16.0),
           "events_live");
-      sameOps(got, expectedFor(drained, "beach", 1, 0, f * 16.0), "events_live effects");
+      sameOps(got, expectedFor(drained, 1, 0, f * 16.0), "events_live effects");
+      // The GO beat's song is the session's own track, read off the handle:
+      // no shell passes it in any more.
+      for (const Value& e : at(got, "effects").arr) {
+        if (json::str_field(e, "op") != "start-music") continue;
+        songs++;
+        check(json::str_field(e, "track") == "tidepool",
+              "start-music names the session's own track, got '" + json::str_field(e, "track") + "'");
+      }
       for (const Value& e : drained.arr) {
         if (json::str_field(e, "type") != "_countdown") continue;
         beats++;
@@ -5279,12 +5289,13 @@ void raceLiveWalks() {
     check(beats >= 2 && gos == 1,
           "the countdown beats were routed, GO among them (" + std::to_string(beats) +
               " beats, " + std::to_string(gos) + " GO)");
+    check(songs == 1, "the GO beat started the music once (" + std::to_string(songs) + ")");
     // The queue really empties: a second drain with nothing behind it. That
     // answer is a short-circuit literal, so it is held to the bytes the full
     // walk would stringify for no effects; the Android shell skips its parse on
     // exactly those bytes.
     const std::string emptyRaw =
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000);
+        ttp_race_events_live_json(live, room, 1, 0, kInterMs, 9000);
     const Value empty = parseOrNull(emptyRaw.c_str(), "events_live empty");
     check(at(empty, "effects").arr.empty(), "a drained queue answers no effects");
     Value noEffects = Value::Obj();
@@ -5317,9 +5328,9 @@ void raceLiveWalks() {
     ttp_update(twin, 1000.0 / 60.0);
     const Value drained = parseOrNull(ttp_events_json(twin), "twin end events");
     const Value ended = parseOrNull(
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 10000),
+        ttp_race_events_live_json(live, room, 1, 0, kInterMs, 10000),
         "events_live end");
-    sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
+    sameOps(ended, expectedFor(drained, 1, 0, 10000), "events_live effects at the flag");
     check(!ended.has("results"),
           "the answer carries no results rider — the rows never leave C++");
     check(opsOf(ended).find("show-results") != std::string::npos,

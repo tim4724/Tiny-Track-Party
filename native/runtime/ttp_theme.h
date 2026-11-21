@@ -9,8 +9,8 @@
 // own cup and hands libttp-renderer the whole thing in-process. What a shell
 // gets is only what a shell genuinely draws or names for itself:
 //
-//   - the biome NAME, because the shell owns the music (the race song is picked
-//     from a per-biome pool) and the ?biome= override list,
+//   - the biome NAME, for the ?biome= override list and the HUD's accent
+//     lookup below,
 //   - one COLOUR each for two 2D widgets the renderer does not draw: the HUD
 //     boost chip's stroke and the biome swatch in the music gallery,
 //   - the scenery MODEL LIST, because fetching bytes is a platform job and the
@@ -22,7 +22,7 @@
 //
 // Unlike the rest of the display ABI this is NOT behind the Filament gate: the
 // biome tables are plain data in libttp-runtime, so a shell can name a biome
-// (for its music, its debug panel) with no renderer in the build at all.
+// (for its debug panel) with no renderer in the build at all.
 #ifndef TTP_THEME_H
 #define TTP_THEME_H
 

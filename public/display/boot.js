@@ -85,8 +85,8 @@ export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, 
     fieldSize, carCount: carModels.length, colorCount: carColors.length,
     aiPrefix: 'ai-', carStats: carStatsRows, cups
   });
-  // The biome ABI off the same module: the ?biome= list, the music pool key and
-  // the HUD boost chip's accent. The palette itself never leaves C++.
+  // The biome ABI off the same module: the ?biome= list and the HUD boost
+  // chip's accent. The palette itself never leaves C++.
   const biomes = await loadBiomes();
 
   const [room, conn, lane, sess] = await Promise.all([

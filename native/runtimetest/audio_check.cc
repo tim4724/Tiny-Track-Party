@@ -2,10 +2,10 @@
 // (tests/fixtures/audio-corpus.jsonl, recorded by scripts/gen-audio-corpus.mjs
 // off public/display/audio/decide.js).
 //
-// WHAT THIS IS. JS-RECORDED cross-implementation evidence — class 1 in
-// tests/fixtures/traces/README.md, the only class that can settle a parity
-// question. Every command in it is one the shipping browser game played a sound
-// from. Nothing here may be "fixed" by re-recording: a disagreement is a bug in
+// WHAT THIS IS. Recorded off the JS oracle, and since re-emitted from C++ for
+// deliberate changes (the music moving to one song per track among them), so
+// regression evidence: class 2 in tests/CLAUDE.md. Nothing here may be "fixed"
+// by re-recording: an unexplained disagreement is a bug in
 // libttp-runtime/ttp/audio.cc, never in the corpus.
 //
 // TWO KINDS OF CASE, and they need different machinery.
@@ -14,7 +14,8 @@
 //    carries its own input — so they replay straight out of the corpus with no
 //    sim at all. They are what reaches the knees of the distance curve, the whole
 //    event table, the scrub arbitration under contention, the voice start/stop
-//    edges, the rocket jet lifecycle and the seeded music shuffle.
+//    edges, the rocket jet lifecycle and the music: each track's own song and
+//    the seeded fallback shuffle.
 //
 // 2. TRACE frames (5900 over 5 golden traces) record ONLY the commands. The
 //    world they were decided from is not in the corpus, so this check REBUILDS
@@ -265,10 +266,10 @@ void applyStep(ScenarioState& st, const std::string& kind, const Value* in,
     const Value* op = i.find("op");
     const std::string o = (op && op->type == Value::STR) ? op->str : "";
     if (o == "start") {
-      const Value* b = i.find("biome");
-      // A null / absent biome is not a pool name, and takes the fallback — the
-      // corpus records both spellings.
-      st.dec->startMusic((b && b->type == Value::STR) ? b->str : std::string(), out);
+      const Value* t = i.find("track");
+      // A null / absent track has no song of its own and takes the fallback —
+      // the corpus records both spellings.
+      st.dec->startMusic((t && t->type == Value::STR) ? t->str : std::string(), out);
     } else if (o == "stop") st.dec->stopMusic(out);
     else if (o == "pause") st.dec->pauseMusic(out);
     else if (o == "resume") st.dec->resumeMusic(out);
@@ -684,8 +685,8 @@ int runCorpus(const std::string& corpusPath, const std::string& traceDir,
       for (const CapBeat& b : f.beats) {
         if (b.beat) {
           // The countdown chimes; the GO beat starts the race song, which is not
-          // recorded here (a trace header carries no biome — the shuffle is swept
-          // in the scripted cases instead); the end beat is where endRace kills
+          // recorded here (the song is swept in the scripted cases instead); the
+          // end beat is where endRace kills
           // the voices and the music.
           if (b.type == "_countdown") traceDec->countdown(b.n, out);
           else if (b.type == "_raceEnd") {

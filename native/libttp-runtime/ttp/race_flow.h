@@ -194,7 +194,7 @@ struct Effect {
   // set-race-flags
   bool paused = false, autoPaused = false, raceEnded = false;
 
-  std::string str;        // screen | to | trackId | biome | item
+  std::string str;        // screen | to | trackId | item
   OptStr forceItem;       // create-session, null when there is no ?item override
 
   Id id, id2;             // item-pickup/item-ready/rocket-impact/remove/stop-car-audio; rekey pairs
@@ -511,7 +511,7 @@ struct CupRace {
 Effects countdownTick(double n, const CupRace* cup = nullptr);
 
 // The "GO!" beat: physics are live and the banner is still up.
-Effects raceStart(const std::string& biome, bool audioReady);
+Effects raceStart(const std::string& trackId, bool audioReady);
 
 // ---- the finish --------------------------------------------------------------
 

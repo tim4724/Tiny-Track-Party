@@ -62,7 +62,7 @@ final class InfoBoardTests: XCTestCase {
         // Down past the end of the list lands on the LAST row, which is the last
         // Software credit — a notice-bearing one, because the tvOS-only packages
         // are appended there (gen-legal.mjs). Walking to it rather than indexing
-        // a row keeps this from rotting every time a song joins a biome pool.
+        // a row keeps this from rotting every time a track gets a new song.
         for _ in 0..<(Self.pressesPastTheEnd) { XCUIRemote.shared.press(.down) }
         XCTAssertTrue(app.staticTexts["Licenses"].exists, "a d-pad move pushed a page")
         // A focused NOTICE row, which is a different view from a focused music

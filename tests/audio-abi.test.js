@@ -15,10 +15,11 @@
 // this pins the arguments.
 //
 // So what is here is the seam and nothing else: the exports the shell binds to,
-// the two lookups its tables come from, the catalogue's one order, and that the
-// bus is inert with nothing bound. A test that raced the native bus against the
-// JS oracle for 3600 frames used to sit at the bottom of this file; it went with
-// decide.js, because it WAS the oracle running. See the note below its slot for
+// the two lookups its tables come from, the catalogue's one order, each track's
+// own song, and that the bus is inert with nothing bound. A test that raced the
+// native bus against the JS oracle for 3600 frames used to sit at the bottom of
+// this file; it went with decide.js, because it WAS the oracle running. See the
+// note below its slot for
 // what that cost and what still covers the same ground.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -128,12 +129,8 @@ test('the song catalogue is one table, in one order', async () => {
   // gallery and the credits test read it), so the two exist at once and this is
   // the only place they meet: index for index, field for field, including the
   // authored LUFS trims that audio-corpus.jsonl records as a level.
-  const { RACE_MUSIC } = await imp('public/display/audio/musicCatalogue.js');
-  const flat = [];
-  for (const biome of ['beach', 'playroom', 'snow', 'grass', 'canyon']) {
-    for (const song of RACE_MUSIC[biome]) flat.push(song);
-  }
-  assert.equal(flat.length, 24, 'twenty-four songs over five pools');
+  const { TRACK_MUSIC } = await imp('public/display/audio/musicCatalogue.js');
+  const flat = Object.values(TRACK_MUSIC);
   flat.forEach((song, i) => {
     const got = JSON.parse(songJson(i));
     assert.ok(got, `song ${i} exists in the wasm`);
@@ -143,6 +140,34 @@ test('the song catalogue is one table, in one order', async () => {
   });
   assert.equal(JSON.parse(songJson(flat.length)), null, 'nothing past the end of the catalogue');
   assert.equal(JSON.parse(songJson(-1)), null, 'nothing below it');
+});
+
+test('every catalogue track races to its own song, and nothing else has one', async () => {
+  const M = await load();
+  const music = M.cwrap('ttp_audio_music', null, ['number', 'string']);
+  const songJson = M.cwrap('ttp_audio_song_json', 'string', ['number']);
+  const { TRACK_MUSIC, MUSIC_FALLBACK } = await imp('public/display/audio/musicCatalogue.js');
+  const { TRACK_LIST } = await imp('public/shared/tracks.js');
+  // The user picked one song per track: a track added to the catalogue without
+  // one would race to the fallback in silence, so the two lists are one list.
+  assert.deepEqual(Object.keys(TRACK_MUSIC), TRACK_LIST.map((t) => t.id),
+    'TRACK_MUSIC keys are the catalogue track ids, in catalogue order');
+  // And the WASM agrees, which is the decision itself rather than its data.
+  drain(M);                       // whatever an earlier test left queued
+  const picked = (track) => {
+    music(1, track);
+    const [cmd] = drain(M);
+    return JSON.parse(songJson(cmd.subject)).file;
+  };
+  for (const [track, song] of Object.entries(TRACK_MUSIC)) {
+    assert.equal(picked(track), song.file, `${track} plays its own song`);
+  }
+  const fallback = new Set(MUSIC_FALLBACK.map((s) => s.file));
+  for (const track of ['gym', 'no-such-track', '']) {
+    assert.ok(fallback.has(picked(track)), `'${track}' has no song of its own and plays a fallback one`);
+  }
+  music(2, null);
+  drain(M);
 });
 
 test('the audio bus is a safe no-op with nothing bound', async () => {
