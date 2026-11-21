@@ -11488,7 +11488,8 @@ def glacier_airstrip(lite=False):
 # muted turquoise. In the sky and blue ramps a crevasse's slot and the
 # tongue's bands read as ultramarine painted on the snow (round 35).
 ICE = {'wall': ('ice', 6), 'slot': ('ice', 24), 'lit': ('ice', 6), 'shade': ('ice', 10),
-       'band_lit': ('ice', 16), 'band_shade': ('ice', 20), 'turned': ('ice', 20), 'water': ('ice', 31)}
+       'band_lit': ('ice', 16), 'band_shade': ('ice', 20), 'block_lit': ('ice', 3), 'turned': ('ice', 20),
+       'water': ('ice', 31)}
 
 def iced(o, part):
     """Paint `o` the ICE tone of `part` (its swatch, at its row)."""
@@ -11497,8 +11498,9 @@ def iced(o, part):
 
 def iced_block(o):
     """A block of ice built sky where it is lit and blue where it turns
-    from the sun (stone(rock=('sky', 'blue')), serac()): ICE's tones."""
-    return iced(o, 'lit' if o['swatch'] == 'sky' else 'turned')
+    from the sun (stone(rock=('sky', 'blue')), serac()): ICE's tones, its
+    lit side whiter than the tongue's (at row 6 a tower read as sea glass)."""
+    return iced(o, 'block_lit' if o['swatch'] == 'sky' else 'turned')
 
 # The straight after the S-bend runs on a causeway a car's height and more over
 # the snow, flying over the run to the line, and nothing stood within six units
