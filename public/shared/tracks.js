@@ -1307,6 +1307,9 @@ export const TRACKS = {
       // the range over the top straight (`land` lays the snowfield and the
       // foothills in front of it)
       { model: 'set-glacier-peaks', u: 0.185, lat: -60 },
+      // the glacier's ice, on the crest of the ridge that carries it down the
+      // valley (`land`, the ridge at u 0.9954): placed in that ridge's frame
+      { model: 'set-glacier-tongue', u: 0.9954, lat: -71.7, yaw: -122 },
       // the range on round the valley's south side, and on the massif east of
       // the east leg
       { model: 'set-glacier-peaks-south', u: 0.661, lat: -70 },
@@ -1340,14 +1343,11 @@ export const TRACKS = {
     // west, low in the valley between two snow ridges, into the middle of the
     // map, ending among the penguins by the long legs; the terminal moraine
     // the ice left lies at the far end of the lap, which the long legs drive
-    // straight at
+    // straight at. The ice is set-glacier-tongue, faces on this ridge's crest:
+    // as the ridge's tint it read as a colour gradient, the 9 u grid's wash.
     land: [
       { kind: 'ridge', u: 0.0491, lat: -126.1, yaw: 151, len: 60, r: 42, h: 28 },
-      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, z: 7, len: 136, r: 15, r1: 9, h: 5.5, h1: 1.2, top: 0.5, tint: 0x74b4f0 },
-      // the bands the ice carries down its lower tongue (ogives)
-      { kind: 'paint', u: 0.9454, lat: -36.57, yaw: 148.5, len: 18, r: 2, w: 4, tint: 0x5c9be6 },
-      { kind: 'paint', u: 0.9709, lat: -53.51, yaw: 148, len: 20, r: 2, w: 4, tint: 0x5c9be6 },
-      { kind: 'paint', u: 0.9954, lat: -70.48, yaw: 148.2, len: 22, r: 2, w: 4, tint: 0x5c9be6 },
+      { kind: 'ridge', u: 0.9954, lat: -71.7, yaw: -122, z: 7, len: 136, r: 15, r1: 9, h: 5.5, h1: 1.2, top: 0.5 },
       { kind: 'ridge', u: 0.0092, lat: -51.4, yaw: -122, x: 8, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.7405, lat: -55.3, yaw: -65, x: -3, z: -5, len: 80, r: 13, h: 11, h1: 3.5, top: 0.15 },
       { kind: 'ridge', u: 0.6671, lat: -18.9, yaw: -172, len: 70, r: 22, h: 4.5, top: 0.55, tint: 0xbcb8c0 },

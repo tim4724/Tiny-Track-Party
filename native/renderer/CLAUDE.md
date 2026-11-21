@@ -783,7 +783,9 @@ to do both:
   undefined.
 - **A form's `tint` is the ground's colour, never a texture**: a multiplier
   per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
-  glacier's ice, a piste); a `paint` is a tint with no shape. The band
+  piste); a `paint` is a tint with no shape. What must break crisply is a
+  piece draped on the form: a glacier's ice as a tint read as a colour
+  gradient (set_prototypes.py `glacier_tongue_build`). The band
   samples it at its own step but comes to the grid's over its last rows, or
   its end shows as a ragged patch of another colour. On a convex slope the grid's chords run under the curve the
   parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
