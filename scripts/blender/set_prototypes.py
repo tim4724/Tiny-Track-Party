@@ -14520,12 +14520,11 @@ def rprop_lobe(r, at, color, scale=(1, 1, 1), yaw=0.0):
     return sphere(r, at, color, subdiv=2, flat=False, scale=scale, yaw=yaw)
 
 def apple(r, at, out, color):
-    """An apple: a ball eight sides round and four high, shaded round, its
-    pole pointing `out` (a Blender vector, off the crown), so its outline has
-    eight sides from the road and from beside the tree alike (twenty faces
-    showed six). 48 triangles: past 64 a far form no longer keeps a shape
-    whole, and an 80-face ball cost the lap's vista a quarter more."""
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=8, ring_count=4, radius=r)
+    """An apple: a ball eight sides round and three high, shaded round, its
+    pole pointing `out` (a Blender vector, off the crown), so seen on the
+    crown its outline has eight sides (twenty faces showed six). 32
+    triangles, every one paid in the orchard's vista: four high cost it 9%."""
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=8, ring_count=3, radius=r)
     o = bpy.context.active_object
     o.location = P(*at)
     o.rotation_mode = 'QUATERNION'
