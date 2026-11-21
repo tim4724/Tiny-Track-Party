@@ -165,8 +165,10 @@ function cspHeader(frameAncestors) {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     // RELAY_URL (env) widens connect-src to exactly the configured relay —
-    // the E2E suite points pages at its local stub this way.
-    "connect-src 'self' wss://ws.paperballoon.games https://ws.paperballoon.games" + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE : ''),
+    // the E2E suite points pages at its local stub this way. Its http(s) form
+    // too, for the controller's room check: a ws: source doesn't cover http:.
+    "connect-src 'self' wss://ws.paperballoon.games https://ws.paperballoon.games"
+      + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE + ' ' + RELAY_URL_OVERRIDE.replace(/^ws/, 'http') : ''),
     "img-src 'self' data:",
     "object-src 'none'",
     "frame-src 'self'",

@@ -34,6 +34,7 @@ import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation, keyboardUp } from './orientation.js';
 import { initPressPaint } from './press.js';
+import { offerPlatform, showAppOffer, dropAppOffer } from './appOffer.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
@@ -158,6 +159,9 @@ const net = new ControllerNet({
     const inRoom = currentScreen && currentScreen !== 'name';
     const { status, conn } = linkCopy(state, info);
     if (status != null) setStatus(status);
+    // A refused join (checkRoom's answer included) or a closed room: drop the
+    // offer, so the name screen's status line says why.
+    if (state === 'error' || state === 'room_closed') dropAppOffer();
     if (inRoom && conn) showConn(conn);
   },
   onMessage: handleMessage,
@@ -851,7 +855,10 @@ installBackHook(() => {
 
 // Boot. In the shell the launcher owns the name (§1): skip the name screen and
 // join straight away under it. Otherwise land on the name screen and wait for
-// the player to pick a name.
+// the player to pick a name. Either way, ask the relay first whether the room is
+// there (Net.checkRoom); a ?scenario= page's fake code is held by no relay.
+const isScenario = !!new URLSearchParams(location.search).get('scenario');
+if (!isScenario) net.checkRoom();
 if (shellName) {
   // Never flash the name screen (it's the default-visible section): hide it up
   // front and go straight to joining. The launcher's own joining cover floats
@@ -862,9 +869,13 @@ if (shellName) {
   // A ?scenario= page inside the launcher (its store-screenshot test) lays out
   // its screen from fake data below. Joining would race that harness import to
   // the relay's "Room not found" for the fake code, and end the session.
-  if (!new URLSearchParams(location.search).get('scenario')) joinRace(shellName);
+  if (!isScenario) joinRace(shellName);
 } else {
   show('name');
+  // A phone browser is offered the app first (appOffer.js). A launcher too old
+  // to name the player lands here as well, and is already the app.
+  const offerOs = inShell || isScenario ? null : offerPlatform(navigator.userAgent);
+  if (offerOs) showAppOffer(offerOs, buzz);
 }
 window.__net = net; window.__wakeLock = wakeLock; // debug/test handles (parity with the display)
 

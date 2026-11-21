@@ -33,8 +33,9 @@ export function initOrientation({ inShell }) {
   const tryFullscreenLandscape = async (e) => {
     // Never on a tap into a text field: the keyboard is about to open, and
     // going fullscreen under it makes Chrome either drop it or lose its pan
-    // to the field. Never on the close button: it is the way OUT.
-    if (e.target.closest('input, textarea, .close-btn')) return;
+    // to the field. Never on the close button: it is the way OUT. Never on the
+    // app offer's links either: the page is leaving for the app or the store.
+    if (e.target.closest('input, textarea, .close-btn, .app-link')) return;
     if (busy || document.fullscreenElement) return;
     busy = true;
     try {

@@ -27,6 +27,7 @@
 // relay's room teardown: the room is deleted and every member socket closed
 // with 4001 (PartyConnection surfaces that as onClose {roomClosed}, terminal).
 
+const http = require('http');
 const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.RELAY_PORT || 4201);
@@ -49,7 +50,17 @@ function newCode() {
   }
 }
 
-const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT }, () => {
+// GET /room/:code as the real relay answers the controller's room check: 404
+// for an unknown code, else occupancy, CORS-open. `clients` counts slots, the
+// same cap this stub's join enforces.
+const server = http.createServer((req, res) => {
+  const m = /^\/room\/([^/?]+)/.exec(req.url || '');
+  const r = m && rooms.get(decodeURIComponent(m[1]));
+  res.writeHead(r ? 200 : 404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(r ? { clients: r.slots.size, maxClients: r.maxClients } : { error: 'Room not found' }));
+});
+const wss = new WebSocketServer({ server });
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`[relay-stub] listening on ws://127.0.0.1:${PORT}`);
 });
 

@@ -33,7 +33,8 @@ export function initPressPaint() {
   // so a scrolled strip never leaves a tile painted down under the finger.
   document.addEventListener('pointerdown', (e) => {
     release();
-    const btn = e.target.closest('button:not(:disabled)');
+    // The app offer's links are pressed like buttons, so they paint like them.
+    const btn = e.target.closest('button:not(:disabled), a.app-link');
     if (!btn || btn.closest('.drive-controls')) return;
     _held = btn;
     btn.classList.add(HELD);

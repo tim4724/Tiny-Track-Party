@@ -58,8 +58,31 @@
     <form id="name-form">
       <input id="name-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off" />
       <button id="join-btn" type="submit" class="btn btn--brand">Join race</button>
+      <!-- The app offer's second stage (appOffer.js): once the player picked the
+           browser, the app stays one quiet row under Join. -->
+      <a id="app-nudge" class="app-nudge app-link">
+        <img class="app-nudge__icon" src="/controller/paperballoon-controller.png?v=__APP_V__" alt="" width="38" height="38" loading="lazy" />
+        <span class="app-nudge__title">Get the app</span>
+        <svg class="app-nudge__chev" viewBox="0 0 10 16" aria-hidden="true" focusable="false"><path d="M2.5 2l5 6-5 6"/></svg>
+      </a>
     </form>
     <div id="name-status"></div>
+    <!-- The app offer (appOffer.js): a sheet along the bottom edge while <html>
+         has .app-offer-up, standing in for the form until the player picks. -->
+    <div id="app-offer" class="app-offer" role="dialog" aria-labelledby="app-offer-name">
+      <div class="app-offer__app">
+        <img class="app-offer__icon" src="/controller/paperballoon-controller.png?v=__APP_V__" alt="" width="76" height="76" loading="lazy" />
+        <div>
+          <h2 id="app-offer-name" class="app-offer__name">Paper Balloon Controller</h2>
+          <p class="app-offer__line">Plays best in the app</p>
+          <p class="app-offer__size"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Under 5 MB</p>
+        </div>
+      </div>
+      <div class="app-offer__actions">
+        <a id="app-offer-link" class="btn btn--brand app-link">Get the app</a>
+        <button id="app-offer-browser" type="button" class="app-offer__browser">Play in the browser</button>
+      </div>
+    </div>
   </section>
 
   <!-- Lobby — who you are, your car, the track (the shared display owns the
