@@ -26973,6 +26973,7 @@ def windup_robot(x, z, body, tag):
     box((0.26, 0.26, 0.26), (x, 3.18, z), 0xe66a5a)
     windup_key(x - 0.45, 1.4, z, tag)
 
+@rounded_over()
 def windup_duck(x, z, tag):
     """A wind-up duck a little over a toy car tall, facing +X, in blocks as
     the cars are: its body, its head on it, an orange bill and feet, its
@@ -28509,7 +28510,7 @@ def fixprop_ship_secs():
         out.append((z, through(z, 1) * d, through(z, 2), through(z, 3) * d, through(z, 4), d, top(z)))
     return tuple(out)
 
-def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
+def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False, bare=0):
     """A two-masted ship, bare-poled, bow to local +Z turned by `yaw`, `S`
     her scale and `stretch` her length over the plain hull's: a dark bottom
     and topsides in two strakes (heeled_hull) on fair sections
@@ -28521,7 +28522,8 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
     with ratlines between them (a solid plate there read as a tent pitched
     on deck). `ports` cuts three gun ports a side. Returns her frame
     K(x, y, z): the rig is the piece's own (sails set or furled, her
-    colours). LITE: no wale, ratlines, wheel or break rail."""
+    colours). `bare` (1 or -1) leaves that side without shrouds. LITE: no
+    wale, ratlines, wheel or break rail."""
     x0, y0, z0 = at
     wood, plank, dark = 'brown', 'tan', 0x38383d
     def K(x, y, z):
@@ -28585,7 +28587,7 @@ def own_ship(at, yaw, S, topsides, trim, stretch=1.0, ports=False):
             top = foot + (head - foot) * 0.6
             b((0.9, 0.16, 0.9), 0.0, top, z, wood)                                       # the top
             hb = 2.25 if z > -2.3 else 1.9
-            for sx in (-1, 1):                                                           # the shrouds, and their ratlines
+            for sx in (s_ for s_ in (-1, 1) if s_ != bare):                              # the shrouds, and their ratlines (none on her `bare` side)
                 head, legs = K(sx * 0.2, top, z), [K(sx * hb, foot + 0.1, z + dz) for dz in ((-0.95, 0.35) if z > -2.3 else (-0.6, 0.6))]
                 for leg in legs:
                     beam(leg, head, 0.11 * S, 'bark')
@@ -28680,7 +28682,7 @@ def pirate_ship():
     S, YAW, black = 0.65, 0.12, 0x38383d
     LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; each sail hangs before its mast, the road's side
     with animated('anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2', (0.0, 0.0, 0.0), yaw=YAW):
-        K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True)
+        K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True, bare=1)   # no shrouds on the road's side: they crossed the skull
         (fore, _, _), (main, _, _) = OWN_SHIP_MASTS
         own_sail(K, S, YAW, fore, 3.5, 6.3, 1.8, black, belly=0.45, brace=BRACE, stretch=LONG)   # the fore course and topsail
         own_sail(K, S, YAW, fore, 7.2, 8.5, 1.3, black, belly=0.45, brace=BRACE, stretch=LONG)
