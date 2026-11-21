@@ -27294,24 +27294,61 @@ def gored(prof, n, colors, per=2):
 
 @piece(1.0)
 def board_top():
-    # A tin top, about 18 cm across, spinning on its point: a squat lens of
-    # rainbow bands below its rim, a dome of red and cream gores above it and
-    # a knob, no pump. It PRECESSES as the helix's tops do: it spins slowly
-    # about its own axis, leaned a little, and that axis walks slowly round
-    # the upright on its point.
+    # A tin humming top, about 18 cm across and as tall, spinning on its
+    # point: a deep cone of orange and yellow bands up to a red belly rim, a
+    # low dome of green and cream gores, and its pump, a grey rod up out of
+    # the dome to a round purple handle: from above, a top and not a
+    # parasol. It PRECESSES: it spins slowly about its own axis, leaned well
+    # off upright, and that axis walks round the upright on its point.
+    # (Helix's humming top is red, yellow and blue, its pump a screw.)
     segs = 16
-    with animated('anim_spin:w=0.4#lean', (0, 0, 0)):
-        cyl(0.04, 0.5, (0, 0, 0), 0x38383d, r2=0.42, segs=10, smooth=True, stem=True)   # the point
-        with animated('anim_spin:w=1.5#body', (0, 0, 0), tilt=0.06):
-            bands = ((0.42, 0.5), (0.85, 0.75), (1.3, 1.0), (1.7, 1.25), (1.98, 1.45))
-            for (r0, y0), (r1, y1), c in zip(bands, bands[1:], (0xe66a5a, 0xff7e44, 0xf2c14e, 0x6cbf6c)):
+    with animated('anim_spin:w=0.5#lean', (0, 0, 0)):
+        cyl(0.04, 0.6, (0, 0, 0), 0x38383d, r2=0.4, segs=10, smooth=True, stem=True)   # the point
+        with animated('anim_spin:w=1.4#body', (0, 0, 0), tilt=0.13):
+            bands = ((0.4, 0.6), (0.85, 1.0), (1.3, 1.4), (1.7, 1.8), (2.0, 2.15))
+            for (r0, y0), (r1, y1), c in zip(bands, bands[1:], (0xff7e44, 0xf2c14e, 0xff7e44, 0xf2c14e)):
                 cyl(r0, y1 - y0, (0, y0, 0), c, r2=r1, segs=segs, smooth=True)
-            cyl(2.06, 0.28, (0, 1.45, 0), 0x5a8fd8, segs=segs, smooth=True)            # the rim
-            n = 6 if LITE else 8
-            gored([(1.98, 1.73), (1.86, 2.0), (1.55, 2.3), (1.05, 2.55), (0.5, 2.7)], n, (0xe66a5a, 0xfdf4de), per=1 if LITE else 2)
-            cyl(0.52, 0.12, (0, 2.66, 0), 0x5a8fd8, r2=0.36, segs=10, smooth=True)     # the collar
-            cyl(0.16, 0.4, (0, 2.74, 0), 0x38383d, segs=8, smooth=True)                # the knob's stem
-            sphere(0.3, (0, 3.2, 0), 0xe66a5a, subdiv=2, flat=False)
+            cyl(2.1, 0.3, (0, 2.15, 0), 0xe66a5a, segs=segs, smooth=True)                # the belly's rim
+            gored([(2.0, 2.45), (1.8, 2.75), (1.35, 3.0), (0.7, 3.16)], 6 if LITE else 8, (0x6cbf6c, 0xfdf4de),
+                  per=1 if LITE else 2)
+            cyl(0.72, 0.14, (0, 3.1, 0), 0xe66a5a, r2=0.45, segs=12, smooth=True)          # the collar
+            cyl(0.13, 1.75, (0, 3.2, 0), 0x9aa1b4, segs=8, smooth=True, stem=True)         # the pump's rod
+            cyl(0.6, 0.22, (0, 4.9, 0), 0xa878e8, segs=12, smooth=True)                    # its round handle
+            cyl(0.6, 0.18, (0, 5.12, 0), 0xa878e8, r2=0.3, segs=12, smooth=True)
+
+def swept_beam(pts, w, h, color):
+    """A beam `w` across and `h` deep swept along glTF `pts` (a rocker's bow,
+    in a plane with the up axis): its section a rectangle with its corners
+    cut, shaded round along its length and over its edges, its ends square."""
+    a, b = w / 2, h / 2
+    c = 0.35 * min(a, b)
+    prof = [(a, b - c), (a - c, b), (c - a, b), (-a, b - c), (-a, c - b), (c - a, -b), (a - c, -b), (a, c - b)]
+    n, m = len(pts), len(prof)
+    rings, tans = [], []
+    for i, p in enumerate(pts):
+        q0, q1 = pts[max(i - 1, 0)], pts[min(i + 1, n - 1)]
+        t = [q1[j] - q0[j] for j in range(3)]
+        l = math.sqrt(sum(v * v for v in t))
+        t = [v / l for v in t]
+        sd = (-t[2], 0.0, t[0])                           # across: t x up
+        l = math.hypot(sd[0], sd[2])
+        sd = (sd[0] / l, 0.0, sd[2] / l)
+        up = (sd[1] * t[2] - sd[2] * t[1], sd[2] * t[0] - sd[0] * t[2], sd[0] * t[1] - sd[1] * t[0])
+        rings.append([tuple(p[j] + sd[j] * x + up[j] * y for j in range(3)) for x, y in prof])
+        tans.append(t)
+    verts = [v for r in rings for v in r]
+    faces, wants = [], []
+    for i in range(n - 1):
+        mid = [(pts[i][j] + pts[i + 1][j]) / 2 for j in range(3)]
+        for k in range(m):
+            f = (i * m + k, i * m + (k + 1) % m, (i + 1) * m + (k + 1) % m, (i + 1) * m + k)
+            faces.append(f)
+            wants.append([sum(verts[q][j] for q in f) / 4 - mid[j] for j in range(3)])
+    o = gate_faces(verts, faces, wants, color, 'beam')
+    for f in o.data.polygons:
+        f.use_smooth = True
+    for i, sg in ((0, -1), (n - 1, 1)):                  # the ends
+        gate_faces(rings[i], [tuple(range(m))], [[sg * v for v in tans[i]]], color, 'beam_end')
 
 @piece(1.0)
 def board_rocking_horse():
@@ -27324,15 +27361,10 @@ def board_rocking_horse():
         return RA - math.sqrt(RA * RA - z * z)
     GREY, DARK, RED, GOLD, CREAMC = 0x9aa1b4, 0x38383d, 0xe66a5a, 0xf2c14e, 0xfdf4de
     with animated('anim_sway:a=x:d=5:p=3.4#rock', (0, RA, 0)):
+        n = 12 if LITE else 20
+        for sx in (-1, 1):                                                           # the rockers, bent smooth
+            swept_beam([(sx * 0.95, bow(z) + 0.22, z) for z in (-HALF + 2 * HALF * i / n for i in range(n + 1))], 0.3, 0.44, RED)
         with rounded_over():
-            n = 6 if LITE else 8
-            for sx in (-1, 1):                                                       # the rockers
-                pts = [(sx * 0.95, bow(z) + 0.22, z) for z in (-HALF + 2 * HALF * i / n for i in range(n + 1))]
-                for a, b in zip(pts, pts[1:]):
-                    d = [b[i] - a[i] for i in range(3)]
-                    l = math.sqrt(sum(c * c for c in d))
-                    e = [c / l * 0.08 for c in d]
-                    bar((a[0], a[1] - e[1], a[2] - e[2]), (b[0], b[1] + e[1], b[2] + e[2]), 0.3, 0.44, RED)
             for z in (-2.9, 0.0, 2.9):                                               # the slats between them
                 box((2.0, 0.2, 0.5), (0, bow(z) + 0.42, z), CREAMC)
             for sz, lean in ((1, 0.35), (-1, -0.35)):                                # the legs, splayed to the bows
@@ -27367,18 +27399,20 @@ def board_rocking_horse():
 
 @piece(1.0)
 def board_ring_stack():
-    # A stacking ring tower about 30 cm high: six fat rings, the biggest at
-    # the bottom, red through to purple on a wooden peg standing in a round
-    # blue base, a yellow ball on its top.
-    cyl(1.75, 0.5, (0, 0, 0), 0x5a8fd8, r2=1.55, segs=16, smooth=True)
-    cyl(0.3, 4.6, (0, 0.5, 0), 0xc8955a, segs=10, smooth=True)
-    y = 0.5
-    for k, c in enumerate((0xe66a5a, 0xff7e44, 0xf2c14e, 0x6cbf6c, 0x339cf2, 0xa878e8)):
-        R, r = 1.38 - 0.13 * k, 0.36 - 0.012 * k
-        torus(R, r, (0, y + r, 0), c, segs=16, minor=6 if LITE else 8)
+    # A wooden stacking toy about 25 cm high: a turned beech base and peg,
+    # the peg's top rounded off, and six flat wooden rings on it, the
+    # biggest at the bottom, in the room's own colours.
+    WOODC = 0xc8955a
+    cyl(2.1, 0.5, (0, 0, 0), WOODC, r2=1.85, segs=16, smooth=True)                 # the base, its edge turned
+    cyl(0.36, 4.1, (0, 0.5, 0), WOODC, segs=10, smooth=True)                         # the peg
+    cyl(0.36, 0.26, (0, 4.6, 0), WOODC, r2=0.14, segs=10, smooth=True)               # its top, rounded off
+    y, flat = 0.5, 0.72
+    for k, c in enumerate((0x5a8fd8, 0xe66a5a, 0xf2c14e, 0x6cbf6c, 0xa878e8, 0xff7e44)):
+        R, r = 1.7 - 0.15 * k, 0.44
+        o = torus(R, r, (0, y + r * flat, 0), c, segs=16, minor=6 if LITE else 8)
+        o.scale[2] = flat                                 # flat-sided, as a wooden ring is turned
         bpy.ops.object.shade_smooth()
-        y += 2 * r
-    sphere(0.6, (0, y + 0.5, 0), 0xf2c14e, subdiv=2 if LITE else 3, flat=False)
+        y += 2 * r * flat
 
 def chess_turned(x, z, prof, color, segs=16):
     """A chessman's turned body at (x, z): `prof` [(r_bottom, r_top, h)]
@@ -27391,46 +27425,49 @@ def chess_turned(x, z, prof, color, segs=16):
 
 @piece(1.0)
 def board_chess():
-    # Three big chessmen (a king about 30 cm) left on the board: the cream
-    # king and the dark knight standing, the knight's head in profile to
-    # the board's middle, and a cream pawn knocked over on its side.
+    # Three big chessmen (a king about 30 cm) where a line of dominoes ran
+    # into them (board_dominoes, set to end here): the cream pawn knocked
+    # over at the piece's middle, its foot to the dominoes coming from -Z,
+    # its head to +Z, the cream king and the dark knight standing either
+    # side of it, the knight looking across at the king.
     CREAMC, DARK = 0xfdf4de, 0x38383d
-    top = chess_turned(-1.5, 0.0, ((1.2, 1.15, 0.3), (1.15, 0.92, 0.25), (0.62, 0.44, 2.3), (0.8, 0.8, 0.18),
-                                   (0.44, 0.52, 0.22), (0.52, 0.86, 0.8), (0.86, 0.62, 0.28)), CREAMC)
+    kx, kz = -2.3, 1.6
+    top = chess_turned(kx, kz, ((1.2, 1.15, 0.3), (1.15, 0.92, 0.25), (0.62, 0.44, 2.3), (0.8, 0.8, 0.18),
+                                (0.44, 0.52, 0.22), (0.52, 0.86, 0.8), (0.86, 0.62, 0.28)), CREAMC)
     with rounded_over():
-        box((0.26, 0.95, 0.26), (-1.5, top + 0.47, 0.0), CREAMC)                      # the cross
-        box((0.7, 0.24, 0.26), (-1.5, top + 0.6, 0.0), CREAMC)
-    y = chess_turned(1.7, -0.6, ((1.1, 1.05, 0.3), (1.05, 0.85, 0.25), (0.7, 0.78, 0.18)), DARK)
-    with rounded_over():                                                               # the knight's head, facing +X
-        box((0.8, 2.0, 1.0), (1.55, y + 0.95, -0.6), DARK, roll=0.25)                  # its neck
-        box((0.8, 0.85, 1.75), (2.05, y + 1.95, -0.6), DARK, yaw=math.pi / 2, pitch=-0.35)   # its head and muzzle
+        box((0.26, 0.95, 0.26), (kx, top + 0.47, kz), CREAMC)                          # the cross
+        box((0.7, 0.24, 0.26), (kx, top + 0.6, kz), CREAMC)
+    nx, nz, f = 2.4, 1.0, -1.0                            # the knight, its head to -X
+    y = chess_turned(nx, nz, ((1.1, 1.05, 0.3), (1.05, 0.85, 0.25), (0.7, 0.78, 0.18)), DARK)
+    with rounded_over():
+        box((0.8, 2.0, 1.0), (nx - 0.15 * f, y + 0.95, nz), DARK, roll=0.25 * f)          # its neck
+        box((0.8, 0.85, 1.75), (nx + 0.35 * f, y + 1.95, nz), DARK, yaw=f * math.pi / 2, pitch=-0.35)   # head and muzzle
         for sz in (-1, 1):
-            box((0.16, 0.45, 0.22), (1.5, y + 2.6, -0.6 + sz * 0.22), DARK, roll=0.25)    # ears
-            box((0.08, 0.16, 0.16), (2.12, y + 2.15, -0.6 + sz * 0.41), CREAMC)        # eyes
-        box((0.3, 1.9, 0.5), (1.12, y + 1.25, -0.6), DARK, roll=0.25)                  # the mane's ridge
-    # the pawn, knocked over: built standing, then laid on its side, its head
-    # to +X, so its base's rim and its ball both rest on the board
+            box((0.16, 0.45, 0.22), (nx - 0.2 * f, y + 2.6, nz + sz * 0.22), DARK, roll=0.25 * f)   # ears
+            box((0.08, 0.16, 0.16), (nx + 0.42 * f, y + 2.15, nz + sz * 0.41), CREAMC)      # eyes
+        box((0.3, 1.9, 0.5), (nx - 0.58 * f, y + 1.25, nz), DARK, roll=0.25 * f)          # the mane's ridge
+    # the pawn: built standing, then laid along +Z so its base's rim and its
+    # ball both rest on the board
     before = set(bpy.context.scene.objects)
     h = chess_turned(0.0, 0.0, ((0.9, 0.86, 0.24), (0.86, 0.68, 0.2), (0.6, 0.34, 1.25), (0.56, 0.56, 0.14)), CREAMC, segs=14)
     sphere(0.55, (0, h + 0.45, 0), CREAMC, subdiv=2, flat=False)
     lb, d = h + 0.45, 0.0
     for _ in range(20):                                  # its rim as low as its ball: 0.9 cos d = lb sin d + 0.55
         d = math.asin(max(0.0, min(1.0, (0.9 * math.cos(d) - 0.55) / lb)))
-    lay = Matrix.Translation(P(0.3, 0.0, 2.4)) @ Matrix.Rotation(-0.5, 4, 'Z') @ Matrix.Translation(P(0, 0.9 * math.cos(d), 0)) \
-        @ Matrix.Rotation(math.pi / 2 + d, 4, 'Y')
+    lay = Matrix.Translation(P(0, 0.9 * math.cos(d), 0)) @ Matrix.Rotation(math.pi / 2 + d, 4, 'X')
     bpy.context.view_layer.update()
     for o in bpy.context.scene.objects:
         if o not in before and o.parent is None:
             o.matrix_world = lay @ o.matrix_world
 
 def domino_path(n, step):
-    """Where a snaking line of `n` dominoes stands, `step` apart: an S across
-    the board (level at its ends), straight for its last few. Answers
-    [(x, z, heading)]."""
+    """Where a snaking line of `n` dominoes stands, `step` apart from z -13:
+    an S across the board (level at its ends), straight along +Z for its
+    last few. Answers [(x, z, heading)]."""
     pts = []
-    for i in range(600):
-        t = i / 599
-        pts.append((3.0 * math.sin(2 * math.pi * min(t, 0.72) / 0.72) ** 3, -13.0 + 27.0 * t))
+    for i in range(1000):
+        z = 34.0 * i / 999
+        pts.append((-3.0 * math.sin(2 * math.pi * min(z, 15.0) / 15.0) ** 3, -13.0 + z))
     out, run = [], 0.0
     for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
         seg = math.hypot(x1 - x0, z1 - z0)
@@ -27443,10 +27480,12 @@ def domino_path(n, step):
 
 @piece(1.0)
 def board_dominoes():
-    # A line of big dominoes (about 13 cm tall) set out snaking across the
-    # board, cream with dark pips, the last few already fallen: the very
-    # last flat on the board, the ones before it leant each on the next.
-    W, H, T, STEP, N, FALL = 1.2, 2.4, 0.42, 1.5, 18, 4
+    # A line of giant wooden dominoes (about 18 cm tall) set out snaking
+    # across the board, cream with dark pips, the last few already fallen:
+    # the very last flat on the board, the ones before it leant each on the
+    # next (its far end is where board_chess's pawn lies knocked over).
+    W, H, T, STEP, N, FALL = 1.6, 3.2, 0.56, 2.0, 18, 4
+    k = W / 1.2
     line = domino_path(N, STEP)
     rnd = [((3 * i + 1) % 7, (5 * i + 4) % 7) for i in range(N)]
     lean = [0.0] * N
@@ -27474,11 +27513,11 @@ def board_dominoes():
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         a, b = rnd[i]
         for face in ('+z', '-z'):
-            face_rect(o, face, T / 2 + 0.012, -W * 0.36, W * 0.36, -0.035, 0.035, 0x38383d)   # the line between its halves
+            face_rect(o, face, T / 2 + 0.012, -W * 0.36, W * 0.36, -0.035 * k, 0.035 * k, 0x38383d)   # the line between its halves
             for half, n in ((-1, a), (1, b)):
                 for u, v in PIP.get(n, ()):
-                    p = 0.1
-                    face_rect(o, face, T / 2 + 0.012, u * 0.3 - p, u * 0.3 + p, half * 0.6 + v * 0.3 - p, half * 0.6 + v * 0.3 + p, 0x38383d)
+                    p, q, c = 0.1 * k, 0.3 * k, half * 0.6 * k
+                    face_rect(o, face, T / 2 + 0.012, u * q - p, u * q + p, c + v * q - p, c + v * q + p, 0x38383d)
     merge_paint()
 
 @piece(1.0)
@@ -27497,8 +27536,8 @@ def board_teddy():
         sphere(1.0, (sx * 0.44, 4.45, 1.12), DARK, subdiv=1, scale=(0.13, 0.15, 0.1), flat=False)   # eyes
         sphere(1.0, (sx * 0.86, 5.08, 0.0), BRN, subdiv=2, scale=(0.46, 0.46, 0.26), flat=False)  # ears
         sphere(1.0, (sx * 0.86, 5.05, 0.17), TAN, subdiv=1, scale=(0.28, 0.28, 0.12), flat=False)
-        sphere(1.0, (sx * 0.85, 0.6, 1.15), BRN, subdiv=2, scale=(0.64, 0.6, 1.1), flat=False)    # legs, out before it
-        sphere(1.0, (sx * 0.85, 0.66, 2.2), TAN, subdiv=1, scale=(0.46, 0.46, 0.1), flat=False)   # foot pads
+        sphere(1.0, (sx * 0.85, 0.6, 1.15), BRN, subdiv=3, scale=(0.64, 0.6, 1.1), flat=False)    # legs, out before it
+        sphere(1.0, (sx * 0.85, 0.66, 2.2), TAN, subdiv=2, scale=(0.46, 0.46, 0.1), flat=False)   # foot pads
         arm = sphere(1.0, (sx * 1.32, 2.15, 0.7), BRN, subdiv=2, scale=(0.44, 1.0, 0.44), flat=False)
         arm.rotation_euler = (-0.75, sx * -0.25, 0.0)                                              # down to its knees
     with rounded_over():
@@ -27535,8 +27574,8 @@ def board_pull_snake():
     hx, hz = at(N)
     hd = math.atan2(hx - at(N - 1)[0], hz - at(N - 1)[1])
     fx, fz = math.sin(hd), math.cos(hd)
-    wheels(hx + fx * 0.5, hz + fz * 0.5, hd, 0.575)
     with animated('anim_watch:r=34:d=50#head', (hx, 0.9, hz), yaw=hd - math.pi / 2):
+        wheels(hx + fx * 0.5, hz + fz * 0.5, hd, 0.575)                                  # its wheels turn with it
         with rounded_over():
             box((1.15, 1.0, 1.5), (hx + fx * 0.6, R + 0.6, hz + fz * 0.6), 0x6cbf6c, yaw=hd)   # the head
             for s in (-1, 1):
