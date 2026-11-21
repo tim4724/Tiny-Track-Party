@@ -2355,7 +2355,17 @@ export const TRACKS = {
       { model: 'set-game-pawns', u: 0.932, lat: 5.6 },
       { model: 'set-snake-humps-purple', u: 0.975, lat: 7.5 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
-      { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 }
+      { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 },
+      // The toy box's classics left out on the board's middle (each its own
+      // piece, to keep or drop): set from the grid straight's frame, so lat
+      // is minus the board's x and u its z.
+      { model: 'set-board-top', u: 0.025335, lat: -10, yaw: 0 },
+      { model: 'set-board-rocking-horse', u: 0.078951, lat: -16, yaw: -90 },
+      { model: 'set-board-teddy', u: 0.121281, lat: -14, yaw: -163 },
+      { model: 'set-board-ring-stack', u: 0.138212, lat: -30, yaw: 0 },
+      { model: 'set-board-chess', u: 0.132565, lat: -44, yaw: -140 },
+      { model: 'set-board-pull-snake', u: 0.983007, lat: -28, yaw: -100 },
+      { model: 'set-board-dominoes', u: 0.036623, lat: -31, yaw: 40 }
     ],
     // The dive is the board's snake, from the top deck down to the board.
     // The climbs stay plain road: painted as the board's ladders, their
