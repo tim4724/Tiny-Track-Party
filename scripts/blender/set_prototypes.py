@@ -28681,8 +28681,8 @@ def pirate_ship():
         K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True)
         own_sail(K, S, YAW, 0.67, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG)   # (under her top: braced, a yard swings clear of it)
         own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.55, brace=BRACE, stretch=LONG)
-        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=BRACE, stretch=LONG)
-        poly([K(0.0, 4.5, 5.15), K(0.0, 3.3, 1.3), K(0.0, 8.6, 0.85)], [(0, 1, 2)], black)   # her jib
+        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=0.3, stretch=LONG)   # (squarer: braced as far, it swung out past her stern)
+        poly([K(0.0, 4.5, 5.15), K(0.0, 3.4, 2.3), K(0.0, 6.6, 2.3)], [(0, 1, 2)], black)   # her jib, clear of the skull
         for (z, _, head), k, p in zip(OWN_SHIP_MASTS, (0.55, 0.45), ('2.2#mast', '2.4#mizzen')):   # her colours at each masthead
             fx, fy, fz = K(0.0, head, z)
             own_jolly_roger((fx, fy - 0.3, fz), YAW + math.pi / 2, k, 'anim_flutter:p=' + p)
