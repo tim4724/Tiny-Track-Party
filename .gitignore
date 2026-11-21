@@ -15,6 +15,9 @@ test-results/
 public/assets/audio/_stk-audition/
 public/assets/audio/_engine-audition/
 public/assets/audio/_music-pool/
+# Per-track music candidates under audition (gallery-music-draft.json lists
+# their download URLs); a promoted one moves up into music/ with SOURCES.json.
+public/assets/audio/music/candidates/
 # Re-fetchable third-party bytes, each behind a URL + sha256 and a script that
 # rebuilds it. They are a cache, not a source:
 #   music-masters/ the 256-320 kbps incompetech downloads the shipped VBR files
