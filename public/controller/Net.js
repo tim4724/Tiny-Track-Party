@@ -58,6 +58,7 @@ function deriveClaim() {
   const n = Number(raw);
   return Number.isInteger(n) && n >= 0 ? n : null;
 }
+// { id, fresh }: fresh when this device holds no id for the room yet.
 function loadClientId(roomCode) {
   const key = 'clientId_' + roomCode;
   try {
@@ -66,11 +67,13 @@ function loadClientId(roomCode) {
       const k = localStorage.key(i);
       if (k && k.startsWith('clientId_') && k !== key) localStorage.removeItem(k);
     }
-    let id = localStorage.getItem(key);
-    if (!id) { id = 'tc-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(key, id); }
-    return id;
+    const stored = localStorage.getItem(key);
+    if (stored) return { id: stored, fresh: false };
+    const id = 'tc-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(key, id);
+    return { id, fresh: true };
   } catch (_) {
-    return 'tc-' + Math.random().toString(36).slice(2);
+    return { id: 'tc-' + Math.random().toString(36).slice(2), fresh: true };
   }
 }
 
@@ -83,8 +86,13 @@ export class ControllerNet extends GameNet {
     this.onRtt = opts.onRtt || (() => {});       // (halfMs, viaFastlane); halfMs < 0 = no signal
     this.roomCode = deriveRoomCode();
     this.instance = deriveInstance();
-    this.clientId = loadClientId(this.roomCode);
+    const { id, fresh } = loadClientId(this.roomCode);
+    this.clientId = id;
     this.rejoinToken = deriveClaim();
+    // Only a newcomer is warned of a full room: a returning clientId may still
+    // swap into its live slot, which the relay allows past the cap.
+    this._newcomer = fresh && this.rejoinToken == null;
+    this._roomGone = false;   // checkRoom found the room gone: a dial could only bounce
     this.peerIndex = null;
     this.playerName = '';
     this._pingTimer = null;
@@ -105,7 +113,38 @@ export class ControllerNet extends GameNet {
     this._terminal = false;
   }
 
+  // Ask the relay whether the room is there (GET /room/:code), so a gone or full
+  // room says so before the player types a name. Answers through onStatus as the
+  // relay's own refusal of a join would, so the name screen and the shell treat
+  // it exactly like one.
+  //
+  // A pin (#<instance>) to a relay machine that no longer exists gets Fly's bare
+  // 400 without CORS headers, seen here as a network error just like a real
+  // blip, and the socket fails silently too. So a failed check asks once more
+  // without the pin: the relay routes a bare code to whichever machine holds
+  // it and answers a gone room with a readable 404. No answer at all is no
+  // verdict; the join reports for itself.
+  checkRoom() {
+    const url = RELAY_URL.replace(/^ws/, 'http') + '/room/' + enc(this.roomCode);
+    const ask = fetch(this.instance ? url + '?instance=' + enc(this.instance) : url);
+    return (this.instance ? ask.catch(() => fetch(url)) : ask)
+      .then((res) => {
+        if (res.status === 404) return 'Room not found';
+        if (!res.ok || !this._newcomer) return null;
+        return res.json().then((info) => (info.clients >= info.maxClients ? 'Room is full' : null), () => null);
+      }, () => null)
+      .then((refusal) => {
+        if (!refusal || this.peerIndex != null) return;   // joined: the room was there
+        if (refusal === 'Room not found') {
+          this._roomGone = true;
+          this._dropLink();   // a dial in flight could only bounce
+        }
+        this.onStatus('error', refusal);
+      });
+  }
+
   connect(playerName) {
+    if (this._roomGone) { this.onStatus('error', 'Room not found'); return; }
     this.playerName = playerName || this.playerName;
     this._suspended = false;
     this._terminal = false;   // a fresh dial: whatever finished the last socket no longer applies
