@@ -997,7 +997,7 @@ def fig_person(at, yaw=0.0, pose='stand', shirt=0xcf534f, legs=0x4f5260, hair=No
     return parts
 
 def r29edge_round(o):
-    """A person's block (or a cannonball's) rounded over at every edge,
+    """A person's block (or a toy knight's) rounded over at every edge,
     three tenths of its thinnest side in two segments. The chamfer's capped
     fifth of a tenth-unit head is a few pixels even on the close-up board,
     where the person read as square blocks; a one-cut chamfer as wide reads
@@ -1006,26 +1006,6 @@ def r29edge_round(o):
     square (LITE_CHAMFER)."""
     o['share'], o['segs'] = 0.3, 2
     return o
-
-class r29edge_cut:
-    """The blocks built inside `thin` and more through are cut `share` of
-    their thinnest side, in one segment (cut_width): a toy's soft edge where
-    CHAMFER's cap is too small to see. The rest stay square (plain_parts):
-    a cut costs a block nearly four times its triangles, and a scene's
-    budget counts them."""
-    def __init__(self, share, thin):
-        self.share, self.thin = share, thin
-    def __enter__(self):
-        self.before = set(bpy.context.scene.objects)
-        return self
-    def __exit__(self, *exc):
-        for o in bpy.context.scene.objects:
-            if o not in self.before and o.get('chamfer'):
-                if min(o.scale) >= self.thin:
-                    o['share'] = self.share
-                else:
-                    o['chamfer'] = 0
-        return False
 
 def fig_block(size, at, color, yaw=0.0, pitch=0.0, roll=0.0):
     """A square-edged block at exactly `size`: an ear, an eye, a horn at an
@@ -2942,11 +2922,12 @@ def promenade():
     # the bathers' pitches on the sand between the huts and the sea, as it
     # lies: an umbrella, and towels in the lee of striped windbreaks
     def sand():
-        with square():
-            for (x, z, c) in ((-2.2, 4.6, red),):
+        for (x, z, c) in ((-2.2, 4.6, red),):
+            with square():
                 umbrella((x, 0, z), 0.46, 0.72, (c, white), gores=6)
                 box((0.46, 0.04, 0.24), (x - 0.38, 0.02, z + 0.1), 0xffc044, yaw=0.1)
-                figure((x - 0.38, 0.04, z + 0.1), 0.1, shirt=c, legs=c, pose='lie')
+            figure((x - 0.38, 0.04, z + 0.1), 0.1, shirt=c, legs=c, pose='lie')    # (a person's round edges)
+        with square():
             beach_pitch(-1.9, 7.6, wind, (0x339cf2, white), (0xffc044, 0x22c46e, red))
             beach_pitch(-2.6, 1.6, wind, (red, white), (0x339cf2, 0xff7e44))
             if not LITE:
@@ -4442,8 +4423,12 @@ def pirate_lookout():
             for k in range(3):                                 # the planks laid up the slope from the bridge's end
                 box((0.6, 0.1, 1.5), (HX + 1.1 + 0.75 * k, 0.05, 0.1 * math.sin(2.0 * k)), plank if k % 2 else 0x9a6a46)
         cove_cannon((LX - 2.6, 0, 1.6), yaw=math.radians(-90), k=0.85)
-        for (dx, dz) in ((0.0, 0.0), (0.42, 0.0), (0.2, 0.36)):     # the shot, rounded over: a ball, not a block
-            r29edge_round(sphere(0.2, (LX - 1.6 + dx, 0.2, 2.6 + dz), 0x38383d, subdiv=1))
+        for (dx, dz) in ((0.0, 0.0), (0.42, 0.0), (0.2, 0.36)):     # the shot (the box's: blocks)
+            at = (LX - 1.6 + dx, 0.2, 2.6 + dz)
+            if LITE:
+                sphere(0.2, at, 0x38383d, subdiv=1)
+            else:
+                fix29figs_shot(0.17, (at[0], 0.16, at[2]))
     draped('shot', shot)
 
 @piece(1.0)
@@ -10828,6 +10813,12 @@ def snowman_field():
             snow_ball(0.25, (1.3 + 0.45 * (i % 3), 0.18 + 0.32 * (i // 3), -1.6 + 0.4 * (i % 2)))
     draped('field', build)
 
+# A penguin's eyes are one bar through its head standing this far (world
+# units: they are built at grow 1) out of the head's sides and set as far
+# back of its front, so no face of theirs lies within a hair of the head's
+# (at 0.004 they flickered).
+PENGUIN_EYE = 0.012
+
 # THE penguin is a toy of blocks, not one of the faceted birds (fig_bird):
 # a dark body full at the belly and narrower at the shoulders, the head on
 # top, the white front wrapped round its front half, the gold at its ears,
@@ -10849,15 +10840,17 @@ def penguin(x, y, z, k=0.46, yaw=0.0):
             b((0.16 * u, 0.13 * u, 0.15 * u), 0.01 * u, 0.405 * u, 0, 0x2a2735),    # head
             # the white front wraps round the front half of the body, so a car beside
             # it sees white as well as one coming at it (a plate on the front alone
-            # read as a black peg from every side but one)
-            snowy(b((0.14 * u, 0.25 * u, 0.235 * u), 0.055 * u, 0.19 * u, 0, 0xfff6eb), 0.15))   # white at any height
+            # read as a black peg from every side but one); its foot over the
+            # belly's round edge (in it, the two cuts lay a hair apart and flickered)
+            snowy(b((0.14 * u, 0.233 * u, 0.235 * u), 0.055 * u, 0.1985 * u, 0, 0xfff6eb), 0.15))   # white at any height
     for o in soft:
         o['lite_chamfer'] = 1
     with plain_parts():                                  # too thin for a chamfer to show
         b((0.18 * u, 0.06, 0.16 * u), 0.03 * u, 0.03, 0, 0xff7e44)                       # feet
         b((0.06 * u, 0.06 * u, 0.165 * u), 0.01 * u, 0.385 * u, 0, 0xffc044)             # the gold at its ears
         if not fig_lite():
-            snowy(b((0.04 * u, 0.04 * u, 0.158 * u), 0.065 * u, 0.425 * u, 0, 0xfff6eb), 0.15)   # the eyes
+            e = max(0.04 * u, MIN_T)                     # the eyes (as box() floors them)
+            snowy(b((e, e, 0.15 * u + 2 * PENGUIN_EYE), 0.09 * u - PENGUIN_EYE - e / 2, 0.425 * u, 0, 0xfff6eb), 0.15)
         b((0.08 * u, 0.06, 0.06), 0.11 * u, 0.385 * u, 0, 0xff7e44)                      # beak
         for sd in (-1, 1):
             b((0.12 * u, 0.18 * u, 0.06), 0, 0.22 * u, sd * 0.125 * u, 0x2a2735, pitch=sd * 0.25)   # flippers, angled out
@@ -10866,25 +10859,31 @@ def slider_penguin(x, y, z, k=0.45, yaw=0.0):
     """A penguin on its belly toward +X turned by `yaw`, the size of one `k`
     tall standing and in its blocks, the pivot under the middle of its
     belly: long and flat, the white under it and up its flanks, the head up
-    at the front to see where it is going, the flippers out flat along its
-    sides and the feet trailing flat behind. The box's has no eyes."""
+    at the front to see where it is going, a white face on it, the flippers
+    out flat along its sides and the feet trailing flat behind. The box's
+    has no eyes."""
     u = k / 0.47
     c, s2 = math.cos(yaw), math.sin(yaw)
     def b(size, dx, dy, dz, color, turn=0.0, pitch=0.0):
         return box(size, (x + dx * c + dz * s2, y + dy, z - dx * s2 + dz * c), color, yaw=yaw + turn, pitch=pitch)
     # the standing one's body laid on its front, flattened: its white the
     # underside, a hand proud of the body below and at the flanks as it is
-    # at the front and sides standing
-    soft = (snowy(b((0.3 * u, 0.09 * u, 0.235 * u), -0.035 * u, 0.045 * u, 0, 0xfff6eb), 0.15),
+    # at the front and sides standing, its end well short of the belly's
+    # (nearly level with it, the two round edges flickered)
+    soft = (snowy(b((0.285 * u, 0.09 * u, 0.235 * u), -0.0275 * u, 0.045 * u, 0, 0xfff6eb), 0.15),
             b((0.22 * u, 0.16 * u, 0.21 * u), -0.1 * u, 0.09 * u, 0, 0x2a2735),        # belly
             b((0.18 * u, 0.14 * u, 0.18 * u), 0.08 * u, 0.08 * u, 0, 0x2a2735),        # shoulders
             b((0.16 * u, 0.13 * u, 0.15 * u), 0.2 * u, 0.19 * u, 0, 0x2a2735))         # the head, up
     for o in soft:
         o['lite_chamfer'] = 1
+    # the white face on the front of its head, the approved slider's: head on
+    # it read all black, its belly's white under it
+    snowy(b((0.06, 0.09 * u, 0.12 * u), 0.28 * u, 0.18 * u, 0, 0xfff6eb), 0.15)
     with plain_parts():
         b((0.06 * u, 0.06 * u, 0.165 * u), 0.2 * u, 0.17 * u, 0, 0xffc044)                # the gold at its ears
         if not fig_lite():
-            snowy(b((0.04 * u, 0.04 * u, 0.158 * u), 0.255 * u, 0.21 * u, 0, 0xfff6eb), 0.15)   # the eyes
+            e = max(0.04 * u, MIN_T)                     # the eyes (as box() floors them)
+            snowy(b((e, e, 0.15 * u + 2 * PENGUIN_EYE), 0.28 * u - PENGUIN_EYE - e / 2, 0.21 * u, 0, 0xfff6eb), 0.15)
         b((0.08 * u, 0.06, 0.06), 0.3 * u, 0.17 * u, 0, 0xff7e44)                         # beak
         t = 0.4                                                                           # the flippers, a little swept back
         for sd in (-1, 1):
@@ -18807,7 +18806,7 @@ lite_too('promenade', 'pier-bridge', 'lifeguard-tower', 'seafront-wall-a', 'seaf
 
 # Glacier's dog team on four-sided limbs (glacier_husky).
 lite_too('glacier-dog-trail')
-# Round 28: the snowman field on the snowmen's own soft balls (decimated from the full build, they were lumps)
+# The snowman field's box build: the snowman's make, each ball cut once (rfig_snow_ball)
 lite_too('snowman-field')
 
 # ---- round 23: the beach brought up beside the hops ----
@@ -18956,8 +18955,12 @@ def bay_battery():
     keg(at(-1.95, 0.0, -1.45), r=0.2, h=0.46)
     if not LITE:
         keg(at(-2.6, 0.0, -1.5), r=0.2, h=0.46)
-    for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.2, -0.04)):
-        r29edge_round(box((0.2, 0.2, 0.2), at(0.0 + dx, 0.17 + dy, -1.35 + dz), iron, yaw=YAW + 0.4))   # the shot, rounded over
+    if LITE:                                                                     # the shot: the box's blocks,
+        for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.2, -0.04)):
+            box((0.2, 0.2, 0.2), at(0.0 + dx, 0.17 + dy, -1.35 + dz), iron, yaw=YAW + 0.4)
+    else:                                                                        # a pyramid of balls on the sand
+        for (dx, dy, dz) in ((-0.12, 0.0, -0.12), (0.12, 0.0, -0.12), (0.0, 0.0, 0.1), (0.0, 0.165, -0.047)):
+            fix29figs_shot(0.11, at(0.0 + dx, 0.1 + dy, -1.35 + dz))
     with plain_parts():
         beam(at(2.05, 0.05, -1.3), at(1.8, 0.95, -0.4), 0.07, wood)
         box((0.16, 0.16, 0.2), at(1.8, 0.95, -0.4), 0xfde4c7, yaw=YAW)
@@ -25076,16 +25079,20 @@ DEFENDERS, BESIEGERS = 0x5a8fd8, 0xff5040
 def soldier(at, color):
     # a toy knight facing +X: hose, a surcoat with its cross, belt and arms,
     # a great helm with its slit and plume, a spear at his side and his
-    # shield before him. His three big blocks (hose, surcoat, helm) are cut
-    # a fifth of their thinnest side, a wooden toy's soft edge (round 29:
-    # square, a rank read as hard blocks on the close-up board; the
-    # chamfer's cap is a few pixels at his size). The rest stay square: cut
-    # too, the Gauntlet's crowd of them put its frame over the budget it had
-    # before round 27. The box's are square all through.
-    with plain_parts() if LITE else r29edge_cut(0.2, 0.4):
-        _soldier(at, color)
+    # shield before him. His helm and surcoat are rounded over as a person's
+    # blocks are (r29edge_round: cut once at a fifth, the helm read as an
+    # eight-sided can from the side and back). The rest stay square: the
+    # Gauntlet's crowd of them has no frame to spare (round 29: the
+    # shoulders cut once cost its worst frame 9k vertices, rounded 17k, past
+    # the budget it had before round 27). The box's are square all through.
+    with plain_parts():
+        soft = _soldier(at, color)
+    for o in soft:
+        o['chamfer'] = 1
+        r29edge_round(o)
 
 def _soldier(at, color):
+    """Builds the knight; returns his blocks to round over (none in the box's)."""
     x, y, z = at
     if LITE:                                      # the box's knight: hose, surcoat, helm, plume, spear and shield
         box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
@@ -25098,23 +25105,28 @@ def _soldier(at, color):
         box((0.12, 0.95, 0.66), (x + 0.44, y + 1.45, z - 0.38), color)
         plate_x(x + 0.525, y + 1.05, y + 1.85, z - 0.44, z - 0.32, 0xfdf4de)
         plate_x(x + 0.525, y + 1.5, y + 1.62, z - 0.66, z - 0.1, 0xfdf4de)
-        return
+        return ()
     box((0.58, 1.0, 0.48), (x, y + 0.5, z), 0x2a2735)
-    box((0.7, 1.0, 0.56), (x, y + 1.5, z), color)
+    soft = [box((0.7, 1.0, 0.56), (x, y + 1.5, z), color)]
     box((0.72, 0.14, 0.58), (x, y + 1.15, z), 0x9a7b55)
-    plate_x(x + 0.375, y + 1.25, y + 1.95, z - 0.06, z + 0.06, 0xfdf4de)     # painted marks stand 0.025 off their part (0.014 at a
-    plate_x(x + 0.375, y + 1.62, y + 1.74, z - 0.22, z + 0.22, 0xfdf4de)     # knight's size): at 0.002 the shield's cross flickered
+    # painted marks stand 0.025 off their part (0.014 at a knight's size): at
+    # 0.002 the shield's cross flickered. On a rounded part they keep to its
+    # flat face, a fifth of its thinnest side either side of the middle: past
+    # it their ends stood off the round as tabs.
+    plate_x(x + 0.375, y + 1.25, y + 1.82, z - 0.06, z + 0.06, 0xfdf4de)
+    plate_x(x + 0.375, y + 1.58, y + 1.7, z - 0.11, z + 0.11, 0xfdf4de)
     for s in (-1, 1):
         box((0.3, 0.85, 0.24), (x, y + 1.55, z + s * 0.4), color)
         box((0.26, 0.24, 0.22), (x, y + 1.02, z + s * 0.4), 0xf2bf99)
-    box((0.56, 0.72, 0.56), (x, y + 2.36, z), 0x9aa1b4)                    # the helm
-    plate_x(x + 0.305, y + 2.36, y + 2.48, z - 0.2, z + 0.2, 0x2a2735)      # its eye slit
+    soft.append(box((0.56, 0.72, 0.56), (x, y + 2.36, z), 0x9aa1b4))       # the helm
+    plate_x(x + 0.305, y + 2.36, y + 2.48, z - 0.11, z + 0.11, 0x2a2735)    # its eye slit
     box((0.12, 0.6, 0.46), (x, y + 3.0, z), color)                          # the plume
     box((0.14, 2.5, 0.14), (x + 0.06, y + 1.75, z + 0.59), 0x9a7b55)       # the spear,
     cyl(0.16, 0.45, (x + 0.06, y + 3.0, z + 0.59), 0x9aa1b4, r2=0.02, segs=4)  # its head
     box((0.12, 0.95, 0.66), (x + 0.44, y + 1.45, z - 0.38), color)          # the shield
     plate_x(x + 0.525, y + 1.05, y + 1.85, z - 0.44, z - 0.32, 0xfdf4de)
     plate_x(x + 0.525, y + 1.5, y + 1.62, z - 0.66, z - 0.1, 0xfdf4de)
+    return soft
 
 @piece(0.55)
 def toy_soldiers():
@@ -28237,6 +28249,14 @@ def own_ball(r, at, color, rows=(4, 22), squash=0.9, grp='ball'):
         out += own_band(color, (r * r0, y + r * squash * y0, w(y0)), (r * r1, y + r * squash * y1, w(y1)), OWN_BALL_N, grp,
                         phase=math.pi / OWN_BALL_N, at=(x, z))
     return out
+
+def fix29figs_shot(r, at):
+    """A cannonball about `r` in radius centred at `at`: a ball turned on
+    eight sides and shaded round (own_ball; rounded-over blocks read as
+    lumps of dough), as high as its sides are wide (unsquashed, it stood an
+    egg), in iron shaded by its height in the piece as a block is."""
+    w = 0.915                                     # own_ball's sides, from their corners to their middles
+    return paint(own_shell('shot', own_ball(r / w, at, 'dark', squash=w), smooth=True), 0x38383d)
 
 @own_model('snowman', grow=0.84)
 def own_snowman():
