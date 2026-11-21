@@ -70,6 +70,8 @@ SWATCH = {
     # and the snow cup's lying snow, an icy white whose shade is a pale blue
     # (the white ramp's is a lavender grey: stone, on a fir)
     'snow': (16, 0),
+    # and glacier ice, a lit cyan white down to a muted turquoise (ICE)
+    'ice': (32, 0),
     # and the scatter's palms (r29tree_palm): the sun-bleached trunk and the
     # frond green the beach painted the approved (kit) palms (theme.cc's
     # kPalmTall and kPalmBend) at rows 0 and 4 of their ramps (palm-bend's
@@ -11484,6 +11486,17 @@ def glacier_airstrip(lite=False):
     box((0.5, 0.07, 0.07), (-9.85, 0.2, -13.0), 0x38383d)
 
 # ---- Glacier's raised straight: the expedition's dog team and the crevasses ----
+# Glacier ice: rows of the atlas's own `ice` ramp, a lit cyan white down to a
+# muted turquoise. In the sky and blue ramps a crevasse's slot and the
+# tongue's bands read as ultramarine painted on the snow (round 35).
+ICE = {'wall': ('ice', 6), 'slot': ('ice', 24), 'lit': ('ice', 6), 'shade': ('ice', 10),
+       'band_lit': ('ice', 16), 'band_shade': ('ice', 20)}
+
+def iced(o, part):
+    """Paint `o` the ICE tone of `part` (its swatch, at its row)."""
+    swatch, row = ICE[part]
+    return rowed(paint(o, swatch), row)
+
 # The straight after the S-bend runs on a causeway a car's height and more over
 # the snow, flying over the run to the line, and nothing stood within six units
 # of its kerb for 95 u: what stood on the plain beside it was under the kerb
@@ -11743,12 +11756,12 @@ def glacier_crevasses():
             for j in range(7):
                 quads.setdefault(kinds[j], []).append([rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
         for kind, qs in quads.items():
-            o = colored_faces([({'snow': 'white', 'slot': 'blue'}.get(kind, 'sky'), q) for q in qs], 'crevasse')[0]
+            o = colored_faces([('white', q) for q in qs], 'crevasse')[0]
             for pl in o.data.polygons:
                 if pl.normal.z < 0:
                     pl.flip()
             if kind in ('slot', 'wall'):
-                rowed(o, 22)                     # dark: down the blue ramp, the sky ramp's deep end
+                iced(o, kind)
             else:
                 snowy(o, 0.45)
     # The lanes, nearest the road first, each (x, seed) and its cracks
@@ -12896,7 +12909,7 @@ def ice_crack(pts, w):
         if o['swatch'] == 'white':
             snowy(o, 0.45)
         else:
-            rowed(o, 22)
+            iced(o, 'slot' if o['swatch'] == 'blue' else 'wall')
 
 # Glacier's serac fields, on the outside verge of a bend where the ice breaks
 # up as it turns: each (seed, the towers (x, z, foot, height), the stranded
@@ -13101,13 +13114,13 @@ def glacier_tongue_build(lite):
                 lit = n[0] * SUN_T[0] + n[1] * SUN_T[1] + n[2] * SUN_T[2] > 0.979
                 drift = noise2(cx / 5.0, cz / 7.0, 43.0) + 0.12 * jitter(i, 2 * j + k, 53.0)   # drifts, ragged
                 if crack and crack[0][0] <= j < crack[0][1]:
-                    tone = ('blue', 16)                                  # the slot
+                    tone = ICE['slot']
                 elif cz < FIRN or drift > 0.22 or (j in (0, COLS - 1) and drift > -0.15):
                     tone = ('white', 2)                                  # firn, a drift, the margin's snow
                 elif (bowed(cx, cz) / 9.0) % 1.0 < 0.3:
-                    tone = ('sky', 20 if lit else 24)                    # an ogive's dark band
+                    tone = ICE['band_lit' if lit else 'band_shade']      # an ogive's dark band
                 else:
-                    tone = ('sky', 8 if lit else 12)
+                    tone = ICE['lit' if lit else 'shade']
                 tones.setdefault(tone, []).append((tone[0], list(t)))
     for (swatch, row), polys in tones.items():
         for o in colored_faces(polys, 'tongue'):
