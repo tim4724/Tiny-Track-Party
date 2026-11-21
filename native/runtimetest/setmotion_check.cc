@@ -12,7 +12,8 @@
 //      and rests when no car is in reach.
 //   4. A HOP lifts only while a car is close, and never past its height. A
 //      GESTURE (a sway or bob with a rest) goes one way and back, eased, and
-//      then stands still for its rest.
+//      then stands still for its rest; with a hold it stands at the far end
+//      for its share first, and parts timed alike move in proportion.
 //   4d. A CLOTH FLUTTERS: its frame is read off its own vertices however it
 //      was built, its hoist stays on the pole, its segments keep their length
 //      (it bends, it does not stretch), no joint bends past its bound, the
@@ -290,6 +291,45 @@ int main(int argc, char** argv) {
     if (u >= 0.6f) still = std::max(still, l);
   }
   check(lo >= 0 && near(hi, 0.3f, 1e-3f) && still == 0, "a bounce lands and waits on the ground");
+  // A hold: a skip up, held at the top, down, held at the bottom, and the
+  // wheel winding its rope in step turning as far as it has climbed.
+  {
+    std::string unk;
+    SetMotion skip, wheel;
+    check(ttp::rt::parse_set_motion("anim_bob:h=3.5:p=14:r=0.25:t=0.25:o=0#skip", skip, &unk) && unk.empty()
+              && near(skip.bobHold, 0.25f)
+              && ttp::rt::parse_set_motion("anim_sway:a=z:d=-236:p=14:r=0.25:t=0.25:o=0#wheel", wheel, &unk)
+              && unk.empty() && near(wheel.swayHold, 0.25f), "a bob and a sway with a hold");
+    float held = 1e9f, rested = 0, worst = 0, lastLift = 0, jump = 0;
+    bool climbs = true;
+    for (int i = 0; i <= 2800; i++) {
+      const float t = i * 0.01f;   // two periods
+      const float lift = ttp::rt::set_motion_pose(skip, t, 0, nullptr, 0).lift;
+      const float turn = ttp::rt::set_motion_pose(wheel, t, 0, nullptr, 0).sway;
+      const float u = t / 14 - std::floor(t / 14);
+      if (u > 0.25f && u < 0.5f) held = std::min(held, lift);
+      if (u > 0.75f) rested = std::max(rested, lift);
+      if (u > 0.0f && u < 0.25f && i && lift < lastLift) climbs = false;
+      worst = std::max(worst, std::fabs(turn / (-236 * DEG) - lift / 3.5f));
+      if (i) jump = std::max(jump, std::fabs(lift - lastLift));
+      lastLift = lift;
+    }
+    check(near(held, 3.5f, 1e-4f), "it holds at the top for its share");
+    check(rested == 0, "and rests at the bottom for its rest");
+    check(climbs, "and only climbs on the way up");
+    // (its fastest, mid-way up: pi h / 2 over a 3.5 s climb, 0.0157 a hundredth)
+    check(jump < 0.0165f, "and never jumps (worst step " + std::to_string(jump) + ")");
+    check(worst < 1e-5f, "a wheel with the same timing turns with the lift at every moment");
+    SetMotion plain, zero;
+    ttp::rt::parse_set_motion("anim_bob:h=3.5:p=14:r=0.25", plain);
+    ttp::rt::parse_set_motion("anim_bob:h=3.5:p=14:r=0.25:t=0", zero);
+    bool same = true;
+    for (int i = 0; i < 300; i++) {
+      same = same && ttp::rt::set_motion_pose(plain, i * 0.05f, 0.1f, nullptr, 0).lift
+                         == ttp::rt::set_motion_pose(zero, i * 0.05f, 0.1f, nullptr, 0).lift;
+    }
+    check(same, "a one-way bob with no hold is the old one, bit for bit");
+  }
   ttp::rt::parse_set_motion("anim_bob:h=0.3:p=2", m);
   SetMotion r0;
   ttp::rt::parse_set_motion("anim_bob:h=0.3:p=2:r=0", r0);
