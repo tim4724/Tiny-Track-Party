@@ -208667,8 +208667,8 @@ inline const Model kModels[] = {
     { 17320226505142560594ull, 1u, k_set_orchard_block_end },  // set-orchard-block-end.glb
     { 1914755256704533504ull, 1u, k_set_orchard_block_lite },  // set-orchard-block-lite.glb
     { 8974567166340457432ull, 1u, k_set_orchard_block },  // set-orchard-block.glb
-    { 18171544922849242051ull, 7u, k_set_ore_line_lite },  // set-ore-line-lite.glb
-    { 8909798879814975579ull, 7u, k_set_ore_line },  // set-ore-line.glb
+    { 20053533931176028ull, 7u, k_set_ore_line_lite },  // set-ore-line-lite.glb
+    { 8221008416813884586ull, 7u, k_set_ore_line },  // set-ore-line.glb
     { 16038719625656675145ull, 4u, k_set_palm_stand_lite },  // set-palm-stand-lite.glb
     { 12167260444353393306ull, 4u, k_set_palm_stand },  // set-palm-stand.glb
     { 7168726152790814737ull, 2u, k_set_park_halt_lite },  // set-park-halt-lite.glb

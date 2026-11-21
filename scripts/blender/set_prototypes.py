@@ -18859,14 +18859,20 @@ def ore_line():
     # the portal's line, on level through the adit's dark into the rock and
     # down into the ground there, then home under everything. Each wagon
     # pitches with the line (f=2), so the two ends turn it out of sight: it
-    # climbs out of the shed's floor at a slant, not standing on its tail,
-    # and dives behind the adit's dark, where its cab swung up out of the
-    # mouth when it dived just inside.
+    # climbs out of the shed's floor up a steep incline a world unit long
+    # under the bin, not standing on its tail, and dives behind the adit's
+    # dark, where its cab swung up out of the mouth when it dived just
+    # inside. (An incline twice as long and half as steep ran out past the
+    # shed's back wall, and the cab's roof slid up out of the sand behind
+    # it: whatever of the train stands over the floor while it climbs is
+    # inside the shed's walls, the floor a quarter unit in front of the
+    # shed's middle.)
     SHED = total - 0.3 / k
     loop = [(-10.6, -3.0, 0.0), (-7.6, Y, 0.0)]
     loop += [(p[0], ry(s), p[1]) for p, s in ((on(s)[0], s) for s in ss if s < SHED - 1.0)]
-    (ex, ez), (dx, dz) = on(SHED)
-    loop += [(ex, Y, ez), (ex + 6.0 * dx, Y - 3.0, ez + 6.0 * dz), (ex + 6.0 * dx, -12.0, ez + 6.0 * dz)]
+    (ex, ez), (dx, dz) = on(SHED - 0.25 / k)
+    fx, fz = ex + dx / k, ez + dz / k
+    loop += [(ex, Y, ez), (fx, Y - 1.8 / k, fz), (fx, -12.0, fz)]
     loop.reverse()
     for i, p in enumerate(loop):
         marker('path_drapeore_%d' % i, p)
