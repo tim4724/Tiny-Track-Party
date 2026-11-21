@@ -670,16 +670,17 @@ Theme snowTheme() {
   t.groundKind = GROUND_SNOW;
   t.hills = { 0xeef4f9, 0xdfe9f2, 0xf7fafc };
   t.clouds = { 6, 0.55f, 1.25f, 0.3f, 0xe9edf2 };  // low flat overcast
-  // Wet ploughed asphalt between snowbanks: a darker, colder deck (free contrast
+  // Wet ploughed asphalt between snowbanks: a darker deck (free contrast
   // against the white ground), ice-tinted paint, and kerbs that become plain
-  // white banks — wider and taller than a racing kerb.
-  t.road.asphalt = 0x494f5e;
+  // white banks — wider and taller than a racing kerb. A grey a step off
+  // slate: deeper and bluer, the road filled half the picture in dark blue.
+  t.road.asphalt = 0x5c616e;
   t.road.line = 0xc2d6e6;
   t.road.kerbA = 0xeff4f9; t.road.kerbB = 0xdde7f0;  // whisper-contrast bank pair
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb
-  // The slab's sides and belly a cold concrete, not the asphalt: under a
+  // The slab's sides and belly a pale concrete, not the asphalt: under a
   // crossing the belly filled the top of the picture in near-black slate.
-  t.road.skirt = 0x8e94a8;
+  t.road.skirt = 0x979ba6;
   deriveRoad(t.road, false, true, false);
   ambientKind(t.ambient, AMB_FLAKE);
   t.ambient.count = 3200; t.ambient.size = 0.3f; t.ambient.tint = 0xffffff;
@@ -691,11 +692,10 @@ Theme snowTheme() {
   t.hasIce = true; t.ice = { 0xa9d7ee, 0xf0f8fd };
   t.gate = 0xdfe9f6;  // cold-cast gate grade
   t.gantry.pylon = 0x3f7bd9; t.gantry.finial = 0xfff6eb;  // pops against the white world
-  // Bridges on stone piers: granite in courses on a footing, under a dressed
-  // cap, snow lying on both. The range's lit rock (set_prototypes.py ROCK),
-  // not slate: a pier stands in the deck's shadow, where slate read
-  // near-black, a dark tower in a white world.
-  t.pier = { PIER_STONE, 0x8a90a4, 0x777d93, 0x9ea4b6, 0x777d93, 0xf3f7fb };
+  // Bridges on stone piers: pale granite in courses on a footing, under a
+  // dressed cap, snow lying on both. Not slate: a pier stands in the deck's
+  // shadow, where slate read near-black, a dark tower in a white world.
+  t.pier = { PIER_STONE, 0x8e929e, 0x7c808c, 0xa2a6b0, 0x7c808c, 0xf3f7fb };
   // The snowman that used to head this list is a Holiday Kit model now, in the
   // prop scatter below — one greeter a track became several a lap.
   t.landmarks = { LM_CABIN };
