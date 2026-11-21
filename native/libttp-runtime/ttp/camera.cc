@@ -1,5 +1,6 @@
 #include "ttp/camera.h"
 
+#include <algorithm>
 #include <climits>
 #include <cmath>
 #include <utility>
@@ -259,7 +260,7 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         target = aimGoal;
         yaw = wantYaw;
         dist = goalDist;
-        pitch = riding ? ridePitch : clearPitch().pitch;
+        pitch = pitchGoal = riding ? ridePitch : clearPitch().pitch;
         init = true;
     } else if (dt > 0) {
         if (lead < (int) seen.size() && seen[lead]) {
@@ -273,7 +274,8 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         spring(dist, distVel, goalDist, FOLLOW_DIST_OMEGA, dt);
         // Riding, the pitch is the place's: every pitch but that looks through the
         // deck somewhere round the ring.
-        const Pick want = riding ? Pick{ ridePitch, false } : clearPitch();
+        const Pick want = riding ? Pick{ ridePitch, false } : steady ? Pick{ pitchGoal, false } : clearPitch();
+        pitchGoal = want.pitch;
         if (want.across && !place) {   // a looping's way in is one unbroken swing
             pitch = want.pitch;  // cut, never through
             pitchVel = 0;
@@ -283,6 +285,8 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
     }
     last.resize(n);
     seen.assign(live.begin(), live.end());
+    battle.clear();
+    for (size_t i = 0; i < n; i++) if (inBattle(i)) battle.push_back((int) i);
     for (size_t i = 0; i < n; i++) if (live[i]) last[i] = at(i);
 
     pos = eyeAt(pitch);
@@ -295,6 +299,128 @@ void CoverChase::update(const ttp::Pose& pose, float dt) {
     const float a = 1 - std::exp(-CAM_POS_RATE * dt);
     if (!init) { pos = want; target = wantTgt; init = true; }
     else { pos = lerp(pos, want, a); target = lerp(target, wantTgt, a); }
+}
+
+bool lensCrowded(const Obstacles& o, V3 p) {
+    // Its own voxel and the 26 around it, then the 26 a voxel further out,
+    // and so on to LENS_RADIUS: spaced wider, a probe would step over a wall.
+    for (float r = Obstacles::kVoxel; r <= LENS_RADIUS + 1e-3f; r += Obstacles::kVoxel) {
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int z = -1; z <= 1; z++) {
+                    if ((x || y || z || r == Obstacles::kVoxel) && o.solid(p + V3{ (float) x, (float) y, (float) z } * r)) return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool wallBlocks(const Obstacles& o, V3 eye, V3 p) {
+    const V3 d = p - eye;
+    const float len = std::sqrt(dot(d, d));
+    if (o.empty() || len <= FOLLOW_CAR_CLEAR) return false;
+    const V3 dir = d * (1.0f / len);
+    V3 right = cross(dir, V3{ 0, 1, 0 });
+    right = dot(right, right) > 1e-6f ? norm(right) : V3{ 1, 0, 0 };
+    const V3 up = cross(right, dir);
+    // The line itself first, then to either side of `p` and over it. Not
+    // under it: that is the road.
+    const V3 around[] = { {}, right * LENS_WALL_RADIUS, right * -LENS_WALL_RADIUS, up * LENS_WALL_RADIUS };
+    const float share = 1 - FOLLOW_CAR_CLEAR / len;
+    // Half-voxel steps: the fill can miss a voxel a face only clips.
+    const int steps = (int) std::ceil(len * share / (0.5f * Obstacles::kVoxel));
+    int blocked = 0;
+    for (int i = 0; i < 4; i++) {
+        const V3 line = (p + around[i] - eye) * share;
+        bool hit = false;
+        for (int k = 0; k <= steps && !hit; k++) hit = o.solid(eye + line * ((float) k / (float) steps));
+        if (!hit && i == 0) return false;   // the line itself is clear
+        blocked += hit;
+    }
+    return blocked >= 3;
+}
+
+V3 lensEye(V3 eye, V3 aim, float u) {
+    if (u <= 0) return eye;
+    const V3 d = eye - aim;
+    const float flat = std::sqrt(d.x * d.x + d.z * d.z), len = std::sqrt(dot(d, d));
+    const float from = std::atan2(d.y, flat);
+    const float elev = from + (std::fmax(from, LENS_ELEV_MAX) - from) * u;   // never lowered
+    const V3 out = flat > 1e-4f ? V3{ d.x / flat, 0, d.z / flat } : V3{ 0, 0, 1 };
+    return aim + (out * std::cos(elev) + V3{ 0, std::sin(elev), 0 }) * len;
+}
+
+V3 LensPlan::apply(const Obstacles& o, const NameTagDeck& deck, size_t n, float dt) {
+    if (o.empty()) {   // no scenery, or not yet: the rig's own eye
+        u = uVel = uIn = goal = lowFor = late = 0;
+        blind = false;
+        init = true;
+        return views[0].eye;
+    }
+    // Is the eye `at` along view v's path a shot? The deck faults of the rig's
+    // own eye are forgiven (camera.h): `deckNear` and `deckHides` hold them
+    // for `asked`, the view they were worked out for.
+    std::vector<bool> deckHides;
+    bool deckNear = false;
+    const LensView* asked = nullptr;
+    const V3 lift = { 0, FOLLOW_LENS_CLEAR * 0.5f, 0 };
+    const auto clear = [&](const LensView& v, float at) {
+        if (asked != &v) {
+            asked = &v;
+            deckNear = deckBlocks(deck, v.eye - lift, v.eye + lift, 0, 0);
+            deckHides.resize(v.subjects.size());
+            for (size_t s = 0; s < v.subjects.size(); s++) deckHides[s] = deckBlocks(deck, v.eye, v.subjects[s], 0, FOLLOW_CAR_CLEAR);
+        }
+        const V3 eye = lensEye(v.eye, v.aim, at);
+        if (lensCrowded(o, eye)) return false;
+        if (at > 0 && !deckNear && deckBlocks(deck, eye - lift, eye + lift, 0, 0)) return false;
+        size_t seen = 0;
+        for (size_t s = 0; s < v.subjects.size(); s++) {
+            if (wallBlocks(o, eye, v.subjects[s])) continue;
+            if (at > 0 && !deckHides[s] && deckBlocks(deck, eye, v.subjects[s], 0, FOLLOW_CAR_CLEAR)) continue;
+            if (2 * ++seen >= v.subjects.size()) return true;
+        }
+        return v.subjects.empty();
+    };
+    const auto level = [](int k) { return (float) k / (LENS_LEVELS - 1); };
+    // Each view's lowest level that is a shot (LENS_LEVELS: none), and the
+    // highest of those: where the eye has to be by the time it gets there...
+    int need[1 + std::size(LENS_AHEAD)] = {};
+    int want = 0;
+    for (size_t i = 0; i < n; i++) {
+        int k = 0;
+        while (k < LENS_LEVELS && !clear(views[i], level(k))) k++;
+        need[i] = k;
+        if (k < LENS_LEVELS) want = std::max(want, k);
+    }
+    // ...but no higher than now and LENS_AHEAD[0] on still take.
+    for (size_t i = 0; i < 2 && i < n; i++) {
+        while (want > std::max(need[0], need[i]) && !clear(views[i], level(want))) want--;
+    }
+    const float wanted = level(want);
+    const bool opening = !init;
+    if (!init) {
+        u = uIn = goal = wanted;
+        uVel = lowFor = 0;
+        init = true;
+    } else if (dt > 0) {
+        // Up at once, down after LENS_HOLD, and a level is held only while it
+        // is still a shot.
+        if (wanted >= goal || !clear(views[0], goal)) {
+            goal = wanted;
+            lowFor = 0;
+        } else if ((lowFor += dt) >= LENS_HOLD) {
+            goal = wanted;
+            lowFor = 0;
+        }
+        uIn += (goal - uIn) * (1 - std::exp(-(goal < uIn ? LENS_RATE_DOWN : LENS_RATE) * dt));
+        spring(u, uVel, uIn, LENS_RATE, dt);
+        if (goal == 0 && u < 1e-4f && uIn < 1e-4f) u = uVel = uIn = 0;   // home: the rig's own eye, to the bit
+    }
+    late = clear(views[0], u) ? 0 : late + dt;
+    blind = opening ? need[0] == LENS_LEVELS : late > LENS_LATE;
+    return lensEye(views[0].eye, views[0].aim, u);
 }
 
 int packFocus(const TtpCarInput* cars, const std::vector<bool>& live) {
@@ -471,6 +597,8 @@ void Coverage::step(float dt, const TtpCarInput* cars, const std::vector<bool>& 
     const auto cutTo = [&](Shot s) { shot = s; held = 0; cut = true; };
     const int pick = featured;
     featured = -1;
+    const bool noPlace = blind;
+    blind = false;
     if (isLive(pick)) {
         // Already chasing this car: restart the hold only. A cut would reset
         // the chase spring to zero lag, which shows as the car jumping back.
@@ -491,9 +619,10 @@ void Coverage::step(float dt, const TtpCarInput* cars, const std::vector<bool>& 
     }
     held += dt;
     const float hold = shot == Shot::CHASE ? COVER_HOLD_CHASE : COVER_HOLD_BATTLE;
-    // A shot whose car or fight has left ends at once. PACK's -1 is the whole
-    // field, which cannot leave.
-    const bool lost = (shot == Shot::CHASE && !isLive(subject))
+    // A shot whose car or fight has left ends at once, and so does one whose
+    // lens has no place (LensPlan). PACK's -1 is the whole field, which
+    // cannot leave.
+    const bool lost = noPlace || (shot == Shot::CHASE && !isLive(subject))
             || (shot == Shot::PACK && subject >= 0 && !isLive(subject));
     // A battle shot does not end on a looping: it waits for the ride to finish.
     if (!lost && (shot == Shot::LEAD || shot == Shot::PACK) && battleOnLoop(cars, live, loops)) return;

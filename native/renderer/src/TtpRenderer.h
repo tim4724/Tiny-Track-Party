@@ -34,6 +34,7 @@
 namespace ttp { namespace kitcolors { struct Mesh; struct Model; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
+#include "ttp/obstacles.h"
 #include "ttp/name_tags.h"
 #include "ttp/set_motion.h"
 
@@ -350,6 +351,12 @@ public:
 
     // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
     const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
+    // The built scene's standing scenery as solid volume (ttp/obstacles.h),
+    // filled into `out` off the triangles it is drawn from. Only when the
+    // dressing has merged since the last take (it merges on the first frame
+    // after a build; false otherwise, `out` untouched), and only for a caller
+    // that asks: a race never does, and its builds do not pay for the fill.
+    bool takeObstacles(ttp::rt::Obstacles& out);
 
     // Slot i as the name tags see it (ttp/name_tags.h), measured off the model
     // at load: its roof over its origin as drawn — in the monster rig while
@@ -2799,6 +2806,7 @@ private:
             filament::math::float3& mn, filament::math::float3& mx);
     void rebuildCarMerge();
     void buildDressingMerge();
+    bool mObstaclesDue = false;   // the dressing merged since takeObstacles last filled
     void mergeInstancedSet(const filament::gltfio::FilamentAsset* asset,
             const std::vector<filament::gltfio::FilamentInstance*>& insts,
             bool dynamic);

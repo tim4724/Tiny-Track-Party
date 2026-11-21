@@ -294,6 +294,7 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
         g_disp->tagDeck.kerbH = theme.road.kerbH;
         g_disp->ground = r.groundGrid();
+        g_disp->obstacles = {};   // the last scene's; this one's arrive with its first frame
         g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground);
         g_disp->sceneT = 0;
         solveFraming(*g_disp);
@@ -794,6 +795,9 @@ namespace {
 // shell deriving it would be a copy that could drift.
 const TtpFrameInput* frameInput(DisplayCore& d, double dtSeconds) {
     const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
+    // The scenery the lobby's cameras keep out of, asked for by the one rig
+    // that reads it. The renderer has it from the first frame after a build.
+    if (d.cells.empty() && d.camMode == ttp::rt::CAM_COVERAGE) d.renderer->takeObstacles(d.obstacles);
     return ttp::rt::buildFrame(d, eng, (float) dtSeconds,
                                d.renderer->cellAspect((uint32_t) d.cells.size()));
 }

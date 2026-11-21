@@ -493,6 +493,11 @@ memory until another track builds or the renderer goes.
   scene-scoped list piles up once per rebuild until the track changes.
   `loadInstancedProp` does not dirty the dressing merge (only `buildStatic`
   does), or every field rebuild would regroup the whole dressing.
+- **What stands in the scene is in `takeObstacles`, or the lobby's cameras film
+  from inside it.** They know scenery only as the voxels that function fills
+  from the drawn triangles (`ttp/obstacles.h`; `LensPlan` in `ttp/camera.h` is
+  the reader), so a new family of standing geometry joins its list. It is
+  filled when the lobby's rig asks and not in the build: a race never reads it.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and
   `buildField` each log their phases (`PhaseLog`).
 - **A bake never `flushAndWait`s**: its GPU time belongs behind the thread that

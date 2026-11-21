@@ -7,6 +7,7 @@
 
 #include "ttp/ground_grid.h"
 #include "ttp/name_tags.h"
+#include "ttp/obstacles.h"
 #include "ttp/vecmath.h"
 #include "ttp_render.h"
 
@@ -283,6 +284,10 @@ struct FollowCam {
     V3 pos, target;
     float yaw = 0, dist = 0;  // yaw: the direction the camera FACES, atan2(x, z)
     float pitch = FOLLOW_PITCH;
+    float pitchGoal = FOLLOW_PITCH;   // the pitch it last chose
+    // Run on ahead by the lobby's lens (LensPlan): it keeps the pitch it chose
+    // rather than scoring the pitches again, which is most of what a step costs.
+    bool steady = false;
     // The springs' velocities, and the leader's smoothed velocity the aim rides on.
     V3 aimVel, flow;
     float yawVel = 0, distVel = 0, pitchVel = 0;
@@ -292,6 +297,7 @@ struct FollowCam {
     float entryYaw = 0, entryDist = 0;   // where the swing began
     std::vector<V3> last;    // each slot's position last frame (the leader's displacement)...
     std::vector<bool> seen;  // ...valid only where the slot held a car last frame
+    std::vector<int> battle; // the slots in the battle this frame (LensPlan films them)
 
     // `live[i]` says slot i holds a car this frame; `cars` is the frame's own
     // car input, so a held field is followed where it is DRAWN. `trackCentre`
@@ -326,6 +332,9 @@ struct FollowCam {
 // screen: the player sees the car they just chose, driving. Unless the chase
 // is already on that car — then the shot only restarts its hold, because a
 // cut starts the rig's spring over and that reads as the car jumping.
+//
+// A battle shot whose lens finds no place out of the scenery (LensPlan's
+// BLIND) is passed over at its cut, or cut away from once it is up.
 // ---------------------------------------------------------------------------
 enum class Shot { WIDE, LEAD, PACK, CHASE };
 constexpr float COVER_HOLD_BATTLE = 10.0f, COVER_HOLD_CHASE = 8.0f;
@@ -343,6 +352,7 @@ struct Coverage {
     uint32_t beat = 0;    // where in the cycle the shot is
     uint32_t turn = 0;    // chase shots taken, so the subject rotates
     bool cut = false;     // the last step changed the shot: its rig starts fresh
+    bool blind = false;   // its lens has no clear place (LensPlan): the next step moves on
 
     // `live[i]`: slot i holds a car this frame, `cars` the frame's car input.
     // `player[i]`: slot i is a player's car, which the rotating CHASE prefers
@@ -374,6 +384,84 @@ struct CoverChase {
     V3 pos, target;
     bool init = false;  // first update snaps: a cut lands on the car
     void update(const ttp::Pose& pose, float dt);
+};
+
+// ---------------------------------------------------------------------------
+// THE LOBBY'S LENS KEEPS OUT OF THE SCENERY, AND IT PLANS AHEAD TO. The
+// follow cam knows the road and the ground and nothing standing on them, so
+// in Skyline's block town a battle shot stood behind a row of houses and the
+// picture was one wall. LensPlan lifts the eye of the lobby's battle shots
+// out of what stands in the way (ttp/obstacles.h) along ONE path: up over
+// its aim at the rig's distance, `u` of the way from the rig's own eye (0)
+// to LENS_ELEV_MAX over level (1). The aim, the bearing and the distance
+// stand, so the battle stays framed: moving in as well, as the first attempt
+// did, drove the cars off the picture and under the lobby's boards. The
+// CHASE is left alone: trailing its car down the road it is next to never
+// behind anything (measured on every track).
+//
+// IT NEVER ANSWERS THIS FRAME ALONE. A first attempt eased toward whichever
+// place was clear now, so the eye lurched each time a house went by. This
+// asks where the rig will stand over the next LENS_AHEAD seconds (a copy of
+// it run on over the cars driven on along the road at their speed), takes
+// the HIGHEST of the levels those places need, holds it LENS_HOLD after the
+// need has gone, and eases u there through a lag into a critically damped
+// spring, three poles at LENS_RATE (the lag at LENS_RATE_DOWN coming down):
+// the eye's acceleration starts from zero and never steps. The look-ahead is as long as that move takes, so the eye
+// is mostly up before the wall arrives. It never lifts higher than now and
+// LENS_AHEAD[0] on can take: a later wall is no reason to rise into a roof.
+//
+// A level is a shot when nothing stands within LENS_RADIUS of the lens and
+// half the battle is in sight, past the scenery's walls and past the road
+// deck. The deck is the rig's own business (its pitches): the lens only may
+// not make it worse, so a fault of the rig's own eye is not one.
+//
+// A shot is BLIND when no level is a shot as it opens, or when the drawn eye
+// has been no shot for LENS_LATE. Coverage then cuts past it or away from
+// it rather than fly the lens round: hard cuts are the lobby's language. A
+// looping's ride is cut away from too: a wall is worse than the break.
+// ---------------------------------------------------------------------------
+constexpr float LENS_ELEV_MAX = 1.1f;     // rad over level at u = 1 (~63 degrees)
+constexpr int LENS_LEVELS = 6;            // the u tried: 0, 0.2 .. 1
+constexpr float LENS_AHEAD[] = { 0.4f, 0.8f, 1.2f, 1.6f, 2.0f };   // seconds
+constexpr float LENS_HOLD = 2.5f;         // seconds a lifted lens waits before it comes down
+constexpr float LENS_RATE = 5.0f;         // 1/s, the three poles
+constexpr float LENS_RATE_DOWN = 1.5f;    // 1/s, the lag's on the way down, which nothing hurries
+constexpr float LENS_LATE = 0.25f;        // seconds the drawn eye may be no shot before coverage cuts
+constexpr float LENS_RADIUS = 3 * Obstacles::kVoxel;   // what the lens keeps clear around itself
+constexpr float LENS_WALL_RADIUS = 0.8f;  // how far round a subject a wall has to reach
+
+// Is anything solid within LENS_RADIUS of `p`?
+bool lensCrowded(const Obstacles& o, V3 p);
+// Does a wall stand between `eye` and `p`, short of the last FOLLOW_CAR_CLEAR?
+// A wall is the line itself blocked AND most of the lines to LENS_WALL_RADIUS
+// beside and over `p`: a pole across the shot is not one.
+bool wallBlocks(const Obstacles& o, V3 eye, V3 p);
+// The eye `u` along the lens's path (lifted toward LENS_ELEV_MAX) from a rig
+// at `eye` aiming at `aim`.
+V3 lensEye(V3 eye, V3 aim, float u);
+
+// Where the rig stands, now or LENS_AHEAD on, and the cars it films.
+struct LensView {
+    V3 eye, aim;
+    std::vector<V3> subjects;
+};
+
+struct LensPlan {
+    float u = 0, uVel = 0;    // the eye's place on the path, and its speed
+    float uIn = 0;            // the lag's output, what the spring chases
+    float goal = 0;           // the held level
+    float lowFor = 0;         // seconds the wanted level has been under `goal`
+    float late = 0;           // seconds the drawn eye has been no shot
+    bool blind = false;       // the shot is blind (above): coverage moves on
+    bool init = false;        // the first apply after a cut lands on its level
+    // Scratch, kept for its storage: the views (views[0] now, then one per
+    // LENS_AHEAD), and the rig run on over its field to fill them.
+    std::vector<LensView> views;
+    FollowCam rig;
+    std::vector<TtpCarInput> field;
+
+    // The eye to draw for the first `n` of `views` (1 <= n <= 1 + LENS_AHEAD's).
+    V3 apply(const Obstacles& o, const NameTagDeck& deck, size_t n, float dt);
 };
 
 }  // namespace rt
