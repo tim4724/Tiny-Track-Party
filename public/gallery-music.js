@@ -3,8 +3,9 @@
 // The race is the real display page (/?scenario=racing, the endless bench race
 // every live gallery card runs) in one frame, driven through its
 // window.__preview hook: a song started here deals the race again from the
-// grid, so the two begin together as they do on GO. A framed preview is silent
-// (TestHarness setupRace), so the song is all that plays.
+// grid, so the two begin together as they do on GO. With game sound on, the
+// frame plays the race's own sound (?sfx=1: engines, cues, no music of its
+// own) and the song sits at the game's music level under it, as in a race.
 //
 // What a track is offered: the DRAFT's pick and options (/gallery-music-draft.json,
 // absent is fine), the songs its cup ships TODAY (RACE_MUSIC, the pool a race
@@ -17,7 +18,7 @@ import * as Gallery from './gallery-common.js';
 import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 import { loadBiomes, cssHex } from '/shared/biomes.js';
 // Straight from the catalogue's own file: this page is a dev surface.
-import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/audio/musicCatalogue.js';
+import { RACE_MUSIC, MUSIC_FALLBACK, MUSIC_LEVEL } from '/display/audio/musicCatalogue.js';
 import { storedVolume, saveVolumePercent } from '/display/audio/bus.js';
 
 const MUSIC_DIR = '/assets/audio/music/';
@@ -26,10 +27,10 @@ const trackById = new Map(TRACK_LIST.map((t) => [t.id, t]));
 const el = (id) => document.getElementById(id);
 const fmtTime = (t) => (Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : '0:00');
 
-// This page's own memory: the track on stage, the camera, the open list.
+// This page's own memory: the track on stage, the camera, game sound, the open list.
 const STATE_KEY = 'tinytrack_gallery_music_v2';
 const state = (() => {
-  const d = { track: '', cam: 'chase', more: false, raceLen: {} };
+  const d = { track: '', cam: 'chase', sfx: true, more: false, raceLen: {} };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
@@ -114,7 +115,8 @@ async function savePick(body) {
 const player = new Audio();
 player.preload = 'none';
 let playGain = 1;
-const applyVolume = () => { player.volume = Math.min(1, storedVolume() * playGain); };
+// Under the race's own sound the song is at the level a race plays it.
+const applyVolume = () => { player.volume = Math.min(1, storedVolume() * playGain * (state.sfx ? MUSIC_LEVEL : 1)); };
 applyVolume();
 let current = null;   // the playing song's key
 let paused = false;   // the song AND the race, held together
@@ -130,6 +132,7 @@ function playSong(key) {
   playGain = s.gain || 1;
   applyVolume();
   if (race) race.pause();
+  syncGameSound();
   player.play().catch((e) => { if (e && e.name !== 'AbortError') status(`Cannot play ${s.title}: ${e.message}`, true); });
   paintTransport();
 }
@@ -137,6 +140,7 @@ player.addEventListener('playing', () => {
   if (!syncing) return;
   syncing = false;
   restartRace();
+  syncGameSound();
 });
 // The song stops; the race runs on.
 function stopSong() {
@@ -153,6 +157,7 @@ function releaseRace() {
   paused = false;
   if (race) race.play();
   clock.resume();
+  syncGameSound();
 }
 function togglePause() {
   paused = !paused;
@@ -165,12 +170,14 @@ function togglePause() {
     if (race && !syncing) race.play();
     clock.resume();
   }
+  syncGameSound();
   paintTransport();
 }
 function restartBoth() {
   paused = false;
   if (!syncing) restartRace();
   if (current) { player.currentTime = 0; player.play().catch(() => {}); }
+  syncGameSound();
   paintTransport();
 }
 player.addEventListener('ended', () => { current = null; paintTransport(); });
@@ -212,7 +219,7 @@ let deal = 0;
 function loadRace() {
   race = null;
   const gen = ++loads;
-  const q = new URLSearchParams({ scenario: 'racing', track: state.track, players: '1', hud: '0' });
+  const q = new URLSearchParams({ scenario: 'racing', track: state.track, players: '1', hud: '0', sfx: '1' });
   if (state.cam === 'follow') q.set('cam', 'follow');
   frame.src = '/?' + q;
   el('mu-lap').textContent = 'Building the race…';
@@ -229,6 +236,7 @@ function loadRace() {
     if (paused || syncing) { clock.pause(); return; }
     if (current) { player.currentTime = 0; player.play().catch(() => {}); }
     race.play();
+    syncGameSound();
   };
   tick();
 }
@@ -253,6 +261,23 @@ function hideFrameChrome() {
   try { frame.contentDocument.getElementById('corner-btns')?.style.setProperty('display', 'none'); } catch (_) { /* not loaded */ }
 }
 frame.addEventListener('load', hideFrameChrome);
+
+// THE RACE'S OWN SOUND: the frame's audio device (window.__audio), heard while
+// game sound is on and the race runs, at the shared volume (its bus reads the
+// stored level once, so a change is pushed). Off or paused, the bus goes to
+// zero and the context is suspended, so a held race holds no drone and a cue
+// cut off by a pause finishes after it. The context is created and resumed
+// from this page's gestures (the frame takes none): a browser lets a frame
+// start sound once the page around it has been clicked.
+function syncGameSound() {
+  const a = hookOf() && frame.contentWindow.__audio;
+  if (!a) return;
+  const on = state.sfx && !paused && !syncing;
+  if (on) a.resume();
+  if (a.master) a.master.gain.value = on ? storedVolume() : 0;
+  if (!on && a.ctx && a.ctx.state === 'running') a.ctx.suspend();
+}
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => syncGameSound(), true);
 
 // Lap and place of your car, and how long the race here takes (its winner's
 // time, once one has been seen), a few times a second.
@@ -484,6 +509,18 @@ function pickTrack(id) {
   paintSongs();
   loadRace();
 }
+function paintSfx() {
+  const b = el('mu-sfx');
+  b.classList.toggle('is-on', state.sfx);
+  b.textContent = state.sfx ? 'Game sound: on' : 'Game sound: off';
+}
+el('mu-sfx').addEventListener('click', () => {
+  state.sfx = !state.sfx;
+  save();
+  paintSfx();
+  applyVolume();
+  syncGameSound();
+});
 function paintCams() {
   for (const b of document.querySelectorAll('#mu-cams [data-cam]')) b.classList.toggle('is-on', b.dataset.cam === state.cam);
 }
@@ -508,6 +545,7 @@ vol.value = String(Math.round(storedVolume() * 100));
 vol.addEventListener('input', () => {
   saveVolumePercent(vol.value);
   applyVolume();
+  syncGameSound();
 });
 
 // Space pauses both, R restarts both, [ and ] step through the tracks.
@@ -521,11 +559,13 @@ document.addEventListener('keydown', (e) => {
     pickTrack(ids[(i + ids.length) % ids.length]);
   }
 });
-// A forgotten song behind a hidden tab is exactly what this page shouldn't do.
-document.addEventListener('visibilitychange', () => { if (document.hidden && !paused && current) togglePause(); });
+// A forgotten song or engine behind a hidden tab is exactly what this page
+// shouldn't do (a hidden frame stops drawing, and its voices would hold).
+document.addEventListener('visibilitychange', () => { if (document.hidden && !paused) togglePause(); });
 
 Gallery.initMobileOptionsToggle();
 paintCams();
+paintSfx();
 const linked = new URLSearchParams(location.hash.slice(1)).get('track');
 pickTrack([linked, state.track, draft && draft.tracks && draft.tracks[0] && draft.tracks[0].track, CUPS[0].tracks[0]]
   .find((id) => trackById.has(id)));
