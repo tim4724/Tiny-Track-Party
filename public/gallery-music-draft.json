@@ -1,44 +1,462 @@
 {
   "note": "Draft per-track race music for review: one song per track, none used twice; candidates are new Kevin MacLeod picks under audition, not yet in the game.",
   "tracks": [
-    { "track": "tidepool", "cup": "beach", "song": "island_meet_and_greet.mp3", "why": "Gentle marimba-and-ukulele island bounce for the opener, and its own blurb names the tidal pools.", "options": ["paradise_found.mp3", "tiki_bar_mixer.mp3", "beachfront_celebration.mp3"] },
-    { "track": "cove", "cup": "beach", "song": "candidates/captain_scurvy.mp3", "why": "Kevin's own pirate tune, a steady 180 bpm hornpipe; it is synth-voiced, so hear the acoustic Fiddles McGinty beside it.", "options": ["candidates/fiddles_mcginty.mp3", "candidates/call_to_adventure.mp3", "arroz_con_pollo.mp3"] },
-    { "track": "driftwood", "cup": "beach", "song": "candidates/unity.mp3", "why": "Pounding piano and drums at 140 bpm: intense without horror, and level from start to end like the storm.", "options": ["candidates/celtic_impulse.mp3", "candidates/morgana_rides.mp3", "desert_of_lost_souls.mp3", "candidates/ready_aim_fire.mp3", "candidates/exit_the_premises.mp3", "candidates/perigrine_grandeur.mp3", "candidates/tango_de_manzana.mp3", "candidates/aggressor.mp3", "candidates/crossing_the_chasm.mp3", "candidates/spy_groove.mp3", "candidates/pulse.mp3"] },
-    { "track": "riptide", "cup": "beach", "song": "beachfront_celebration.mp3", "why": "The seafront promenade, pier and surf club get the song named for a beachfront: brass, steel drums, uplifting.", "options": ["paradise_found.mp3", "arroz_con_pollo.mp3", "surf_shimmy.mp3"] },
-    { "track": "powder", "cup": "snow", "song": "wallpaper.mp3", "why": "Clean, bright resort-lodge pop for the ski resort that opens the cup.", "options": ["digital_lemonade.mp3", "glitter_blast.mp3"] },
-    { "track": "flurry", "cup": "snow", "song": "glitter_blast.mp3", "why": "Glockenspiel, flutes and ukulele sparkle like light snowfall over the frozen lake and its hamlet.", "options": ["digital_lemonade.mp3", "new_friendly.mp3"] },
-    { "track": "glacier", "cup": "snow", "song": "new_friendly.mp3", "why": "Round synths and a choir that keeps building, as big and cold as the ice field.", "options": ["digital_lemonade.mp3", "wallpaper.mp3"] },
-    { "track": "avalanche", "cup": "snow", "song": "cloud_dancer.mp3", "why": "The fastest snow song (214 bpm) for the cup's hardest run down the slide paths.", "options": ["digital_lemonade.mp3", "new_friendly.mp3"] },
-    { "track": "ribbon", "cup": "backyard", "song": "hyperfun.mp3", "why": "Ragtime piano, tuba and ukulele: a village band for the church green, maypole and fete.", "options": ["happy_happy_game_show.mp3", "happy_bee.mp3"] },
-    { "track": "pretzel", "cup": "backyard", "song": "feelin_good.mp3", "why": "Peppy strummed guitar for the children's summer of kites, picnics and the treehouse.", "options": ["happy_bee.mp3", "happy_happy_game_show.mp3"] },
-    { "track": "tangle", "cup": "backyard", "song": "vivacity.mp3", "why": "Vibraphone shimmer and an easy swing for the brook, the turning millwheel and the duck pond.", "options": ["feelin_good.mp3", "happy_bee.mp3"] },
-    { "track": "cloverleaf", "cup": "backyard", "song": "happy_bee.mp3", "why": "Bright 1950s organ rock, a bee song for the park in blossom, its bandstand and railway.", "options": ["vivacity.mp3", "happy_happy_game_show.mp3"] },
-    { "track": "wash", "cup": "canyon", "song": "surf_shimmy.mp3", "why": "Fast, twangy surf-rock guitar for the run down the dry wash and through its fords.", "options": ["desert_of_lost_souls.mp3", "still_pickin.mp3"] },
-    { "track": "gulch", "cup": "canyon", "song": "still_pickin.mp3", "why": "Banjo pickin' and stompin' is gold-rush music for the mine, its ore train and stamp mill.", "options": ["bama_country.mp3", "surf_shimmy.mp3"] },
-    { "track": "crag", "cup": "canyon", "song": "bama_country.mp3", "why": "Harmonica-and-fiddle country for the ranch, its corral and the turning windpump.", "options": ["still_pickin.mp3", "surf_shimmy.mp3"] },
-    { "track": "sidewinder", "cup": "canyon", "song": "desert_of_lost_souls.mp3", "why": "Mysterious, driving desert synths for the oil field and the tunnel through the massif.", "options": ["surf_shimmy.mp3", "bama_country.mp3"] },
-    { "track": "skysnake", "cup": "rooftop", "song": "bit_shift.mp3", "why": "Swinging 8-bit game music for a lap raced across a snakes-and-ladders board.", "options": ["chipper_doodle_v2.mp3", "voice_over_under.mp3"] },
-    { "track": "skyline", "cup": "rooftop", "song": "delightful_d.mp3", "why": "A bright, driving synth groove for cruising the skyway over the block city.", "options": ["voice_over_under.mp3", "bit_shift.mp3"] },
-    { "track": "helix", "cup": "rooftop", "song": "itty_bitty_8_bit.mp3", "why": "Its melody climbs the chromatic scale and settles back, like marbles riding the lifts and rolling down.", "options": ["chipper_doodle_v2.mp3", "bit_shift.mp3"] },
-    { "track": "gauntlet", "cup": "rooftop", "song": "candidates/master_of_the_feast.mp3", "why": "Crumhorns, lute and a comic bounce: toy-box medieval for the knights' siege, steady throughout.", "options": ["candidates/crunk_knight.mp3", "candidates/minstrel_guild.mp3"] }
+    {
+      "track": "tidepool",
+      "cup": "beach",
+      "song": "island_meet_and_greet.mp3",
+      "why": "Gentle marimba-and-ukulele island bounce for the opener, and its own blurb names the tidal pools.",
+      "options": [
+        "beachfront_celebration.mp3"
+      ]
+    },
+    {
+      "track": "cove",
+      "cup": "beach",
+      "song": "candidates/captain_scurvy.mp3",
+      "why": "Kevin's own pirate tune, a steady 180 bpm hornpipe; it is synth-voiced, so hear the acoustic Fiddles McGinty beside it.",
+      "options": [
+        "candidates/fiddles_mcginty.mp3",
+        "candidates/call_to_adventure.mp3",
+        "arroz_con_pollo.mp3"
+      ]
+    },
+    {
+      "track": "driftwood",
+      "cup": "beach",
+      "song": "candidates/unity.mp3",
+      "why": "Pounding piano and drums at 140 bpm: intense without horror, and level from start to end like the storm.",
+      "options": [
+        "candidates/celtic_impulse.mp3",
+        "candidates/morgana_rides.mp3",
+        "desert_of_lost_souls.mp3",
+        "candidates/ready_aim_fire.mp3",
+        "candidates/exit_the_premises.mp3",
+        "candidates/perigrine_grandeur.mp3",
+        "candidates/tango_de_manzana.mp3",
+        "candidates/aggressor.mp3",
+        "candidates/crossing_the_chasm.mp3",
+        "candidates/spy_groove.mp3",
+        "candidates/pulse.mp3"
+      ]
+    },
+    {
+      "track": "riptide",
+      "cup": "beach",
+      "song": "beachfront_celebration.mp3",
+      "why": "The seafront promenade, pier and surf club get the song named for a beachfront: brass, steel drums, uplifting.",
+      "options": [
+        "arroz_con_pollo.mp3",
+        "surf_shimmy.mp3"
+      ]
+    },
+    {
+      "track": "powder",
+      "cup": "snow",
+      "song": "wallpaper.mp3",
+      "why": "Clean, bright resort-lodge pop for the ski resort that opens the cup.",
+      "options": [
+        "digital_lemonade.mp3",
+        "glitter_blast.mp3"
+      ]
+    },
+    {
+      "track": "flurry",
+      "cup": "snow",
+      "song": "glitter_blast.mp3",
+      "why": "Glockenspiel, flutes and ukulele sparkle like light snowfall over the frozen lake and its hamlet.",
+      "options": [
+        "digital_lemonade.mp3",
+        "new_friendly.mp3"
+      ]
+    },
+    {
+      "track": "glacier",
+      "cup": "snow",
+      "song": "new_friendly.mp3",
+      "why": "Round synths and a choir that keeps building, as big and cold as the ice field.",
+      "options": [
+        "digital_lemonade.mp3"
+      ]
+    },
+    {
+      "track": "avalanche",
+      "cup": "snow",
+      "song": "cloud_dancer.mp3",
+      "why": "The fastest snow song (214 bpm) for the cup's hardest run down the slide paths.",
+      "options": [
+        "digital_lemonade.mp3",
+        "new_friendly.mp3"
+      ]
+    },
+    {
+      "track": "ribbon",
+      "cup": "backyard",
+      "song": "hyperfun.mp3",
+      "why": "Ragtime piano, tuba and ukulele: a village band for the church green, maypole and fete.",
+      "options": [
+        "happy_happy_game_show.mp3"
+      ]
+    },
+    {
+      "track": "pretzel",
+      "cup": "backyard",
+      "song": "feelin_good.mp3",
+      "why": "Peppy strummed guitar for the children's summer of kites, picnics and the treehouse.",
+      "options": [
+        "happy_happy_game_show.mp3"
+      ]
+    },
+    {
+      "track": "tangle",
+      "cup": "backyard",
+      "song": "vivacity.mp3",
+      "why": "Vibraphone shimmer and an easy swing for the brook, the turning millwheel and the duck pond.",
+      "options": [
+        "feelin_good.mp3"
+      ]
+    },
+    {
+      "track": "cloverleaf",
+      "cup": "backyard",
+      "song": "happy_bee.mp3",
+      "why": "Bright 1950s organ rock, a bee song for the park in blossom, its bandstand and railway.",
+      "options": [
+        "vivacity.mp3",
+        "happy_happy_game_show.mp3"
+      ]
+    },
+    {
+      "track": "wash",
+      "cup": "canyon",
+      "song": "surf_shimmy.mp3",
+      "why": "Fast, twangy surf-rock guitar for the run down the dry wash and through its fords.",
+      "options": [
+        "desert_of_lost_souls.mp3",
+        "still_pickin.mp3"
+      ]
+    },
+    {
+      "track": "gulch",
+      "cup": "canyon",
+      "song": "still_pickin.mp3",
+      "why": "Banjo pickin' and stompin' is gold-rush music for the mine, its ore train and stamp mill.",
+      "options": [
+        "bama_country.mp3",
+        "surf_shimmy.mp3"
+      ]
+    },
+    {
+      "track": "crag",
+      "cup": "canyon",
+      "song": "bama_country.mp3",
+      "why": "Harmonica-and-fiddle country for the ranch, its corral and the turning windpump.",
+      "options": [
+        "still_pickin.mp3",
+        "surf_shimmy.mp3"
+      ]
+    },
+    {
+      "track": "sidewinder",
+      "cup": "canyon",
+      "song": "desert_of_lost_souls.mp3",
+      "why": "Mysterious, driving desert synths for the oil field and the tunnel through the massif.",
+      "options": [
+        "surf_shimmy.mp3",
+        "bama_country.mp3"
+      ]
+    },
+    {
+      "track": "skysnake",
+      "cup": "rooftop",
+      "song": "bit_shift.mp3",
+      "why": "Swinging 8-bit game music for a lap raced across a snakes-and-ladders board.",
+      "options": []
+    },
+    {
+      "track": "skyline",
+      "cup": "rooftop",
+      "song": "delightful_d.mp3",
+      "why": "A bright, driving synth groove for cruising the skyway over the block city.",
+      "options": [
+        "bit_shift.mp3"
+      ]
+    },
+    {
+      "track": "helix",
+      "cup": "rooftop",
+      "song": "itty_bitty_8_bit.mp3",
+      "why": "Its melody climbs the chromatic scale and settles back, like marbles riding the lifts and rolling down.",
+      "options": [
+        "bit_shift.mp3"
+      ]
+    },
+    {
+      "track": "gauntlet",
+      "cup": "rooftop",
+      "song": "candidates/master_of_the_feast.mp3",
+      "why": "Crumhorns, lute and a comic bounce: toy-box medieval for the knights' siege, steady throughout.",
+      "options": [
+        "candidates/crunk_knight.mp3",
+        "candidates/minstrel_guild.mp3"
+      ]
+    }
   ],
   "candidates": [
-    { "file": "candidates/unity.mp3", "title": "Unity", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Unity.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400014", "dur": 264, "lufs": -12.7, "gain": 0.47315125896148047, "feel": "Action, Driving, Intense / Soundtrack, 140 bpm", "for": ["driftwood"] },
-    { "file": "candidates/celtic_impulse.mp3", "title": "Celtic Impulse", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Celtic%20Impulse.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100297", "dur": 158, "lufs": -16.9, "gain": 0.7673614893618189, "feel": "Dark, Driving, Mystical / World, 144 bpm", "for": ["driftwood"] },
-    { "file": "candidates/morgana_rides.mp3", "title": "Morgana Rides", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Morgana%20Rides.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1800010", "dur": 246, "lufs": -16.8, "gain": 0.7585775750291839, "feel": "Grooving, Driving, Mysterious / Soundtrack, 116 bpm", "for": ["driftwood"] },
-    { "file": "candidates/captain_scurvy.mp3", "title": "Captain Scurvy", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Captain%20Scurvy.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1800000", "dur": 227, "lufs": -14.5, "gain": 0.5821032177708715, "feel": "Bouncy, Driving, Humorous / Electronica, 180 bpm", "for": ["cove"] },
-    { "file": "candidates/fiddles_mcginty.mp3", "title": "Fiddles McGinty", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Fiddles%20McGinty.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400051", "dur": 207, "lufs": -10.7, "gain": 0.3758374042884442, "feel": "Bouncy, Bright, Uplifting / World, 174 bpm", "for": ["cove"] },
-    { "file": "candidates/call_to_adventure.mp3", "title": "Call to Adventure", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Call%20to%20Adventure.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300022", "dur": 247, "lufs": -12.4, "gain": 0.4570881896148751, "feel": "Action, Bright, Bouncy, Humorous, Epic / Soundtrack, 178 bpm", "for": ["cove"] },
-    { "file": "candidates/master_of_the_feast.mp3", "title": "Master of the Feast", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Master%20of%20the%20Feast.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400019", "dur": 228, "lufs": -15.8, "gain": 0.6760829753919819, "feel": "Bouncy, Bright, Humorous, Uplifting / World, 122 bpm", "for": ["gauntlet"] },
-    { "file": "candidates/crunk_knight.mp3", "title": "Crunk Knight", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crunk%20Knight.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400044", "dur": 232, "lufs": -12.0, "gain": 0.436515832240166, "feel": "Bouncy, Driving, Grooving / Unclassifiable, 104 bpm", "for": ["gauntlet"] },
-    { "file": "candidates/minstrel_guild.mp3", "title": "Minstrel Guild", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Minstrel%20Guild.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200098", "dur": 186, "lufs": -11.2, "gain": 0.3981071705534972, "feel": "Bouncy, Bright / Classical, 216 bpm", "for": ["gauntlet"] },
-    { "file": "candidates/ready_aim_fire.mp3", "title": "Ready Aim Fire", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ready%20Aim%20Fire.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500002", "dur": 217, "lufs": -10.0, "gain": 0.34673685045253166, "feel": "Aggressive, Driving, Intense / Rock, 172 bpm", "for": ["driftwood"] },
-    { "file": "candidates/exit_the_premises.mp3", "title": "Exit the Premises", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Exit%20the%20Premises.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500029", "dur": 210, "lufs": -10.6, "gain": 0.37153522909717257, "feel": "Driving, Intense / Electronica, 128 bpm", "for": ["driftwood"] },
-    { "file": "candidates/perigrine_grandeur.mp3", "title": "Perigrine Grandeur", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Perigrine%20Grandeur.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100114", "dur": 221, "lufs": -18.4, "gain": 0.9120108393559097, "feel": "Driving, Grooving, Intense, Mysterious / World, 122 bpm", "for": ["driftwood"] },
-    { "file": "candidates/tango_de_manzana.mp3", "title": "Tango de Manzana", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Tango%20de%20Manzana.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100404", "dur": 182, "lufs": -17.7, "gain": 0.8413951416451951, "feel": "Bouncy, Bright, Dark, Intense / Latin, 127 bpm", "for": ["driftwood"] },
-    { "file": "candidates/aggressor.mp3", "title": "Aggressor", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Aggressor.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700051", "dur": 239, "lufs": -10.6, "gain": 0.37153522909717257, "feel": "Action, Driving, Dark / Soundtrack, 150 bpm", "for": ["driftwood"] },
-    { "file": "candidates/crossing_the_chasm.mp3", "title": "Crossing the Chasm", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crossing%20the%20Chasm.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700026", "dur": 197, "lufs": -12.8, "gain": 0.4786300923226384, "feel": "Action, Dark, Driving / Soundtrack, 100 bpm", "for": ["driftwood"] },
-    { "file": "candidates/spy_groove.mp3", "title": "Spy Groove", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Spy%20Groove.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100372", "dur": 181, "lufs": -12.5, "gain": 0.46238102139926035, "feel": "Dark, Grooving, Intense, Mysterious / Soundtrack, 115 bpm", "for": ["driftwood"] },
-    { "file": "candidates/pulse.mp3", "title": "Pulse", "artist": "Kevin MacLeod", "license": "CC BY 4.0", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pulse%20Rock.mp3", "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100102", "dur": 176, "lufs": -17.1, "gain": 0.785235634610072, "feel": "Dark, Driving / Rock, 110 bpm", "for": ["driftwood"] }
+    {
+      "file": "candidates/unity.mp3",
+      "title": "Unity",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Unity.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400014",
+      "dur": 264,
+      "lufs": -12.7,
+      "gain": 0.47315125896148047,
+      "feel": "Action, Driving, Intense / Soundtrack, 140 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/celtic_impulse.mp3",
+      "title": "Celtic Impulse",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Celtic%20Impulse.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100297",
+      "dur": 158,
+      "lufs": -16.9,
+      "gain": 0.7673614893618189,
+      "feel": "Dark, Driving, Mystical / World, 144 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/morgana_rides.mp3",
+      "title": "Morgana Rides",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Morgana%20Rides.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1800010",
+      "dur": 246,
+      "lufs": -16.8,
+      "gain": 0.7585775750291839,
+      "feel": "Grooving, Driving, Mysterious / Soundtrack, 116 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/captain_scurvy.mp3",
+      "title": "Captain Scurvy",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Captain%20Scurvy.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1800000",
+      "dur": 227,
+      "lufs": -14.5,
+      "gain": 0.5821032177708715,
+      "feel": "Bouncy, Driving, Humorous / Electronica, 180 bpm",
+      "for": [
+        "cove"
+      ]
+    },
+    {
+      "file": "candidates/fiddles_mcginty.mp3",
+      "title": "Fiddles McGinty",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Fiddles%20McGinty.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400051",
+      "dur": 207,
+      "lufs": -10.7,
+      "gain": 0.3758374042884442,
+      "feel": "Bouncy, Bright, Uplifting / World, 174 bpm",
+      "for": [
+        "cove"
+      ]
+    },
+    {
+      "file": "candidates/call_to_adventure.mp3",
+      "title": "Call to Adventure",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Call%20to%20Adventure.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300022",
+      "dur": 247,
+      "lufs": -12.4,
+      "gain": 0.4570881896148751,
+      "feel": "Action, Bright, Bouncy, Humorous, Epic / Soundtrack, 178 bpm",
+      "for": [
+        "cove"
+      ]
+    },
+    {
+      "file": "candidates/master_of_the_feast.mp3",
+      "title": "Master of the Feast",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Master%20of%20the%20Feast.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400019",
+      "dur": 228,
+      "lufs": -15.8,
+      "gain": 0.6760829753919819,
+      "feel": "Bouncy, Bright, Humorous, Uplifting / World, 122 bpm",
+      "for": [
+        "gauntlet"
+      ]
+    },
+    {
+      "file": "candidates/crunk_knight.mp3",
+      "title": "Crunk Knight",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crunk%20Knight.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400044",
+      "dur": 232,
+      "lufs": -12.0,
+      "gain": 0.436515832240166,
+      "feel": "Bouncy, Driving, Grooving / Unclassifiable, 104 bpm",
+      "for": [
+        "gauntlet"
+      ]
+    },
+    {
+      "file": "candidates/minstrel_guild.mp3",
+      "title": "Minstrel Guild",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Minstrel%20Guild.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200098",
+      "dur": 186,
+      "lufs": -11.2,
+      "gain": 0.3981071705534972,
+      "feel": "Bouncy, Bright / Classical, 216 bpm",
+      "for": [
+        "gauntlet"
+      ]
+    },
+    {
+      "file": "candidates/ready_aim_fire.mp3",
+      "title": "Ready Aim Fire",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ready%20Aim%20Fire.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500002",
+      "dur": 217,
+      "lufs": -10.0,
+      "gain": 0.34673685045253166,
+      "feel": "Aggressive, Driving, Intense / Rock, 172 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/exit_the_premises.mp3",
+      "title": "Exit the Premises",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Exit%20the%20Premises.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500029",
+      "dur": 210,
+      "lufs": -10.6,
+      "gain": 0.37153522909717257,
+      "feel": "Driving, Intense / Electronica, 128 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/perigrine_grandeur.mp3",
+      "title": "Perigrine Grandeur",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Perigrine%20Grandeur.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100114",
+      "dur": 221,
+      "lufs": -18.4,
+      "gain": 0.9120108393559097,
+      "feel": "Driving, Grooving, Intense, Mysterious / World, 122 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/tango_de_manzana.mp3",
+      "title": "Tango de Manzana",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Tango%20de%20Manzana.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100404",
+      "dur": 182,
+      "lufs": -17.7,
+      "gain": 0.8413951416451951,
+      "feel": "Bouncy, Bright, Dark, Intense / Latin, 127 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/aggressor.mp3",
+      "title": "Aggressor",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Aggressor.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700051",
+      "dur": 239,
+      "lufs": -10.6,
+      "gain": 0.37153522909717257,
+      "feel": "Action, Driving, Dark / Soundtrack, 150 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/crossing_the_chasm.mp3",
+      "title": "Crossing the Chasm",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crossing%20the%20Chasm.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700026",
+      "dur": 197,
+      "lufs": -12.8,
+      "gain": 0.4786300923226384,
+      "feel": "Action, Dark, Driving / Soundtrack, 100 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/spy_groove.mp3",
+      "title": "Spy Groove",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Spy%20Groove.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100372",
+      "dur": 181,
+      "lufs": -12.5,
+      "gain": 0.46238102139926035,
+      "feel": "Dark, Grooving, Intense, Mysterious / Soundtrack, 115 bpm",
+      "for": [
+        "driftwood"
+      ]
+    },
+    {
+      "file": "candidates/pulse.mp3",
+      "title": "Pulse",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pulse%20Rock.mp3",
+      "page": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100102",
+      "dur": 176,
+      "lufs": -17.1,
+      "gain": 0.785235634610072,
+      "feel": "Dark, Driving / Rock, 110 bpm",
+      "for": [
+        "driftwood"
+      ]
+    }
   ]
 }
