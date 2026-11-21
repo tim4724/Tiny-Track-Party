@@ -223,7 +223,8 @@ const server = http.createServer((req, res) => {
   }
 
   // REVIEW, for /gallery-landmarks.html: notes taken on the stage, and a round
-  // of items set up to be judged there with the verdicts given on it. It reads
+  // of items set up to be judged there with the verdicts given on it; and for
+  // /gallery-music.html, the song picked for each track. It reads
   // and writes the checkout's scratch/review/ (gitignored), so it exists only in
   // development and answers only this machine.
   if (urlPath.startsWith('/api/review-')) {
@@ -289,6 +290,40 @@ const server = http.createServer((req, res) => {
                          at: new Date().toISOString(), title: item.title || id };
         fs.writeFileSync(verdictsFile(round), JSON.stringify(verdicts, null, 2) + '\n');
         sendJson(res, 200, { verdict: verdicts[id], file: path.relative(path.join(__dirname, '..'), verdictsFile(round)) });
+      });
+      return;
+    }
+    // MUSIC PICKS, for /gallery-music.html: the song chosen for each track and
+    // a note on it, in music-picks.json as { <track>: { song, at, note } }. A
+    // post names one track and touches only that entry: `song` a file under
+    // /assets/audio/music/ (null clears it, absent keeps it), `note` likewise.
+    const picksFile = path.join(REVIEW_DIR, 'music-picks.json');
+    const readPicks = () => (fs.existsSync(picksFile) ? JSON.parse(fs.readFileSync(picksFile, 'utf8')) : {});
+    if (urlPath === '/api/review-music' && req.method === 'GET') {
+      try {
+        sendJson(res, 200, readPicks());
+      } catch (e) {
+        sendJson(res, 500, { error: `scratch/review: ${(e && e.message) || e}` });
+      }
+      return;
+    }
+    if (urlPath === '/api/review-music' && req.method === 'POST') {
+      readJson(64 * 1024, ({ track, song, note }) => {
+        if (!/^[a-z0-9-]{1,40}$/.test(String(track))) { sendJson(res, 400, { error: 'a track is a catalogue track id' }); return; }
+        if (song != null && !/^(candidates\/)?[\w-]+(\.[\w-]+)*\.mp3$/.test(String(song))) {
+          sendJson(res, 400, { error: 'a song is a file under /assets/audio/music/' });
+          return;
+        }
+        const picks = readPicks();
+        const was = picks[track] || {};
+        const entry = { song: song === undefined ? (was.song || null) : song, at: new Date().toISOString() };
+        const said = String(note === undefined ? (was.note || '') : (note || '')).trim().slice(0, 4000);
+        if (said) entry.note = said;
+        if (entry.song || entry.note) picks[track] = entry;
+        else delete picks[track];
+        fs.mkdirSync(REVIEW_DIR, { recursive: true });
+        fs.writeFileSync(picksFile, JSON.stringify(picks, null, 2) + '\n');
+        sendJson(res, 200, { pick: picks[track] || null, file: path.relative(path.join(__dirname, '..'), picksFile) });
       });
       return;
     }
