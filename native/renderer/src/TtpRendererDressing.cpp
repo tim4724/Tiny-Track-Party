@@ -3205,11 +3205,9 @@ void TtpRenderer::buildDressingMerge() {
     layAmbientRoofs();
 }
 
-bool TtpRenderer::takeObstacles(ttp::rt::Obstacles& out) {
-    if (!mObstaclesDue) return false;
-    mObstaclesDue = false;
+void TtpRenderer::fillObstacles(ttp::rt::Obstacles& out) {
     out = {};
-    if (!mScene || !mEngine) return true;
+    if (!mScene || !mEngine) return;
     // What lies on the land is no obstacle, and a shot along the road would
     // graze it: a face counts only where it stands kClear over the ground.
     // A face longer than kBackdrop is the room or the horizon, not scenery.
@@ -3276,7 +3274,6 @@ bool TtpRenderer::takeObstacles(ttp::rt::Obstacles& out) {
     family(mPropAssets, mPropInstances, false);
     family(mSetAssets, mSetInstances, true);
     out.seal();
-    return true;
 }
 
 void TtpRenderer::addCut(utils::Entity e, float size, bool sheet) {

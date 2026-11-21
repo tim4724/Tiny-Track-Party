@@ -334,7 +334,8 @@ struct FollowCam {
 // cut starts the rig's spring over and that reads as the car jumping.
 //
 // A battle shot whose lens finds no place out of the scenery (LensPlan's
-// BLIND) is passed over at its cut, or cut away from once it is up.
+// BLIND) is passed over at its cut, or cut away from once it is up; never on
+// a looping, which is one unbroken move.
 // ---------------------------------------------------------------------------
 enum class Shot { WIDE, LEAD, PACK, CHASE };
 constexpr float COVER_HOLD_BATTLE = 10.0f, COVER_HOLD_CHASE = 8.0f;
@@ -415,12 +416,16 @@ struct CoverChase {
 // deck. The deck is the rig's own business (its pitches): the lens only may
 // not make it worse, so a fault of the rig's own eye is not one.
 //
-// A shot is BLIND when no level is a shot as it opens, or when the drawn eye
-// has been no shot for LENS_LATE. Coverage then cuts past it or away from
-// it rather than fly the lens round: hard cuts are the lobby's language. A
-// looping's ride is cut away from too: a wall is worse than the break.
+// THE LIFT STOPS WELL SHORT OF TOP-DOWN (LENS_ELEV_MAX): a camera looking
+// straight down on the cars reads as another camera, not this one lifted.
+// A shot that would need more is BLIND: when it opens, if any view of its
+// next LENS_AHEAD seconds has no level that is a shot, and once it is up,
+// when the drawn eye has been no shot for LENS_LATE. Coverage then cuts
+// past it or away from it rather than fly the lens round: hard cuts are the
+// lobby's language. Never on a looping, though: its swing and ride are one
+// unbroken move (FollowCam), so there the lens lifts and nothing cuts.
 // ---------------------------------------------------------------------------
-constexpr float LENS_ELEV_MAX = 1.1f;     // rad over level at u = 1 (~63 degrees)
+constexpr float LENS_ELEV_MAX = 0.75f;    // rad over level at u = 1 (~43 degrees)
 constexpr int LENS_LEVELS = 6;            // the u tried: 0, 0.2 .. 1
 constexpr float LENS_AHEAD[] = { 0.4f, 0.8f, 1.2f, 1.6f, 2.0f };   // seconds
 constexpr float LENS_HOLD = 2.5f;         // seconds a lifted lens waits before it comes down

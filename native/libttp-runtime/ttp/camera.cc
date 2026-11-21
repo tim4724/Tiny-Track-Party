@@ -419,7 +419,7 @@ V3 LensPlan::apply(const Obstacles& o, const NameTagDeck& deck, size_t n, float 
         if (goal == 0 && u < 1e-4f && uIn < 1e-4f) u = uVel = uIn = 0;   // home: the rig's own eye, to the bit
     }
     late = clear(views[0], u) ? 0 : late + dt;
-    blind = opening ? need[0] == LENS_LEVELS : late > LENS_LATE;
+    blind = opening ? std::count(need, need + n, LENS_LEVELS) > 0 : late > LENS_LATE;
     return lensEye(views[0].eye, views[0].aim, u);
 }
 

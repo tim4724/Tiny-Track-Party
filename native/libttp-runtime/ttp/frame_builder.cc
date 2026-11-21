@@ -475,7 +475,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // A battle shot the lens has no place for at its cut is passed
             // over at once: the lobby cuts to a clear shot rather than open
             // on a wall. Once a shot is up, its next step cuts away from it.
-            for (int tries = 0; d.coverage.cut && d.lens.blind && tries < 3; tries++) {
+            // Never on a looping: that is one unbroken move.
+            for (int tries = 0; d.coverage.cut && d.lens.blind && d.follow.loop < 0 && tries < 3; tries++) {
                 d.coverage.blind = true;
                 d.coverage.step(0, outCars, live, d.rosterPlayers, d.loops);
                 d.follow = {};
@@ -486,7 +487,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                 eye = coverFollow(d, cars, eng, outCars, live, dt);
                 target = d.follow.target;
             }
-            d.coverage.blind = follow && d.lens.blind;
+            d.coverage.blind = follow && d.lens.blind && d.follow.loop < 0;
         }
         if (mode == CAM_FREE) {
             eye = d.freeEye;

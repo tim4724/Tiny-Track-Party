@@ -3597,7 +3597,6 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
             mSetSkins.clear();
         }
         else buildDressingMerge();
-        mObstaclesDue = true;
         if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;
     }

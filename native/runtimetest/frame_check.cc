@@ -1549,7 +1549,7 @@ void testLensPlan(const GameTrack& track) {
     DisplayState d = freshState();
     d.roster = bare.roster;
     d.camMode = TTP_CAM_COVERAGE;
-    addBox(d.obstacles, rigEye - V3{1, 1, 1}, rigEye + V3{1, 1, 1});
+    addBox(d.obstacles, rigEye - V3{0.5f, 0.5f, 0.5f}, rigEye + V3{0.5f, 0.5f, 0.5f});
     d.obstacles.seal();
     check(rt::wallBlocks(d.obstacles, rigEye, aim), "premise: the block hides the battle from the rig");
     const V3 eye = viewEye(rt::buildFrame(d, &game, DT, caseAspect(d)));
@@ -1571,6 +1571,26 @@ void testLensPlan(const GameTrack& track) {
     const V3 up{car.up.x, car.up.y, car.up.z};
     checkNear(viewEye(h), V3{car.pos.x, car.pos.y, car.pos.z} + V3{car.forward.x, car.forward.y, car.forward.z} * -rt::COVER_CHASE_DIST
               + up * rt::COVER_CHASE_HEIGHT, "…which is the chase rig's own, scenery or not");
+  }
+  // The same lid over a battle on a looping: no skip and no cut. A looping
+  // is one unbroken move, however blind.
+  {
+    DisplayState d = freshState();
+    d.roster = {P0, P1, P2};
+    d.camMode = TTP_CAM_COVERAGE;
+    const rt::LoopPlace end{{0, 2, 0}, 0, 0.1f, 8, 0};
+    d.loops = {{80, 105, 120, 1000, {end, end}, 105, 120}};
+    addBox(d.obstacles, {-3, -1, -5}, {3, 1.2f, 2});
+    d.obstacles.seal();
+    rt::buildFrame(d, &game, DT, caseAspect(d));
+    check(d.coverage.shot == rt::Shot::LEAD && d.follow.loop == 0, "premise: a battle on a looping opens");
+    bool cut = false, finite = true;
+    for (int i = 0; i < 120; i++) {
+      const V3 e = viewEye(rt::buildFrame(d, &game, DT, caseAspect(d)));
+      cut = cut || d.coverage.cut;
+      finite = finite && std::isfinite(e.x) && std::isfinite(e.y) && std::isfinite(e.z);
+    }
+    check(!cut && d.coverage.shot == rt::Shot::LEAD && finite, "a battle on a looping is never cut, blind or not");
   }
 }
 
