@@ -285,7 +285,8 @@ for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () =>
 // The rain knob: a race whose sky rains plays the game's rain bed; the knob
 // trims it (the display's dev cueTrim) as a share of the game's level, shown
 // only while the race has rain, and saves the share with the track's pick.
-const rainShare = () => (picks[state.track] && picks[state.track].rain != null ? picks[state.track].rain : state.rain);
+// A track opens at the game's level (1) unless a share was saved for it.
+const rainShare = () => (picks[state.track] && picks[state.track].rain != null ? picks[state.track].rain : 1);
 function paintRain(share) {
   el('mu-rain-level').value = String(Math.round(share * 100));
   const db = share > 0 ? 20 * Math.log10(share) : -Infinity;
