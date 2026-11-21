@@ -2301,6 +2301,7 @@ private:
         filament::math::float3 ball{};  // the fireball, which TRAILS a hit car
         float t = -1;                   // <0 idle; else seconds since impact
         int32_t car = -1;               // >=0: rode this car in; the ball follows it
+        filament::math::float4 ground{};  // the ring's deck plane (vburst `ground`)
     };
     Burst mBursts[2];
     Mesh mBurstMeshes[2]; // shockwave rings

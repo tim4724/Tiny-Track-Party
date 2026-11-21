@@ -1854,6 +1854,13 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         // The events say which case it is, so the fireball can ride the car out
         // like the JS does (TrackProps IMPACT_FOLLOW) while the shockwave ring
         // stays put at the impact point.
+        //
+        // Both are clipped to the deck under them (vburst.mat point 3), as its
+        // normal and how high `at` stands over the deck point at (s, lat).
+        const auto deckGround = [&](float s, float lat, const float3& at) {
+            const float3 n = mTrack->frameAt(s).up;
+            return math::float4{ n, dot(n, at - mTrack->deckPoint(s, lat)) };
+        };
         const TtpBurstInput* bursts = ttp_frame_bursts(&input);
         for (uint32_t bi = 0; bi < input.burstCount; bi++) {
             Burst* slot = nullptr;
@@ -1866,10 +1873,12 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 slot->pos = carPosW[ev.car]
                         + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
                 slot->car = ev.car;
+                slot->ground = deckGround(hit.trackS, hit.trackLat, slot->pos);
             } else {
                 const TrackBin::Sample f = mTrack->frameAt(ev.s);
                 slot->pos = f.pos + f.lat * ev.lat + f.up * 0.3f;
                 slot->car = -1;
+                slot->ground = deckGround(ev.s, ev.lat, slot->pos);
             }
             slot->ball = slot->pos;
             slot->t = 0;
@@ -1891,11 +1900,14 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             }
             // The fireball chases the car it hit as that car spins away
             // (TrackProps IMPACT_FOLLOW 10/s); the ring stays at the impact.
+            // Followed, it is clipped by the deck under the car NOW.
+            math::float4 ballGround = b.ground;
             if (b.car >= 0 && (uint32_t) b.car < nCars && (size_t) b.car < carPosW.size()) {
                 const TtpCarInput& hit = cars[b.car];
                 const float3 target = carPosW[b.car]
                         + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
                 b.ball += (target - b.ball) * std::min(1.0f, 10.0f * input.dt);
+                ballGround = deckGround(hit.trackS, hit.trackLat, b.ball);
             }
             // Ring: IMPACT_RING_R0 0.25 → R1 2.0 on the JS ease-out
             // (1-(1-t)²), half-width held at IMPACT_RING_W 0.05 the whole way,
@@ -1908,6 +1920,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 mBurstRingMats[bi]->setParameter("ring", math::float2{ R, 0.05f });
                 mBurstRingMats[bi]->setParameter("tint",
                         math::float4{ 1, 1, 1, 0.55f * (1.0f - tr) });
+                mBurstRingMats[bi]->setParameter("ground", b.ground);
             }
             // Ball: pops to IMPACT_FLASH_R 0.62 in ~0.1 s and then HOLDS that
             // size while its brightness dies — a fireball that shrank instead
@@ -1923,6 +1936,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                     const float a = tf < 0.25f ? 1.0f
                             : std::max(0.0f, 1.0f - (tf - 0.25f) / 0.75f);
                     mBurstBallMats[bi]->setParameter("tint", math::float4{ 1, 1, 1, a });
+                    mBurstBallMats[bi]->setParameter("ground", ballGround);
                 }
             }
         }
