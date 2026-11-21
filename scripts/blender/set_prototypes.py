@@ -23802,8 +23802,8 @@ def castle_gate():
     # Gauntlet: the home straight runs THROUGH the block castle's gatehouse,
     # a way six units deep under one great wooden arch block (the toy's
     # arch, its half round cut out of its underside) on two jamb blocks, its
-    # portcullis drawn up into the arch, merlons along its top and the
-    # castle's alphabet blocks over the arch's face, round towers with
+    # portcullis drawn up into the arch, merlons along its top (the four over
+    # the arch to the racers the castle's alphabet blocks), round towers with
     # pointed roofs either side and a short curtain wall running away from
     # the road on the right (-X): on the left the lap's other road runs
     # past a few units off. Placed at lat 0, so x = 0 is the road's centreline
@@ -23817,11 +23817,15 @@ def castle_gate():
         box((OX - JX, J, 2 * D), (sx * (JX + OX) / 2, J / 2, 0), 0xe66a5a if sx > 0 else 0x5a8fd8)
     top = J + 4.4
     gate_arch(-OX, OX, J, top, JX, -D, D, 0xf2c14e, 0x6e5b3a)
-    for i in range(7):                            # merlons, front and back
-        for z in (-D + 0.55, D - 0.55):
-            box((1.1, 1.0, 1.1), ((i - 3) * 1.9, top + 0.5, z), TOY[(i + (z > 0)) % 4])
-    for i, ch in enumerate('ABCD'):               # the castle's letters over the arch, to the racers
-        block(1.3, ((1.5 - i) * 1.6, top - 1.0, -D - 0.65), TOY[(i + 1) % 4], faces=('-z',), letters={'-z': ch})
+    M = 1.3                                       # merlons, front and back, alphabet blocks: the middle
+    for i in range(6):                            # four to the racers ARE the castle's letters
+        x = (2.5 - i) * 2.28
+        for z in (-D + M / 2, D - M / 2):
+            ch = 'ABCD'[i - 1] if z < 0 and 0 < i < 5 else None
+            if ch:
+                block(M, (x, top + M / 2, z), TOY[i % 4], faces=('-z',), letters={'-z': ch})
+            else:
+                box((M, M, M), (x, top + M / 2, z), TOY[(i + (z > 0)) % 4])
     # the portcullis, drawn up into the crown of the arch
     for k in range(7):
         x = (k - 3) * 0.62
@@ -24578,29 +24582,93 @@ def trestle(p):
     cyl(r, top, (x, 0, z), POST_WOOD, segs=run_segs(8))
     cyl(r + 0.14, 0.22, (x, top - 0.26, z), POST_COLLAR, segs=run_segs(8))   # under the post's top: level with it, the two caps flickered
 
+def door_drum(x, z, r, lo, hi, y0, y1, toward, color, segs, w=0.95, back=0.45):
+    """A drum turned on `segs` sides (as cyl() turns them) from `lo` up to
+    `hi`, open underneath at the floor (lo 0) and on top (a lid covers it),
+    with a DOORWAY from y0 to y1 toward each of `toward` [(x, z)]: an
+    opening `w` wide cut into it as far as `back` from its axis, its sill,
+    lintel and jambs the drum's own, the dark of the drum's inside a wall at
+    the back (wide enough for a marble, deep enough that one in the drum's
+    middle is behind it)."""
+    doors = []
+    for tx, tz in toward:
+        l = math.hypot(tx - x, tz - z)
+        doors.append(((tx - x) / l, (tz - z) / l))
+    def lat(p, u):
+        return u[0] * p[1] - u[1] * p[0]          # across door u: along (-uz, ux)
+    def door_of(p):
+        for d, u in enumerate(doors):
+            if p[0] * u[0] + p[1] * u[1] > 0 and abs(lat(p, u)) < w / 2 - 1e-6:
+                return d
+        return None
+    ring0 = [(r * math.sin(2 * math.pi * k / segs), -r * math.cos(2 * math.pi * k / segs)) for k in range(segs)]
+    ring = []                                      # the drum's sides, cut where a doorway's jambs meet them
+    for k in range(segs):
+        a, b = ring0[k], ring0[(k + 1) % segs]
+        ring.append(a)
+        cuts = []
+        for u in doors:
+            la, lb = lat(a, u), lat(b, u)
+            for c in (-w / 2, w / 2):
+                if (la - c) * (lb - c) < 0:
+                    t = (c - la) / (lb - la)
+                    p = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+                    if p[0] * u[0] + p[1] * u[1] > 0:
+                        cuts.append((t, p))
+        ring += [p for _t, p in sorted(cuts)]
+    verts, faces, wants = [], [], []
+    def add(pts, want, into=None):
+        into = into or (verts, faces, wants)
+        into[1].append(tuple(range(len(into[0]), len(into[0]) + len(pts))))
+        into[0].extend((x + p[0], yy, z + p[1]) for p, yy in pts)
+        into[2].append(want)
+    n = len(ring)
+    for i in range(n):
+        a, b = ring[i], ring[(i + 1) % n]
+        out = ((a[0] + b[0]) / 2, 0.0, (a[1] + b[1]) / 2)
+        if door_of((out[0], out[2])) is None:
+            add([(a, lo), (b, lo), (b, hi), (a, hi)], out)
+        else:                                      # under and over the doorway
+            add([(a, lo), (b, lo), (b, y0), (a, y0)], out)
+            add([(a, y1), (b, y1), (b, hi), (a, hi)], out)
+    if lo > 0:
+        add([(p, lo) for p in ring], (0.0, -1.0, 0.0))
+    dark = ([], [], [])
+    for d, u in enumerate(doors):
+        v = (-u[1], u[0])
+        rim = sorted([p for p in ring if door_of(p) == d or (p[0] * u[0] + p[1] * u[1] > 0 and abs(abs(lat(p, u)) - w / 2) < 1e-6)],
+                     key=lambda p: lat(p, u))
+        bk = [(u[0] * back + v[0] * s * w / 2, u[1] * back + v[1] * s * w / 2) for s in (-1, 1)]
+        cut = rim + [bk[1], bk[0]]                # the cut's outline, round the rim and back across
+        add([(p, y0) for p in cut], (0.0, 1.0, 0.0))                       # the sill
+        add([(p, y1) for p in cut], (0.0, -1.0, 0.0))                      # the lintel's underside
+        for s, e, b_ in ((-1, rim[0], bk[0]), (1, rim[-1], bk[1])):        # the jambs, facing in
+            add([(e, y0), (b_, y0), (b_, y1), (e, y1)], (-v[0] * s, 0.0, -v[1] * s))
+        add([(bk[0], y0), (bk[1], y0), (bk[1], y1), (bk[0], y1)], (u[0], 0.0, u[1]), into=dark)
+    gate_faces(verts, faces, wants, color, 'drum')
+    if dark[0]:
+        gate_faces(*dark, 0x2a2735, 'doorway')
+
 def joint(x, z, h, toward=(), color=0x5a8fd8):
-    """A STATION, where one section hands its marbles to the next: a closed
-    drum under a cream lid on a fat connector post (a low one stands on the
-    floor), the marbles' line through its middle at `h`, a dark mouth in its
-    wall toward each of `toward` [(x, z)], where a chute or a pair of rails
-    runs in. The hand-over happens inside it: one section's marble dives
-    down the post as the next one's, the same marble on the run's conveyor
-    (run_marbles), carries on out of the far mouth. Nothing appears or
-    vanishes in sight."""
+    """A STATION, where one section hands its marbles to the next: a drum
+    under a cream lid on a fat connector post (a low one stands on the
+    floor), the marbles' line through its middle at `h`, an open doorway in
+    its wall toward each of `toward` [(x, z)], where a chute or a pair of
+    rails runs in. The hand-over happens inside it, behind the doorways'
+    dark: one section's marble dives down the post as the next one's, the
+    same marble on the run's conveyor (run_marbles), carries on out of the
+    far doorway. Nothing appears or vanishes in sight."""
     lo = max(0.0, h - 0.8)
     if lo > 0.9:
         cyl(0.6, 0.12, (x, 0, z), COLLAR, segs=run_segs(10))
-        cyl(0.44, lo - 0.1, (x, 0, z), GREY, segs=run_segs(10))
-        cyl(0.54, 0.2, (x, lo - 0.35, z), COLLAR, segs=run_segs(10))
+        cyl(0.44, lo + 0.1, (x, 0, z), GREY, segs=run_segs(10))            # up into the drum: it stands on its post
+        cyl(0.54, 0.25, (x, lo - 0.2, z), COLLAR, segs=run_segs(10))
     else:
         lo = 0.0
-    cyl(0.95, h + 0.75 - lo, (x, lo, z), color, segs=run_segs(12))
+    door_drum(x, z, 0.95, lo, h + 0.75, h - RUN_MR - 0.08, h + 0.5, toward, color, ring_sides(run_segs(12), 0.95))
     cyl(1.08, 0.2, (x, h + 0.75, z), CREAM, segs=run_segs(12))
-    cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=run_segs(8))
-    for tx, tz in toward:
-        dx, dz = tx - x, tz - z
-        l = math.hypot(dx, dz)
-        box((1.3, 1.0, 0.3), (x + dx / l * 0.9, h + 0.07, z + dz / l * 0.9), 0x2a2735, yaw=math.atan2(dx, dz))
+    if not RUN_LITE:                              # the box's lid has no knob: it pays for the doorways
+        cyl(0.3, 0.22, (x, h + 0.95, z), color, segs=run_segs(8))
 
 def mouth(at, toward, w=1.3, h=1.0):
     """A dark doorway on a housing's wall at `at` (x, y, z), facing `toward`
@@ -25020,32 +25088,59 @@ def run_loop(lite):
     joint(end[0], end[2], end[1], toward=((35.6, Z0 - SH), (26.0, -27.5)), color=0x6cbf6c)
     run_marbles('loop', [J0] + line + loop + [end], lite, after='vortex')
 
+STAIR_J0 = (33.4, 0.6, -22.4)                     # the loop's station, where the stair's floor chute leaves
+STAIR_FOOT = (-1.6, 0.55, -13.4)                  # the stair lift's foot
+STAIR_N, STAIR_D, STAIR_S = 11, 0.5, 0.33         # its steps, their tread and rise: high enough for the racer's head
+
+def stair_dir():
+    """The stair lift's own line (unit x, z): on from the floor chute's way."""
+    dx, dz = STAIR_FOOT[0] - STAIR_J0[0], STAIR_FOOT[2] - STAIR_J0[2]
+    l = math.hypot(dx, dz)
+    return dx / l, dz / l
+
+def stair_line():
+    """The marbles' line from the loop's station to the racer's head: the
+    floor chute, the stair lift's steps (`hop`, from its foot), the station
+    at the lift's head (where the run turns for the racer and the racer's
+    sorter lanes take over) and the high chute from it straight onto the
+    racer head's deck at its far, high side."""
+    J0, foot = STAIR_J0, STAIR_FOOT
+    floor = fillet([toward(J0, (26.0, 0.6, -27.5)), (26.0, 0.6, -27.5), (10.0, 0.58, -27.5), (1.4, 0.56, -14.2), foot], r=2.5)
+    dx, dz = stair_dir()
+    base = foot[1] - RUN_MR - 0.05                  # the chute's floor at the stair's foot
+    hop = [foot]
+    for k in range(STAIR_N):
+        s0, s1 = 0.15 + k * STAIR_D, 0.15 + (k + 1) * STAIR_D
+        y = base + STAIR_S * (k + 1)
+        hop += [(foot[0] + dx * s0, y + RUN_MR, foot[2] + dz * s0), (foot[0] + dx * s1, y + RUN_MR, foot[2] + dz * s1)]
+    top = hop[-1]
+    station = (top[0] + dx * 1.05, top[1] - 0.02, top[2] + dz * 1.05)      # its drum clear of the top step
+    x_in = racer_lane(0)
+    bend = (x_in, top[1] - 0.12, -8.2)
+    deck = (x_in, RACER_Y0 + (x_in - RACER_X) * RACER_TILT + RUN_MR * 1.06 + 0.1, RACER_A0 - 0.05)   # over the head's deck edge
+    high = fillet([toward(station, bend), bend, deck], r=2.0)
+    return floor, hop, station, high
+
 def run_stair(lite):
     # M -> A -> B: low along the floor from the loop, swinging out away from
     # the road (alongside it, a floor chute read as a second kerb) and in
     # across the corner home's outside to a stair lift whose steps rise and
-    # fall in turn, the marbles hopping up them to a chute that brings them
-    # round onto the marble racer's high end.
-    J0 = (33.4, 0.6, -22.4)
-    foot = (-1.6, 0.55, -13.4)
-    floor = fillet([toward(J0, (26.0, 0.6, -27.5)), (26.0, 0.6, -27.5), (10.0, 0.58, -27.5), (1.4, 0.56, -14.2), foot], r=2.5)
+    # fall in turn, the marbles hopping up them into a station at its head,
+    # where the run turns for the racer: the racer's chute out of it
+    # (run_racer) brings them round and straight on onto its high end. (The
+    # racer's own cup by its head, in that straight, read as a box swapping
+    # each marble for its twin; at the lift's head the hand-over has a turn
+    # to make.)
+    floor, hop, station, high = stair_line()
+    foot = STAIR_FOOT
     run_chute(floor, 0xf2c14e)
     for f in (0.15, 0.35, 0.55, 0.75):              # sleepers under it
         a, b = floor[int(len(floor) * f)], floor[int(len(floor) * f) + 1]
         box((1.0, 0.1, 0.3), (a[0], 0.05, a[2]), COLLAR, yaw=math.atan2(b[0] - a[0], b[2] - a[2]))
-    dx, dz = foot[0] - J0[0], foot[2] - J0[2]       # the stair's own line
-    l = math.hypot(dx, dz)
-    dx, dz = dx / l, dz / l
+    dx, dz = stair_dir()
     yaw = math.atan2(dx, dz)
-    N, D, S = 11, 0.5, 0.33                        # high enough for the racer's head
-    base = foot[1] - RUN_MR - 0.05                  # the chute's floor at the stair's foot
-    hop = [foot]
-    for k in range(N):
-        s0, s1 = 0.15 + k * D, 0.15 + (k + 1) * D
-        y = base + S * (k + 1)
-        x0, z0 = foot[0] + dx * s0, foot[2] + dz * s0
-        x1, z1 = foot[0] + dx * s1, foot[2] + dz * s1
-        hop += [(x0, y + RUN_MR, z0), (x1, y + RUN_MR, z1)]
+    N, D, S = STAIR_N, STAIR_D, STAIR_S
+    base = foot[1] - RUN_MR - 0.05
     for g in range(2):                             # the steps, every other one falling a step as its neighbours rise
         with animated('anim_bob:h=%.2f:p=2:o=%.1f#steps%d' % (-S, 0.5 * g, g), (foot[0], 0, foot[2])):
             for k in range(g, N, 2):
@@ -25059,17 +25154,12 @@ def run_stair(lite):
         a, b = 0.62 * side - 0.06, 0.62 * side + 0.06
         slab_on([(foot[0] + nx * a, top0, foot[2] + nz * a), (foot[0] + nx * b, top0, foot[2] + nz * b),
                  (end[0] + nx * b, top1, end[1] + nz * b), (end[0] + nx * a, top1, end[1] + nz * a)], top1, GREY)
-    top = hop[-1]
-    jx, jh, jz = RACER_FEED                       # the cup behind the racer's head, where its sorter's marbles take over
-    high = fillet([(top[0] + dx * 0.3, top[1] - 0.02, top[2] + dz * 0.3), (jx, top[1] - 0.12, -8.2), (jx, jh + 0.03, jz - 0.55)], r=2.0)
-    run_chute(high, 0xf2c14e)
-    for x, z in ((-7.9, -9.6), (jx, -5.4)):
-        trestle(on(resample(high, 0.3), x, z))
-    run_marbles('stair', [J0] + floor + hop[1:] + high + [(jx, jh, jz)], lite, after='loop')
+    joint(station[0], station[2], station[1], toward=(hop[-1][0::2], high[1][0::2]), color=0xa878e8)
+    run_marbles('stair', [STAIR_J0] + floor + hop[1:] + [station], lite, after='loop')
 
 RACER_LANES = (0xe66a5a, 0xf2c14e, 0x5a8fd8, 0x6cbf6c)   # the racer's lanes, far side to the road's: the sorter's four colours
 RACER_X, RACER_W, RACER_TILT = -7.0, 3.6, -0.55
-RACER_FEED = (-8.35, 3.85, -2.2)                 # the cup the stair lift's marbles hand over in: over the far lane's line
+RACER_A0, RACER_Y0 = 1.5, 2.45                    # the head board's high end: where it starts, its middle's height there
 
 def racer_lane(k):
     """Lane k's middle (x)."""
@@ -25112,23 +25202,24 @@ def run_racer(lite):
     # B -> C: the wooden marble racer beside the grid straight on the right,
     # and the run's SORTER: two boards with daylight between them stepping
     # down north, a light bridge of the same four lanes across the gap, the
-    # lanes tilted to face the road. The stair lift's marbles come up out of
-    # a cup behind its head, mixed, and roll onto the head's open deck at its
-    # far, high side; each rolls down the tilt across the head as far as the
+    # lanes tilted to face the road. The chute from the stair lift's head
+    # runs straight on onto the head's open deck at its far, high side, the
+    # marbles mixed; each rolls down the tilt across the head as far as the
     # gate of its own colour and turns through it, so every lane races only
     # marbles of its colour beside the cars. At the foot they roll on down
     # the tilt along a gutter and drop through the hole at its road end into
-    # the board. Four chains, one a colour, their loops padded under the
-    # floor to one length, so the marbles keep their order and their gaps
-    # where they share the feed and the gutter. From the foot a floor chute
+    # the board. Four chains, one a colour, from the lift's head station on
+    # (stair_line), their loops padded under the floor to one length, so the
+    # marbles keep their order and their gaps where they share the chute,
+    # the feed and the gutter. From the foot a floor chute
     # swings out away from the road and round behind the slinky and its block
     # (in front of them it hid the block and read as a second kerb) to a cup
     # at the marble tower's back, and up its column the marbles go round
     # again.
     X, W, T = RACER_X, RACER_W, 0.8
-    A0, A1, B0, B1 = 1.5, 22.5, 26.0, 47.0        # the two boards
+    A0, A1, B0, B1 = RACER_A0, 22.5, 26.0, 47.0   # the two boards
     HEAD, FOOT = 1.0, 1.0                         # the open deck at the head, the gutter at the foot
-    S0 = racer_deck(A0, A1, 2.45, 1.95, T, paint=(A0 + HEAD, A1))
+    S0 = racer_deck(A0, A1, RACER_Y0, 1.95, T, paint=(A0 + HEAD, A1))
     S1 = racer_deck(B0, B1, 1.75, 1.25, T, paint=(B0, B1 - FOOT))
     SB = racer_deck(A1 - 0.05, B0 + 0.05, S0(X, A1 - 0.05), S1(X, B0 + 0.05), 0.25, drop=0.03)   # the bridge, let into both
     racer_legs(S0, T, A0, A1)
@@ -25144,23 +25235,24 @@ def run_racer(lite):
     bar((X - W / 2, S1(X - W / 2, B1) + 0.15, B1), (X + W / 2, S1(X + W / 2, B1) + 0.15, B1), 0.16, 0.3, CREAM)   # the gutter's end wall
     zf = B1 - FOOT / 2
     xo = racer_lane(3)
-    # the feed: out of the hand-over cup onto the head's far side
+    # the feed: out of the stair lift's head station (run_stair) onto the
+    # head's far side
     R = RUN_MR * 1.06
-    jx, jh, jz = RACER_FEED
+    _floor, _hop, station, high = stair_line()
+    run_chute(high, 0xf2c14e)
+    for z in (-6.9, -2.6):
+        trestle(on(resample(high, 0.3), high[-1][0], z))
+    trestle(high[-1])
     x_in = racer_lane(0)
-    joint(jx, jz, jh, toward=((jx, jz - 1.0), (x_in, A0)), color=0xa878e8)
-    feed = [(jx, jh + 0.03, jz + 0.55), (x_in, S0(x_in, A0) + R + 0.1, A0 - 0.05)]
-    run_chute(feed, 0xa878e8)
-    trestle(feed[1])
     zc = A0 + HEAD / 2
     def on0(x, z): return (x, S0(x, z) + R, z)
     def on1(x, z): return (x, S1(x, z) + R, z)
     loops = []
     for k in range(4):
         x = racer_lane(k)
-        deck = [feed[1], on0(x_in, zc)] + ([on0(x, zc)] if k else []) + [on0(x, za + 0.6), on0(x, A1), on1(x, B0), on1(x, zf)]
+        deck = [high[-1], on0(x_in, zc)] + ([on0(x, zc)] if k else []) + [on0(x, za + 0.6), on0(x, A1), on1(x, B0), on1(x, zf)]
         deck += [on1(xo, zf)] if k < 3 else []
-        seen = [(jx, jh, jz), feed[0]] + fillet(deck, r=0.45, n=4) + [(xo, S1(xo, zf) - 0.5, zf)]
+        seen = [station] + high[:-1] + fillet(deck, r=0.45, n=4) + [(xo, S1(xo, zf) - 0.5, zf)]
         loops.append(seen)
     # the foot: a box with a lid over the hole, the gutter and the last lane
     # running into it, the chute home running out of it
