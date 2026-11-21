@@ -902,6 +902,13 @@ export function runDisplayScenario(opts, ctx) {
       let track = ctx.track;
       let seats = players;
       let mode = 'driver';
+      // SOUND, when the page asks for it (?sfx=1: the landmark gallery): the
+      // race's own voices off the bound session and the track's song, decided by
+      // the production layer as main.js does; the page owns the context
+      // (window.__audio): its unlock, level and mute.
+      const audible = !!window.__audio && !!window.__audioDecide && new URLSearchParams(location.search).get('sfx') === '1';
+      const sfx = (cmds) => { if (audible) window.__audio.apply(cmds); };
+      let songFor = null;   // the track whose song is playing
       let focusAt = 0;
       let placeAt = 0;            // which placement of the focused model is framed
       let spreadOn = false;
@@ -966,6 +973,10 @@ export function runDisplayScenario(opts, ctx) {
         race.ms = 0;
         window.__engine = engine;
         scene.bindSession(engine.h);
+        if (audible) {
+          sfx(window.__audioDecide.stopVoices());
+          sfx(window.__audioDecide.bind(engine.h));
+        }
         scene.hold(mode !== 'race');
         // The cells' place/lap readout off the grid, rather than empty pills.
         for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
@@ -2106,12 +2117,19 @@ export function runDisplayScenario(opts, ctx) {
       }
 
       scene.onFrame = (dt, nowMs) => {
+        // The track's song, once the page has unlocked the sound (a command
+        // before that is dropped), and again on a new track.
+        if (audible && songFor !== track.id && window.__audio.ready) {
+          songFor = track.id;
+          sfx(window.__audioDecide.startMusic(track.id));
+        }
         if (mode === 'orbit') { if (!turn.held) orbitT += dt; aim(); return; }
         if (mode !== 'race' || !engine || race.paused) return;
         const ms = dt * 1000;
         race.dts.length = race.step;
         race.dts.push(ms);
         engine.update(ms);
+        sfx(audible ? window.__audioDecide.frame(nowMs) : null);
         race.step++;
         race.ms += ms;
         const snap = engine.getSnapshot();
@@ -2618,6 +2636,7 @@ export function runDisplayScenario(opts, ctx) {
         pause(on) {
           race.paused = on === undefined ? !race.paused : !!on;
           scene.frozen = race.paused;
+          if (race.paused) sfx(audible ? window.__audioDecide.stopVoices() : null);
           return race.paused;
         },
         seek: (step) => seekFree(step),

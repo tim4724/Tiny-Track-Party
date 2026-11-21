@@ -7,13 +7,14 @@
 // engine through that hook; nothing here knows where a piece stands.
 import * as Gallery from './gallery-common.js';
 import { MAX_BUFFER_H } from './display/Stage.js';
+import { storedVolume } from './display/audio/bus.js';
 
 // This page's own memory. gallery-common's state is shared by every gallery
 // page, and a track or view picked here means nothing on the others.
 const STATE_KEY = 'tinytrack_gallery_landmarks_v2';
 const state = (() => {
   const d = { track: '', players: 1, view: 'race', res: 'sharp', speed: 'normal', help: false, tab: 'review',
-              tier: 'full', sort: 'size', item: '' };
+              tier: 'full', sort: 'size', item: '', sound: true };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
@@ -136,6 +137,7 @@ function load() {
   if (state.track) q.set('track', state.track);
   if (state.tier === 'lite') q.set('detail', 'lite');
   if (state.res !== 'auto') q.set('dpr', String(resScale()));
+  q.set('sfx', '1');
   frame.src = '/?' + q;
   whenReady(init);
 }
@@ -1033,6 +1035,7 @@ function onKey(e) {
   else if (k === 'f') toggleFull();
   else if (k === 'h' && document.fullscreenElement) legend.hidden = !legend.hidden;
   else if (k === 'n') openNote();
+  else if (k === 'v') { state.sound = !state.sound; save(); syncSound(); }
   else return;
   e.preventDefault();
 }
@@ -1042,8 +1045,25 @@ function onKeyUp(e) {
 window.addEventListener('keydown', onKey);
 window.addEventListener('keyup', onKeyUp);
 
+// The game's sound in the stage (?sfx=1): the race's voices and the track's
+// song, at the shared volume, or silent with the Sound button off. The stage's
+// AudioContext is unlocked from the viewer's own clicks and keys here.
+function syncSound() {
+  let a;
+  try { a = frame.contentWindow.__audio; } catch (_) { return; }
+  if (!a) return;
+  if (state.sound && a.resume) a.resume();
+  if (a.master) a.master.gain.value = state.sound ? storedVolume() : 0;
+  const b = document.getElementById('lm-sound');
+  b.textContent = state.sound ? 'Sound: on' : 'Sound: off';
+  b.classList.toggle('active', state.sound);
+}
+document.getElementById('lm-sound').addEventListener('click', () => { state.sound = !state.sound; save(); syncSound(); });
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => syncSound(), true);
+
 function init(h) {
   lm = h;
+  syncSound();
   frame.contentWindow.addEventListener('keydown', onKey);
   frame.contentWindow.addEventListener('keyup', onKeyUp);
   // Grouped by cup, in catalogue order; once, a Res reload keeps it.
