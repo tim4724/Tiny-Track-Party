@@ -329,7 +329,7 @@ function paintCups() {
       else if (d && d.song) sub.textContent = `draft: ${songOf(d.song).title}`;
       else sub.textContent = 'cup pool (random)';
       b.append(name, sub);
-      b.addEventListener('click', () => pickTrack(id));
+      b.addEventListener('click', () => pickTrack(id, true));
       col.appendChild(b);
     }
     box.appendChild(col);
@@ -511,7 +511,10 @@ function paintTransport() {
 }
 
 // ---- picking a track ----
-function pickTrack(id) {
+// `auto`: start the track's chosen song (the saved pick, else the draft's) with
+// its race from the grid. Only on the viewer's own pick: a song at page load is
+// sound before any gesture, which the browser refuses.
+function pickTrack(id, auto = false) {
   if (!trackById.has(id) || (id === state.track && frame.src)) return;
   if (current) stopSong();
   paused = false;
@@ -524,6 +527,8 @@ function pickTrack(id) {
   paintHead();
   paintSongs();
   loadRace();
+  const chosen = (picks[id] && picks[id].song) || (draftFor.get(id) || {}).song;
+  if (auto && chosen && songs.has(chosen) && !missing.has(chosen)) playSong(chosen);
 }
 function paintSfx() {
   const b = el('mu-sfx');
@@ -572,7 +577,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === '[' || e.key === ']') {
     const ids = CUPS.flatMap((c) => c.tracks);
     const i = ids.indexOf(state.track) + (e.key === ']' ? 1 : -1);
-    pickTrack(ids[(i + ids.length) % ids.length]);
+    pickTrack(ids[(i + ids.length) % ids.length], true);
   }
 });
 // A forgotten song or engine behind a hidden tab is exactly what this page
