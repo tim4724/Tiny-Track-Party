@@ -73,12 +73,12 @@ export function licenseInfo(id) {
 // and this is the one link on the page that has to work.
 export const ASSET_CREDITS = [
   // No Kenney model ships any more: every model is built by this repo's own
-  // scripts (public/assets/toycar/SOURCES.json). The credit stays for what they
-  // are built AFTER: it covers no path, so it names no license either (a chip
+  // scripts (public/assets/toycar/SOURCES.json). The credit stays for what
+  // inspired them: it covers no path, so it names no license either (a chip
   // there read as "these files are Kenney's").
   {
     section: '3D models',
-    title: 'Model style after Kenney\'s asset kits',
+    title: 'Inspired by Kenney\'s asset kits',
     author: 'Kenney',
     url: 'https://kenney.nl/assets',
   },
