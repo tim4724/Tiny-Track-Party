@@ -23687,8 +23687,7 @@ def headframe():
     # it all: in-step sways and bobs (`o`) with a rest r and a hold t, each
     # part's move set inside the hold of the one it rides (the cart's roll
     # inside the cage's stop at the top, the tip inside the cart's stop at
-    # the stop block, the ore sinking into the cart's closed tub while it is
-    # tipped and rising again while the cage is down in the shaft). The
+    # the stop block, the ore's way out and home inside the tip). The
     # rope comes off the wheel's outer side (RX) straight down to the cage's
     # shackle in three lengths sliding one into the next, each moving its
     # share of the cage's climb (the top one fixed, the middle half, the
@@ -23703,9 +23702,20 @@ def headframe():
     LAND = 3.36                                                                  # the landing's rails' top
     RX, CLIMB = WX - 0.86, LAND - RAIL0
     REST, HOLD = 0.15, 0.55                                                      # the cage: 3 s in the shaft, 11 s at the top
-    ROLL, OUT = 1.48, (0.175, 0.3, 0.1)                                          # the cart: how far, and (start, its stop, each way) in cycles
-    TIP = (0.30, 0.1, 0.075)                                                     # the tip: start, held, each way
-    SINK = (0.38, 0.49, 0.05)                                                    # the ore sinking: start, held, each way
+    ROLL, OUT = 1.48, (0.175, 0.35, 0.075)                                       # the cart: how far, and (start, its stop, each way) in cycles
+    TIP = (0.27, 0.17, 0.07)                                                     # the tub's tip: start, held, each way
+    # The ore pours from 20 degrees of the tip (0.30): out over the lip and
+    # down into the bin before the tub is full over (0.34). It goes home
+    # unseen: it stays in the bin while the tub rights and the cart rolls
+    # back (KEEP_TIP and KEEP_ROLL, each the very move it undoes, reversed),
+    # rides the cage down through the bin's floor and the boarded chute
+    # under it into the ground, and once the cage is down crosses under the
+    # collar house and comes up inside it into the tub, each undone in turn.
+    SLIDE, SLID = (0.30, 0.66, 0.02), (-0.385, 0.25)                             # out over the lip (the tub's frame:
+                                                                                 # level in the world's, tipped)
+    DROP, DROPD = (0.32, 0.554, 0.018), 1.5                                      # and down into the bin
+    KEEP_TIP = (0.51, 0.33, 0.07)                                                # the tip's way back, kept
+    KEEP_ROLL = (0.6, 0.175, 0.075)                                              # the cart's way back, kept
     def hoist(verb, amount, tag):
         return 'anim_%s:%s:p=%.0f:r=%.2f:t=%.2f:o=0#%s' % (verb, amount, PERIOD, REST, HOLD, tag)
     def inside(verb, amount, span, tag):
@@ -23749,14 +23759,35 @@ def headframe():
         # the cart on the cage's rails, along Z: a side-tipping cart, its tub
         # pivoted on the outer edge of its chassis. The chassis rolls out down
         # the landing (-Z, its node's up aimed there) on its wheels, the tub
-        # tips over the bin (-X) and rights itself, and its ore sinks into
-        # its closed tub while it is tipped
+        # tips over the bin (-X) and rights itself; its ore pours out of it
+        # (SLIDE above), each step of its way a part riding the one before
+        TP = (RX - 0.15, RAIL0 + 0.18, ZC)                                       # the tub's pivot
+        ORE = (RX, RAIL0 + 0.455, ZC)
+        def speck(at):
+            # A step of the ore's way with nothing of its own to draw makes no
+            # part (TtpRendererMotion: its riders ride on past it), so each
+            # carries a speck too small to see, in the tub's wall at rest.
+            fig_block((0.004, 0.004, 0.004), at, 'slate')
         with animated(inside('bob', 'h=%.2f' % ROLL, OUT, 'cart'), (RX, RAIL0, ZC), tilt=-math.pi / 2) as cart:
             ore_cart((RX, RAIL0, ZC), ore=False, k=0.35, parts='chassis')
-            with animated(inside('sway', 'a=z:d=55', TIP, 'tip'), (RX - 0.15, RAIL0 + 0.18, ZC)):
+            with animated(inside('sway', 'a=z:d=55', TIP, 'tip'), TP):
                 ore_cart((RX, RAIL0, ZC), ore=False, k=0.35, parts='tub')
-                with animated(inside('bob', 'h=-0.14', SINK, 'ore'), (RX, RAIL0 + 0.455, ZC)):
-                    rock_lump(0.17, (RX, RAIL0 + 0.455, ZC), 'yellow', (0.9, 0.5, 1.3), 0.0, seed=4.0)
+                with animated(inside('sway', 'a=z:d=55', KEEP_TIP, 'keeptip'), TP):
+                    speck((RX - 0.12, RAIL0 + 0.2, ZC))
+                    with animated(inside('bob', 'h=%.2f' % ROLL, KEEP_ROLL, 'keeproll'), ORE, tilt=-math.pi / 2) as keep:
+                        speck((RX, RAIL0 + 0.4, ZC))
+                        # the slide and the drop, each a bob along its node's up,
+                        # turned in the tub's plane (yaw a quarter, then tilted)
+                        with animated(inside('bob', 'h=%.3f' % math.hypot(*SLID), SLIDE, 'slide'), ORE, yaw=math.pi / 2,
+                                      tilt=math.atan2(*SLID)) as slide:
+                            speck((RX, RAIL0 + 0.4, ZC))
+                            # the drop's up is the world's once the tub is over
+                            with animated(inside('bob', 'h=%.2f' % -DROPD, DROP, 'drop'), ORE, yaw=math.pi / 2,
+                                          tilt=math.radians(55)) as drop:
+                                rock_lump(0.14, ORE, 'yellow', (0.9, 0.5, 1.3), 0.0, seed=4.0)
+                                unlean(drop)
+                            unlean(slide)
+                        unlean(keep)
             unlean(cart)
     # its guides: two timbers either side of it from the collar house's roof
     # to over its stop, tied across the top (either side of the rope) and
@@ -23789,8 +23820,8 @@ def headframe():
         strut((XL * 0.82, H + 0.1, ZC + sz * 0.85), (7.3, -0.3, ZC + sz * 1.1), 0.24, TIMBER)
     strut((7.3, 0.05, ZC - 1.1), (7.3, 0.05, ZC + 1.1), 0.2, TIMBER)            # their sill
     # the collar house over the shaft, between the right-hand legs
-    box((1.3, 1.3, 1.5), (-4.25, 0.45, ZC), BOARD)
-    box((1.42, 0.12, 1.62), (-4.25, 1.15, ZC), RUST)
+    box((1.7, 1.3, 1.5), (-4.45, 0.45, ZC), BOARD)                                # (out to under the bin's side: the
+    box((1.82, 0.12, 1.62), (-4.45, 1.15, ZC), RUST)                              # ore comes home through it)
     box((0.06, 0.9, 0.6), (-3.58, 0.35, ZC), 'dark')                             # its gate, toward the road
     box((2 * CX + 0.08, 0.03, 2 * CZ + 0.1), (RX, 1.215, ZC), 'dark')            # the shaft's mouth in its roof, the cage's way
     # the ore bin over the loading shed behind the right-hand legs, where
@@ -23802,6 +23833,7 @@ def headframe():
     for sx in (-0.7, 0.7):
         box((0.1, 1.15, 1.9), (SX + sx, 0.48, SZ + 0.1), BOARD)                   # the shed's walls
     box((1.5, 1.15, 0.1), (SX, 0.48, SZ + 1.0), BOARD)                           # and its back
+    box((0.34, 1.92, 0.48), (-5.12, 0.94, 0.54), BOARD)                          # the bin's chute down its back corner
     box((1.75, 0.16, 2.0), (SX, 1.95, SZ), TIMBER)                               # the bin's floor
     solid([(SX - 0.8, 2.0, SZ - 0.95), (SX + 0.8, 2.0, SZ - 0.95), (SX + 0.8, 2.0, SZ + 0.95), (SX - 0.8, 2.0, SZ + 0.95),
            (SX - 0.95, 3.1, SZ - 1.1), (SX + 0.95, 3.1, SZ - 1.1), (SX + 0.95, 3.1, SZ + 1.1), (SX - 0.95, 3.1, SZ + 1.1)],
