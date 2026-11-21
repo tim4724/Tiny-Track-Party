@@ -57,12 +57,11 @@ gate in this tree would tell you.
 
 This is the trap. Opus/AAC at low bitrates are smaller and better per bit, **but**
 the C++ song table bakes the path INCLUDING the extension and the audio corpus
-froze those strings — and that corpus can never be re-recorded, because its JS
-oracle is deleted.
-
-Changing the extension turns the audio replay and its record roundtrip red on all
-four legs. Moving off MP3 means making the song's file field a stem and letting
-each shell append its own extension: **an ABI and corpus change, not an encode.**
+records those strings, so a new extension is a deliberate corpus re-record
+(`tests/CLAUDE.md`) on top of the encode — and no one other container serves
+every leg (below). Moving off MP3 means making the song's file field a stem and
+letting each shell append its own extension: **an ABI and corpus change, not an
+encode.**
 
 MP3 also happens to be the only container all four legs decode unaided, which is
 what makes the bundling above a copy rather than a pipeline. Apple decodes Opus

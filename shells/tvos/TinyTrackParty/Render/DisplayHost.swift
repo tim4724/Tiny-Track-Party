@@ -773,9 +773,8 @@ final class DisplayHost {
     }
 
     /// The biome the current scene RESOLVED to — the track's cup, or the
-    /// override. Kept because the GO beat needs it by name
-    /// (`ttp_race_start_beat_json` keys the music pool off it) and the staging
-    /// sequence is the only thing that ever knew which one won.
+    /// override. Kept because the race HUD's boost accent needs it by name and
+    /// the staging sequence is the only thing that ever knew which one won.
     private(set) var biomeName = ""
 
     private func flushPendingAssets() {

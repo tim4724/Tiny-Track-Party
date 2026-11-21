@@ -3105,7 +3105,7 @@ export function runDisplayScenario(opts, ctx) {
         // THE SONG STARTS ON GO, not at the launch. That is where the live walk
         // puts it (race_flow's raceStart, not launchRace), so the countdown beats
         // play over silence and the music arrives with the field.
-        if (!raceMs && audible) sfx(window.__audioDecide.startMusic(scene.biome()));
+        if (!raceMs && audible) sfx(window.__audioDecide.startMusic(cup.tracks[leg]));
         raceMs += ms;
         if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) flag();
       };

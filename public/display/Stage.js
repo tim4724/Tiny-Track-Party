@@ -518,7 +518,7 @@ export class Stage {
     return this._rebuild();
   }
 
-  // The biome this track is being drawn in — the race-music pool key.
+  // The biome this track is being drawn in.
   biome() { return this._biome; }
 
   // Draw every scene from here on as the ASSET GALLERY's showroom: this biome's

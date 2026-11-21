@@ -14,12 +14,12 @@ const url = require('node:url');
 const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
-let RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS;
+let TRACK_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS;
 let ASSET_CREDITS;
 let creditsFor, LICENSES, OBLIGATION_IDS, SECTION_ORDER;
 let upstream;
 test.before(async () => {
-  ({ RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/audio/musicCatalogue.js'));
+  ({ TRACK_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/audio/musicCatalogue.js'));
   ({
     ASSET_CREDITS,
     creditsFor, LICENSES, OBLIGATION_IDS, SECTION_ORDER,
@@ -27,34 +27,32 @@ test.before(async () => {
   upstream = await import('../scripts/gen-upstream-licenses.mjs');
 });
 
-test('every RACE_MUSIC song carries full attribution fields', () => {
-  for (const [biome, pool] of Object.entries(RACE_MUSIC)) {
-    assert.ok(pool.length > 0, `biome '${biome}' has an empty pool — delete the key instead`);
-    for (const s of pool) {
-      for (const field of ['file', 'title', 'artist', 'license', 'source']) {
-        assert.ok(s[field], `${biome}: '${s.title || s.file}' is missing '${field}'`);
-      }
+test('every TRACK_MUSIC song carries full attribution fields', () => {
+  for (const [track, s] of Object.entries(TRACK_MUSIC)) {
+    for (const field of ['file', 'title', 'artist', 'license', 'source']) {
+      assert.ok(s[field], `${track}: '${s.title || s.file}' is missing '${field}'`);
     }
   }
-  assert.ok(MUSIC_FALLBACK.length > 0, 'MUSIC_FALLBACK must never be empty (it is the no-silence guarantee)');
+  assert.ok(MUSIC_FALLBACK.length > 1, 'MUSIC_FALLBACK needs more than one song (no silence, no repeat)');
+  const songs = new Set(Object.values(TRACK_MUSIC));
+  assert.ok(MUSIC_FALLBACK.every((s) => songs.has(s)),
+    'every fallback song is a track\'s song, so the credits that walk TRACK_MUSIC cover it');
 });
 
 test('every song carries a loudness measurement and an attenuating gain', () => {
-  for (const [biome, pool] of Object.entries(RACE_MUSIC)) {
-    for (const s of pool) {
-      assert.ok(Number.isFinite(s.lufs) && s.lufs < 0,
-        `${biome}: '${s.title}' needs a measured integrated LUFS (see the ffmpeg recipe in Audio.js)`);
-      assert.ok(s.gain > 0 && s.gain <= 1,
-        `${biome}: '${s.title}' gain ${s.gain} outside (0, 1] — a pick quieter than ` +
-        'MUSIC_TARGET_LUFS means the target (and MUSIC_LEVEL) need rebalancing');
-    }
+  for (const [track, s] of Object.entries(TRACK_MUSIC)) {
+    assert.ok(Number.isFinite(s.lufs) && s.lufs < 0,
+      `${track}: '${s.title}' needs a measured integrated LUFS (see the ffmpeg recipe in musicCatalogue.js)`);
+    assert.ok(s.gain > 0 && s.gain <= 1,
+      `${track}: '${s.title}' gain ${s.gain} outside (0, 1] — a pick quieter than ` +
+      'MUSIC_TARGET_LUFS means the target (and MUSIC_LEVEL) need rebalancing');
   }
 });
 
 // musicCatalogue.js bakes each `gain` as a LITERAL instead of evaluating
 // `10 ** ((MUSIC_TARGET_LUFS - lufs) / 20)` at load, because `**` is V8's pow —
 // implementation-approximated, disagreeing with the fdlibm the C++ port links on 2
-// of the 23 shipped trims — and this number is recorded into audio-corpus.jsonl,
+// of the 23 trims when the table was frozen — and this number is recorded into audio-corpus.jsonl,
 // which a port has to match bit-for-bit (docs/native-port/fp-profile.md §2).
 // Literals are portable; the derivation is not. This re-runs it anyway so the
 // literals stay honest: a typo or a new song carrying a stale trim fails here,
@@ -63,22 +61,20 @@ test('every song carries a loudness measurement and an attenuating gain', () => 
 // conforming pow implementations and nothing more — 1e-12 relative is ~4500 ULP,
 // far under the 1e-3 a genuinely wrong trim would be off by.
 test('each song gain is the LUFS trim it claims to be, without the byte path using pow', () => {
-  for (const [biome, pool] of Object.entries(RACE_MUSIC)) {
-    for (const s of pool) {
-      const derived = 10 ** ((MUSIC_TARGET_LUFS - s.lufs) / 20);
-      assert.ok(Math.abs(s.gain - derived) <= 1e-12 * derived,
-        `${biome}: '${s.title}' gain ${s.gain} does not match its ${s.lufs} LUFS trim ` +
-        `(expected ~${derived}). Re-derive with: node -e "console.log(10 ** ((${MUSIC_TARGET_LUFS} - ${s.lufs}) / 20))"`);
-    }
+  for (const [track, s] of Object.entries(TRACK_MUSIC)) {
+    const derived = 10 ** ((MUSIC_TARGET_LUFS - s.lufs) / 20);
+    assert.ok(Math.abs(s.gain - derived) <= 1e-12 * derived,
+      `${track}: '${s.title}' gain ${s.gain} does not match its ${s.lufs} LUFS trim ` +
+      `(expected ~${derived}). Re-derive with: node -e "console.log(10 ** ((${MUSIC_TARGET_LUFS} - ${s.lufs}) / 20))"`);
   }
 });
 
 test('creditsFor() lists every unique song exactly once, as required credits', () => {
-  const sections = creditsFor(RACE_MUSIC);
+  const sections = creditsFor(TRACK_MUSIC);
   const music = sections.find((s) => s.section === 'Music');
   assert.ok(music, 'a Music section exists');
 
-  const uniqueTitles = new Set(Object.values(RACE_MUSIC).flat().map((s) => s.title));
+  const uniqueTitles = new Set(Object.values(TRACK_MUSIC).map((s) => s.title));
   assert.equal(music.entries.length, uniqueTitles.size, 'one credit per unique song');
   for (const e of music.entries) {
     assert.equal(e.required, /CC-BY/i.test(e.license),
@@ -109,7 +105,7 @@ test('static asset credits are complete', () => {
 // happens. The obligation no longer shows on the page, but it is what the
 // served-notice gate below keys on, so it still has to be right.
 test('every credit rides a known license, and its obligation is that license’s', () => {
-  const all = creditsFor(RACE_MUSIC).flatMap((s) => s.entries);
+  const all = creditsFor(TRACK_MUSIC).flatMap((s) => s.entries);
   const known = new Set(OBLIGATION_IDS);
   for (const e of all) {
     if (!e.license) { assert.equal(e.obligation, 'courtesy'); assert.equal(e.required, false); continue; }
@@ -128,11 +124,11 @@ test('every credit rides a known license, and its obligation is that license’s
 // A section missing from SECTION_ORDER would drop its works off the page
 // silently, which for a credit is the one failure that matters.
 test('creditsFor groups every credit into a listed section, in SECTION_ORDER', () => {
-  const sections = creditsFor(RACE_MUSIC);
+  const sections = creditsFor(TRACK_MUSIC);
 
   const placed = sections.flatMap((s) => s.entries.map((e) => e.title)).sort();
   const expected = [
-    ...new Set(Object.values(RACE_MUSIC).flat().map((s) => s.title)),
+    ...new Set(Object.values(TRACK_MUSIC).map((s) => s.title)),
     ...ASSET_CREDITS.map((e) => e.title),
   ].sort();
   assert.deepEqual(placed, expected, 'every credit lands in exactly one section');

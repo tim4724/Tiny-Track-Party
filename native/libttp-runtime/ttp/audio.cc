@@ -1,7 +1,8 @@
 // audio.cc — see audio.h. Transliterated line for line from the JS decision
 // layer that tests/fixtures/audio-corpus.jsonl was recorded off. That oracle was
 // deleted with the engine, so the corpus is now the only surviving statement of
-// what these rules were — it can never be re-recorded (root rule 4).
+// what these rules were — re-emitted from here only for a deliberate change
+// (root rule 4).
 //
 // The TUNING rationale did not come with it. Why AUD_PEAK is 0.7, why a CPU car
 // is never voiced, why the roulette's reveal pop is the "item ready" beat — all
@@ -40,8 +41,8 @@ const char* const MACLEOD_SOURCE = "https://incompetech.com/music/royalty-free/m
 // `gain` is an AUTHORED LITERAL, not 10 ** ((MUSIC_TARGET_LUFS - lufs) / 20)
 // evaluated here, and that is the same decision the JS made for the same reason:
 // pow is implementation-approximated (fp-profile §2), and measured against the
-// vendored fdlibm this port links, ttp_fd_pow(10, x) disagrees with V8's
-// `10 ** x` on 2 of the 23 distinct trims below (lufs -15.7 and -15.3). A
+// vendored fdlibm this port links, ttp_fd_pow(10, x) disagreed with V8's
+// `10 ** x` on 2 of the 23 distinct trims when the table was frozen. A
 // decimal literal has no such problem — JS and C++ both parse it correctly
 // rounded, so both get the identical double. `lufs` stays beside each one as the
 // authored measurement; tests/credits.test.js re-runs the derivation over the JS
@@ -50,65 +51,53 @@ const char* const MACLEOD_SOURCE = "https://incompetech.com/music/royalty-free/m
   { "/assets/audio/music/" file, title, dur, lufs, gain, \
     MACLEOD_ARTIST, MACLEOD_LICENSE, MACLEOD_SOURCE }
 
-const Song BEACH[] = {
-  SONG("beachfront_celebration.mp3", "Beachfront Celebration", 187, -9.2, 0.31622776601683794),
-  SONG("island_meet_and_greet.mp3", "Island Meet and Greet", 217, -13.6, 0.5248074602497727),
-  SONG("paradise_found.mp3", "Paradise Found", 187, -11.5, 0.4120975190973303),
-  SONG("tiki_bar_mixer.mp3", "Tiki Bar Mixer", 212, -15.3, 0.6382634861905488),
-  SONG("arroz_con_pollo.mp3", "Arroz Con Pollo", 162, -13.2, 0.5011872336272722),
-};
-const Song PLAYROOM[] = {
-  SONG("itty_bitty_8_bit.mp3", "Itty Bitty 8 Bit", 194, -11.9, 0.4315190768277653),
-  SONG("bit_shift.mp3", "Bit Shift", 192, -13.3, 0.5069907082747045),
-  SONG("chipper_doodle_v2.mp3", "Chipper Doodle v2", 172, -12.2, 0.44668359215096315),
-  SONG("voice_over_under.mp3", "Voice Over Under", 197, -15.4, 0.6456542290346556),
-  SONG("delightful_d.mp3", "Delightful D", 184, -10.3, 0.35892193464500527),
-};
-const Song SNOW[] = {
-  SONG("wallpaper.mp3", "Wallpaper", 220, -11.2, 0.3981071705534972),
-  SONG("new_friendly.mp3", "New Friendly", 169, -15.7, 0.6683439175686147),
-  SONG("glitter_blast.mp3", "Glitter Blast", 178, -15.1, 0.6237348354824193),
-  SONG("cloud_dancer.mp3", "Cloud Dancer", 220, -13.6, 0.5248074602497727),
-  SONG("digital_lemonade.mp3", "Digital Lemonade", 180, -14.0, 0.5495408738576246),
-};
-const Song GRASS[] = {
-  SONG("happy_bee.mp3", "Happy Bee", 302, -9.1, 0.3126079367123955),
-  SONG("hyperfun.mp3", "Hyperfun", 233, -19.1, 0.9885530946569391),
-  SONG("feelin_good.mp3", "Feelin Good", 225, -18.0, 0.8709635899560807),
-  SONG("vivacity.mp3", "Vivacity", 232, -12.8, 0.4786300923226384),
-  SONG("happy_happy_game_show.mp3", "Happy Happy Game Show", 158, -9.7, 0.33496543915782767),
-};
-const Song CANYON[] = {
-  SONG("still_pickin.mp3", "Still Pickin", 298, -13.9, 0.5432503314924333),
-  SONG("desert_of_lost_souls.mp3", "Desert of Lost Souls", 181, -16.7, 0.7498942093324559),
-  SONG("surf_shimmy.mp3", "Surf Shimmy", 123, -13.4, 0.5128613839913649),
-  SONG("bama_country.mp3", "Bama Country", 212, -18.2, 0.8912509381337456),
+}  // namespace
+
+// Catalogue order, cup by cup — the order the song indices count in and the
+// music gallery walks. It is NOT a lookup order: the decisions match by id.
+const TrackSong TRACK_MUSIC[] = {
+  {"tidepool", SONG("island_meet_and_greet.mp3", "Island Meet and Greet", 217, -13.6, 0.5248074602497727)},
+  {"cove", SONG("arroz_con_pollo.mp3", "Arroz Con Pollo", 162, -13.2, 0.5011872336272722)},
+  {"driftwood", SONG("spy_groove.mp3", "Spy Groove", 181, -12.5, 0.46238102139926035)},
+  {"riptide", SONG("beachfront_celebration.mp3", "Beachfront Celebration", 187, -9.2, 0.31622776601683794)},
+  {"powder", SONG("digital_lemonade.mp3", "Digital Lemonade", 180, -14.0, 0.5495408738576246)},
+  {"flurry", SONG("new_friendly.mp3", "New Friendly", 169, -15.7, 0.6683439175686147)},
+  {"glacier", SONG("glitter_blast.mp3", "Glitter Blast", 178, -15.1, 0.6237348354824193)},
+  {"avalanche", SONG("cloud_dancer.mp3", "Cloud Dancer", 220, -13.6, 0.5248074602497727)},
+  {"ribbon", SONG("hyperfun.mp3", "Hyperfun", 233, -19.1, 0.9885530946569391)},
+  {"pretzel", SONG("feelin_good.mp3", "Feelin Good", 225, -18.0, 0.8709635899560807)},
+  {"tangle", SONG("vivacity.mp3", "Vivacity", 232, -12.8, 0.4786300923226384)},
+  {"cloverleaf", SONG("happy_happy_game_show.mp3", "Happy Happy Game Show", 158, -9.7, 0.33496543915782767)},
+  {"wash", SONG("still_pickin.mp3", "Still Pickin", 298, -13.9, 0.5432503314924333)},
+  {"gulch", SONG("surf_shimmy.mp3", "Surf Shimmy", 123, -13.4, 0.5128613839913649)},
+  {"crag", SONG("bama_country.mp3", "Bama Country", 212, -18.2, 0.8912509381337456)},
+  {"sidewinder", SONG("desert_of_lost_souls.mp3", "Desert of Lost Souls", 181, -16.7, 0.7498942093324559)},
+  {"skysnake", SONG("bit_shift.mp3", "Bit Shift", 192, -13.3, 0.5069907082747045)},
+  {"skyline", SONG("delightful_d.mp3", "Delightful D", 184, -10.3, 0.35892193464500527)},
+  {"helix", SONG("itty_bitty_8_bit.mp3", "Itty Bitty 8 Bit", 194, -11.9, 0.4315190768277653)},
+  {"gauntlet", SONG("master_of_the_feast.mp3", "Master of the Feast", 228, -15.8, 0.6760829753919819)},
 };
 
 #undef SONG
 
-}  // namespace
-
-// Declaration order is the JS object's, which is what the ?biome= list and the
-// music gallery walk. It is NOT a lookup order: the decisions match by name.
-const MusicPool RACE_MUSIC[] = {
-  {"beach", BEACH, 5},
-  {"playroom", PLAYROOM, 5},
-  {"snow", SNOW, 5},
-  {"grass", GRASS, 5},
-  {"canyon", CANYON, 4},
+// The Snow Cup's four songs: what was left of the snow pool, the fallback
+// before songs were per track.
+const Song* const MUSIC_FALLBACK[] = {
+  &TRACK_MUSIC[5].song,  // new_friendly
+  &TRACK_MUSIC[6].song,  // glitter_blast
+  &TRACK_MUSIC[7].song,  // cloud_dancer
+  &TRACK_MUSIC[4].song,  // digital_lemonade
 };
 
-// RACE_MUSIC is `extern` in the header, so RACE_MUSIC_COUNT cannot be derived
-// there and is hand-maintained beside it. This is what keeps the two honest: a
-// sixth pool added above without bumping the constant would not be a compile
-// error, it would be a biome startMusic's lookup never reaches and silently
-// answers with the snow fallback — and the corpus knows only the five shipped
-// biomes, so no gate would say a word.
-static_assert(sizeof(RACE_MUSIC) / sizeof(RACE_MUSIC[0]) == RACE_MUSIC_COUNT,
-              "RACE_MUSIC_COUNT must match the pool table above");
-
-const MusicPool& musicFallback() { return RACE_MUSIC[2]; }  // MUSIC_FALLBACK = RACE_MUSIC.snow
+// Both tables are `extern` in the header, so their counts cannot be derived
+// there and are hand-maintained beside them. A row added without bumping its
+// constant would not be a compile error: it would be a track startMusic's lookup
+// never reaches, silently answered with the fallback.
+static_assert(sizeof(TRACK_MUSIC) / sizeof(TRACK_MUSIC[0]) == TRACK_MUSIC_COUNT,
+              "TRACK_MUSIC_COUNT must match the table above");
+static_assert(sizeof(MUSIC_FALLBACK) / sizeof(MUSIC_FALLBACK[0]) == MUSIC_FALLBACK_COUNT,
+              "MUSIC_FALLBACK_COUNT must match the pool above");
+static_assert(MUSIC_FALLBACK_COUNT > 1, "the no-repeat filter needs an alternative to leave");
 
 // ---------------------------------------------------------------------------
 // the distance model
@@ -411,30 +400,24 @@ void Decider::stopCar(const Id& id, std::vector<Command>& out) {
   out.push_back(std::move(c));
 }
 
-void Decider::startMusic(const std::string& biome, std::vector<Command>& out) {
-  const MusicPool* pool = &musicFallback();
-  for (int i = 0; i < RACE_MUSIC_COUNT; i++) {
-    if (biome == RACE_MUSIC[i].biome && RACE_MUSIC[i].count) { pool = &RACE_MUSIC[i]; break; }
+void Decider::startMusic(const std::string& track, std::vector<Command>& out) {
+  const Song* pick = nullptr;
+  for (int i = 0; i < TRACK_MUSIC_COUNT; i++) {
+    if (track == TRACK_MUSIC[i].track) { pick = &TRACK_MUSIC[i].song; break; }
   }
-  // The no-repeat filter, in pool order — but only when the pool has an
-  // alternative, so a one-song pool still plays.
-  std::vector<const Song*> fresh;
-  if (pool->count > 1) {
-    for (int i = 0; i < pool->count; i++) {
-      if (musicFile_ != pool->songs[i].file) fresh.push_back(&pool->songs[i]);
+  if (!pick) {
+    // The fallback: random, minus the song that just played. The pool's files
+    // are distinct and there are several, so the filter always leaves one.
+    std::vector<const Song*> fresh;
+    for (int i = 0; i < MUSIC_FALLBACK_COUNT; i++) {
+      if (musicFile_ != MUSIC_FALLBACK[i]->file) fresh.push_back(MUSIC_FALLBACK[i]);
     }
-  } else {
-    for (int i = 0; i < pool->count; i++) fresh.push_back(&pool->songs[i]);
+    // `(rng() * fresh.length) | 0` — ToInt32 of a value in [0, length), which is
+    // truncation toward zero (fp-profile §3.3; the operand can never reach the
+    // 2^31 wrap).
+    const int32_t idx = (int32_t)(rng_() * (double) fresh.size());
+    pick = fresh[(size_t) idx];
   }
-  // Unreachable: a pool's files are distinct, so a >1 pool always keeps one.
-  // Here so a mis-authored pool degrades to a repeated song rather than to UB
-  // (the JS would index `undefined` and throw).
-  if (fresh.empty()) for (int i = 0; i < pool->count; i++) fresh.push_back(&pool->songs[i]);
-  // `(rng() * fresh.length) | 0` — ToInt32 of a value in [0, length), which is
-  // truncation toward zero (fp-profile §3.3; the operand can never reach the
-  // 2^31 wrap).
-  const int32_t idx = (int32_t)(rng_() * (double) fresh.size());
-  const Song* pick = fresh[(size_t) idx];
   musicFile_ = pick->file;
   Command c;
   c.kind = Command::MUSIC;

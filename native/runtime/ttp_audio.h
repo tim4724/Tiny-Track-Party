@@ -5,7 +5,7 @@
  *
  * WHAT CROSSES, AND WHAT DOES NOT. The rules behind every cue — the audibility
  * curve, the shared curb-scrub throttle, the per-human voice levels, the rocket
- * jet lifecycle, the music pool and its no-repeat shuffle — are
+ * jet lifecycle, each track's song and the fallback's no-repeat shuffle — are
  * libttp-runtime/ttp/audio.{h,cc}, replayed on every leg against
  * tests/fixtures/audio-corpus.jsonl. This header is how a SHELL gets at them:
  * it calls the entry points below, then drains a block of commands and performs
@@ -16,7 +16,7 @@
  *
  * SINGLETON, deliberately, like the display: there is one audio device per
  * process on every platform we ship, and the decisions carry state that
- * OUTLIVES a race (the last song, so a Grand Prix rotates its pool; the roster
+ * OUTLIVES a race (the last song, so the fallback never repeats it; the roster
  * count behind the join plink, which is a lobby event with no session at all).
  * A handle here would always be 1.
  *
@@ -183,12 +183,12 @@ TTP_ABI void ttp_audio_stop_voices(void);
  * car's id as a JSON scalar, the same identity ttp_process_input takes. */
 TTP_ABI void ttp_audio_stop_car(const char* idJson);
 
-/* The background song. op is a TTP_AUD_MUSIC_* value; biomeOrNull is read only
- * by TTP_AUD_MUSIC_START, which picks from that biome's pool — at random, but
- * never the song that just played when the pool has an alternative, so a cup
- * spent in one biome rotates it. An unknown or null biome takes the fallback
- * pool rather than silence. */
-TTP_ABI void ttp_audio_music(int op, const char* biomeOrNull);
+/* The background song. op is a TTP_AUD_MUSIC_* value; trackIdOrNull is read
+ * only by TTP_AUD_MUSIC_START, which plays that track's own song — the id the
+ * race walk's start-music effect carries. Any other id (a dev track, unknown,
+ * null) takes a fallback song rather than silence: at random, but never the
+ * song that just played. */
+TTP_ABI void ttp_audio_music(int op, const char* trackIdOrNull);
 
 /* ---- the drain ----------------------------------------------------------- */
 
@@ -222,7 +222,7 @@ TTP_ABI const char* ttp_audio_cue_id(int code);
  *
  * JSON, and a separate call, because this is the one thing in the audio path
  * that IS text and it happens once per race — off the frame path entirely.
- * Indices are stable for a build: pools in table order, songs in pool order. */
+ * Indices are stable for a build: one per track, in catalogue order. */
 TTP_ABI const char* ttp_audio_song_json(int index);
 
 #ifdef __cplusplus

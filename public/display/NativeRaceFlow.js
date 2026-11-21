@@ -47,8 +47,7 @@ export async function init() {
     start: c('ttp_race_start_live_json', 'string',
              ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
-              ['number', 'number', 'string', 'number', 'number',
-               'number', 'number']),
+              ['number', 'number', 'number', 'number', 'number', 'number']),
     flag: c('ttp_race_flag_live_json', 'string', ['number', 'number']),
     advance: c('ttp_race_advance_live_json', 'string',
                ['number', 'number', 'number', 'number', 'string', 'string']),
@@ -125,8 +124,8 @@ export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forc
 // walk banks the points and retains the board against them), so an effect is
 // all a caller gets and all it needs.
 export function drainEvents(sessionHandle, roomHandle,
-                            { biome, audioReady, fastForwarding, intermissionMs, nowMs }) {
-  return P(fn.events(sessionHandle, roomHandle, biome || '',
+                            { audioReady, fastForwarding, intermissionMs, nowMs }) {
+  return P(fn.events(sessionHandle, roomHandle,
                      audioReady ? 1 : 0, fastForwarding ? 1 : 0,
                      intermissionMs, nowMs));
 }

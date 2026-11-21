@@ -176,8 +176,8 @@ test('ttp_display_cell_rects is a safe no-op with no display', async () => {
 // tables (theme_check) and the marshalling (abi_check); what only this file can
 // see is that the SHIPPED artifact still exports them — the biome ABI sits
 // OUTSIDE the Filament gate in native/CMakeLists.txt, so a build that dropped it
-// would still link, still race, and lose the HUD boost accent, the ?biome=
-// dropdown and the race music's pool key in the browser.
+// would still link, still race, and lose the HUD boost accent and the ?biome=
+// dropdown in the browser.
 test('the shipped module exports the biome ABI, and resolves through it', async () => {
   const M = await load();
   for (const name of ['biome_count', 'biome_name', 'has_biome', 'biome_for_cup',
@@ -196,19 +196,6 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
   const forTrack = M.cwrap('ttp_theme_biome_for_track', 'string', ['string']);
   assert.equal(forTrack('tidepool'), 'beach', 'a track resolves through its own cup');
   assert.equal(forTrack('gym'), 'grass', 'a dev-only track falls back to grass');
-
-  // Every biome must name a race-music pool that exists, or a race in it plays
-  // the fallback song silently. This is the ONE place the two halves meet: the
-  // pool keys come from audio/musicCatalogue.js (the catalogue's authored home
-  // — it moved there when the decide.js oracle was retired), the biome names are
-  // C++. Read straight from the data rather than through Audio.js, which does
-  // not re-export it: the device half performs commands and holds no table.
-  const { RACE_MUSIC } = await import(pathToFileURL(
-    path.join(ROOT, 'public/display/audio/musicCatalogue.js')).href);
-  const unpooled = names.filter((b) => !RACE_MUSIC[b] || !RACE_MUSIC[b].length);
-  assert.deepEqual(unpooled, ['sunset'],
-    'sunset is the one cupless biome with no pool of its own (it falls back); '
-    + 'any other name here means a cup races to the wrong music');
 
   // The two colours a shell still draws itself, and the model list it fetches by.
   const boostIcon = M.cwrap('ttp_theme_boost_icon', 'number', ['string']);

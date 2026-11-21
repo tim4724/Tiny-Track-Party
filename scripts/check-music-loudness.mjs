@@ -6,11 +6,12 @@
 // derived from the file's integrated loudness — MEASURED ONCE, at wiring time,
 // off the file as it was then. The gain is an AUTHORED LITERAL on both sides
 // (musicCatalogue.js and native/libttp-runtime/ttp/audio.cc), frozen against
-// tests/fixtures/audio-corpus.jsonl, which can never be re-recorded. So the
-// numbers cannot follow the file. If a re-encode, a re-download or an
-// accidental filter moves a song's loudness, NOTHING else in the tree notices:
-// the corpus still passes (it only knows the literal), the E2E suite still
-// passes, and the only symptom is one song playing at the wrong level.
+// tests/fixtures/audio-corpus.jsonl, which moves only on a deliberate
+// re-record. So the numbers do not follow the file. If a re-encode, a
+// re-download or an accidental filter moves a song's loudness, NOTHING else in
+// the tree notices: the corpus still passes (it only knows the literal), the
+// E2E suite still passes, and the only symptom is one song playing at the
+// wrong level.
 //
 // It also checks the baked `duration` and that no cover art crept back in.
 //
@@ -51,26 +52,6 @@ if (!Number.isFinite(TOLERANCE) || TOLERANCE < 0) {
 
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
-// A song whose re-encode legitimately does not land on its catalogue figure.
-// The allowance is the EXPECTED delta, still held to ±TOLERANCE either side, so
-// it stays a gate: a file that drifts further, or that stops drifting, fails.
-// Never add one to silence a genuine level change — see the note in each entry.
-const ALLOWANCES = {
-  'chipper_doodle_v2.mp3': {
-    lu: -1.5,
-    why: 'the master carries ~-24 dB RMS ABOVE 16 kHz (it is a chiptune, so its '
-      + 'square-wave harmonics run to the top of the band). Every VBR setting '
-      + 'below V0 lowpasses around 16 kHz and removes it, and BS.1770 '
-      + 'K-weighting shelves the high end up, so the measurement drops 1.5 LU '
-      + 'for content no listener can hear. V0 preserves it exactly (-12.2) at '
-      + '5.8 MB against 2.9 MB — twice the bytes to satisfy a meter rather than '
-      + 'an ear. The playback level is unchanged, so the frozen gain still '
-      + 'holds. Verified: the loss tracks HF energy, not level (attenuating the '
-      + 'input 3 dB first loses the same 1.5 LU) and no audio is missing '
-      + '(identical duration and frame count).',
-  },
-};
-
 function capture(cmd, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args);
@@ -107,10 +88,7 @@ async function probe(file) {
 async function main() {
   const mod = await import(pathToFileURL(CATALOGUE).href);
   const songs = new Map();
-  for (const pool of Object.values(mod.RACE_MUSIC ?? {})) {
-    for (const s of pool) songs.set(s.file, s);
-  }
-  for (const s of mod.FALLBACK_MUSIC ?? []) songs.set(s.file, s);
+  for (const s of Object.values(mod.TRACK_MUSIC ?? {})) songs.set(s.file, s);
 
   if (!songs.size) throw new Error(`no songs found in ${path.relative(ROOT, CATALOGUE)}`);
   console.log(`${songs.size} song(s), tolerance ${TOLERANCE} LU\n`);
@@ -130,24 +108,19 @@ async function main() {
     bytes += size;
 
     const [lufs, info] = await Promise.all([measure(file), probe(file)]);
-    const allowance = ALLOWANCES[name];
-    const allowed = allowance?.lu ?? 0;
     const dLufs = lufs - song.lufs;
     const dDur = info.duration - song.duration;
-    const bad = Math.abs(dLufs - allowed) > TOLERANCE;
+    const bad = Math.abs(dLufs) > TOLERANCE;
     const badDur = Math.abs(dDur) > DURATION_TOLERANCE;
 
     console.log(`  ${bad || badDur || info.hasVideo ? 'FAIL' : 'ok  '} ${name.padEnd(28)}` +
       `${lufs.toFixed(1)} LUFS (catalogue ${song.lufs.toFixed(1)}, ${dLufs >= 0 ? '+' : ''}` +
-      `${dLufs.toFixed(1)})${allowance ? ` [allowed ${allowed.toFixed(1)}]` : ''}` +
-      `  ${mb(size)}`);
+      `${dLufs.toFixed(1)})  ${mb(size)}`);
 
     if (bad) {
       problems.push(`${name}: ${lufs.toFixed(1)} LUFS but the catalogue trims it as ` +
-        `${song.lufs.toFixed(1)} (${dLufs >= 0 ? '+' : ''}${dLufs.toFixed(1)} LU` +
-        `${allowance ? `, allowed ${allowed.toFixed(1)}` : ''}). ` +
-        'The gain is a frozen literal — re-encode the file rather than edit the number.' +
-        (allowance ? `\n    This song has an allowance: ${allowance.why}` : ''));
+        `${song.lufs.toFixed(1)} (${dLufs >= 0 ? '+' : ''}${dLufs.toFixed(1)} LU). ` +
+        'The gain is a frozen literal — re-encode the file rather than edit the number.');
     }
     if (badDur) {
       problems.push(`${name}: ${info.duration.toFixed(1)}s but the catalogue bakes ` +

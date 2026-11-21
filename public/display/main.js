@@ -971,7 +971,7 @@ const RACE_PERFORMERS = {
   'refresh-auto-pause': (e) => {
     if (e.deferred) setTimeout(refreshAutoPause, 0); else refreshAutoPause();
   },
-  'start-music': (e) => sfx(audioDecide.startMusic(e.biome)),
+  'start-music': (e) => sfx(audioDecide.startMusic(e.track)),
   'stop-music': () => sfx(audioDecide.stopMusic()),
   'stop-voices': () => sfx(audioDecide.stopVoices()),
   'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(); },
@@ -1225,7 +1225,7 @@ function prepareNextTrack(next) {
 function drainRaceEvents() {
   if (!session) return;
   const d = flow.drainEvents(session.h, net.flow.handle, {
-    biome: scene.biome(), audioReady: audio.ready, fastForwarding,
+    audioReady: audio.ready, fastForwarding,
     intermissionMs: intermissionMs(), nowMs: Date.now()
   });
   if (d.effects.length) perform(d.effects);

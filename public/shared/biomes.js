@@ -7,9 +7,9 @@
 // handed back to JS. That is the point: three shells, one palette.
 //
 // What crosses is what a shell genuinely draws or names for itself: the biome
-// NAME (the race-music pool key, the ?biome= override list) and two colours for
-// two 2D widgets the renderer does not draw — the HUD boost chip's stroke and
-// the music gallery's per-cup swatch. Plus the model lists (scenery, props,
+// NAME (the ?biome= override list) and two colours for two 2D widgets the
+// renderer does not draw — the HUD boost chip's stroke and the music gallery's
+// per-cup swatch. Plus the model lists (scenery, props,
 // a track's set pieces), because fetching bytes is a platform job.
 //
 // If you find yourself wanting another getter to reproduce part of the look in

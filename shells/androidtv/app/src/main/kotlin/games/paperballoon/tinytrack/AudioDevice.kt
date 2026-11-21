@@ -175,10 +175,10 @@ class AudioDevice(
 
     fun stopCar(id: EngineId) = Ttp.ttp_audio_stop_car(TtpJson.arg(id.json))
 
-    /** `start-music` / `stop-music`. Null biome stops. */
-    fun music(biome: String?) {
-        if (biome == null) Ttp.ttp_audio_music(MUSIC_STOP, null)
-        else Ttp.ttp_audio_music(MUSIC_START, TtpJson.arg(biome))
+    /** `start-music` (that track's own song) / `stop-music`. Null track stops. */
+    fun music(track: String?) {
+        if (track == null) Ttp.ttp_audio_music(MUSIC_STOP, null)
+        else Ttp.ttp_audio_music(MUSIC_START, TtpJson.arg(track))
     }
 
     fun setMusicPaused(paused: Boolean) =
@@ -305,9 +305,9 @@ class AudioDevice(
         musicBed = bed.toFloat().coerceIn(0f, 1f)
         applyMusicVolume()
 
-        // THE SAME SONG REWINDS; it does not re-stream. The no-repeat shuffle only
-        // avoids the LAST song (`audio.cc`), so a four-race cup on a four-song pool
-        // repeats routinely — and tearing the player down for that pays a fresh
+        // THE SAME SONG REWINDS; it does not re-stream. Every track has its own
+        // song (`audio.cc`), so racing a track again plays the same one — and
+        // tearing the player down for that pays a fresh
         // `prepareAsync` over the network and a silent gap in front of the grid.
         // Both twins keep theirs: the web swaps `src` only on a real change and
         // seeks to zero, tvOS seeks the same way.

@@ -69,6 +69,10 @@ ttp::rt::ui::LastItems* ttp_session_item_outbox(int handle);
 // C++ instead. Empty array for an unknown handle.
 ttp::Value ttp_session_drain_events(int handle);
 
+// The track id the session was begun on (ttp_session_begin's), or "" for an
+// unknown handle. Owned by the session: valid while it lives.
+const char* ttp_session_track_id(int handle);
+
 // The live cup series behind a ttp_gp_create handle, or nullptr — the seam the
 // ui and race shims read series metadata through, so no scalar getter has to
 // be exported per field (ttp_gp_state_json is the shell's one read).

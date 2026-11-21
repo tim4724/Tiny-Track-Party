@@ -4,7 +4,7 @@
 // Relative, not root-absolute: this module resolves its own imports against
 // where IT was loaded from, so the page survives being hosted under a prefix
 // (see shared/assetUrl.js and tests/asset-urls.test.js).
-import { RACE_MUSIC } from './display/audio/musicCatalogue.js';
+import { TRACK_MUSIC } from './display/audio/musicCatalogue.js';
 import { creditsFor, licenseInfo } from './shared/credits.js';
 
 function el(tag, cls, text) {
@@ -62,4 +62,4 @@ function sectionCard({ section, entries }) {
 }
 
 const sections = document.getElementById('sections');
-for (const group of creditsFor(RACE_MUSIC)) sections.appendChild(sectionCard(group));
+for (const group of creditsFor(TRACK_MUSIC)) sections.appendChild(sectionCard(group));

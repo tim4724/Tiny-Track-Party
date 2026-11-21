@@ -24,7 +24,7 @@ object Ttp {
     external fun ttp_audio_cue_id(code: Int): ByteArray?
     external fun ttp_audio_drain(): ByteBuffer?
     external fun ttp_audio_frame(nowMs: Double)
-    external fun ttp_audio_music(op: Int, biomeOrNull: ByteArray?)
+    external fun ttp_audio_music(op: Int, trackIdOrNull: ByteArray?)
     external fun ttp_audio_roster(count: Int, inLobby: Int)
     external fun ttp_audio_song_json(index: Int): ByteArray?
     external fun ttp_audio_stop_car(idJson: ByteArray?)
@@ -191,7 +191,7 @@ object Ttp {
     external fun ttp_race_demo_next_json(roomHandle: Int, trackId: ByteArray?, shownMs: Double): ByteArray?
     external fun ttp_race_effect_ops_json(): ByteArray?
     external fun ttp_race_end_party_json(): ByteArray?
-    external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, biome: ByteArray?, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
+    external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
     external fun ttp_race_flag_live_json(sessionHandle: Int, roomHandle: Int): ByteArray?
     external fun ttp_race_flourish_ms(): Double
     external fun ttp_race_forfeit_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?

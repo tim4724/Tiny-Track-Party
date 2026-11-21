@@ -13,12 +13,13 @@
 // isolation this deployment refuses). A shell performs the commands below and
 // nothing else.
 //
-// CONFORMANCE. tests/fixtures/audio-corpus.jsonl — 5900 trace frames over five
-// golden traces plus 497 scripted steps — was recorded off the live decide.js in
-// P5, which makes it JS-RECORDED cross-implementation evidence: class 1 in
-// tests/fixtures/traces/README.md, the only class that can settle a parity
-// question. runtimetest/audio_check.cc replays every line of it through this
-// header on all four legs. A disagreement is a bug HERE, never in the corpus.
+// CONFORMANCE. tests/fixtures/audio-corpus.jsonl — trace frames over five
+// golden traces plus scripted steps — was recorded off the live decide.js in P5
+// and has since been re-emitted from here for deliberate changes (green first,
+// through audio_check --record), which makes it regression evidence: class 2 in
+// tests/CLAUDE.md. runtimetest/audio_check.cc replays every line of it through
+// this header on all four legs. An unexplained disagreement is a bug HERE,
+// never in the corpus.
 //
 // FLOATING POINT. Everything is double, matching JS Number, and every operation
 // order is the JS's. Two rules are load-bearing enough that the corpus was
@@ -29,7 +30,8 @@
 //     2-argument so composing it is a different rounding again. One ULP on `d`
 //     flips `d <= AUD_NEAR` and changes the command outright.
 //   - The music trims are AUTHORED LITERALS, not `pow(10, x)`. Deriving them
-//     would hand the port two songs (lufs -15.7 and -15.3) it could never match.
+//     with fdlibm's pow misses V8's `10 ** x` on some trims (two, when the
+//     table was frozen), so the JS twin and this table would disagree.
 // Math.max/Math.min go through js_max/js_min (fp-profile §3.4); the sum must not
 // contract into an FMA, which is what ttp_strict_fp's -ffp-contract=off is for.
 #pragma once
@@ -196,18 +198,21 @@ double audibility(const Point* p, const Listeners& humans);
 double rocketImpactLevel(const Point* pos, bool targetIsAi, const Listeners& humans);
 
 // ---- background music -------------------------------------------------------
-// Keyed by BIOME name (ttp::rt::Theme's, over the same palette tables — the
-// Backyard cup resolves to 'grass'). Each biome holds a POOL of songs that share
-// its mood. Unlisted/empty biomes (currently just the cupless 'sunset') fall
-// back to the neutral ex-global pool rather than to silence.
-struct MusicPool {
-  const char* biome;
-  const Song* songs;
-  int count;
+// ONE SONG PER TRACK, keyed by track id: every catalogue track races to its own
+// song (picked by ear, track by track). A track with no row — the dev tracks,
+// an unknown or empty id — draws from MUSIC_FALLBACK instead, never silence.
+//
+// TRACK_MUSIC is also the CATALOGUE a picked song crosses the ABI as an index
+// into (ttp_audio_song_json), and MUSIC_FALLBACK points into it, so every song
+// that can play has exactly one index.
+struct TrackSong {
+  const char* track;
+  Song song;
 };
-extern const MusicPool RACE_MUSIC[];
-inline constexpr int RACE_MUSIC_COUNT = 5;
-const MusicPool& musicFallback();  // == RACE_MUSIC["snow"]
+extern const TrackSong TRACK_MUSIC[];
+inline constexpr int TRACK_MUSIC_COUNT = 20;
+extern const Song* const MUSIC_FALLBACK[];
+inline constexpr int MUSIC_FALLBACK_COUNT = 4;
 
 // The common loudness target every song's `gain` trims its file to. Not read by
 // the decisions — it is the authored REASON for each literal, and what
@@ -220,8 +225,8 @@ inline constexpr double MUSIC_LEVEL = 0.51;
 // ---- the decider ------------------------------------------------------------
 // Holds the small amount of state these rules need across calls: which sustained
 // voices are live, the two one-shot spacing clocks, the last song (so the
-// shuffle can avoid repeating it) and the last roster size. Everything else is
-// derived from the arguments.
+// fallback shuffle can avoid repeating it) and the last roster size. Everything
+// else is derived from the arguments.
 //
 // Every entry point APPENDS to `out` rather than returning a fresh vector: a
 // frame's event commands and its voice commands concatenate in exactly that
@@ -229,8 +234,8 @@ inline constexpr double MUSIC_LEVEL = 0.51;
 // keeps the per-frame path allocation-free.
 class Decider {
  public:
-  // `rng` is the [0,1) source the music shuffle draws from — and the ONLY
-  // randomness in here. Empty means the platform RNG (the shipped path); the
+  // `rng` is the [0,1) source the fallback music shuffle draws from — and the
+  // ONLY randomness in here. Empty means the platform RNG (the shipped path); the
   // conformance corpus injects a seeded mulberry32 so the picks are recordable.
   explicit Decider(std::function<double()> rng = {});
 
@@ -265,11 +270,10 @@ class Decider {
 
   // ---- music ----
   // Ambient, not a cue: the race song plays globally for the whole race (it does
-  // NOT follow the visible-events rule the SFX do). Picks from the biome's pool
-  // — random, but never the song that just played (across races AND biomes) when
-  // there is an alternative, so a 4-race GP through one biome rotates its pool.
-  // An empty/unknown biome takes the fallback pool.
-  void startMusic(const std::string& biome, std::vector<Command>& out);
+  // NOT follow the visible-events rule the SFX do). A catalogue track plays its
+  // own song. Any other id takes a random fallback song, never the one that just
+  // played, so a run of dev-track races still rotates.
+  void startMusic(const std::string& track, std::vector<Command>& out);
   void stopMusic(std::vector<Command>& out);
   void pauseMusic(std::vector<Command>& out);
   void resumeMusic(std::vector<Command>& out);

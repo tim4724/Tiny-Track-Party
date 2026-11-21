@@ -315,7 +315,7 @@ Value effectVal(const race::Effect& e) {
       break;
     case race::Op::BROADCAST_COUNTDOWN: v.set("n", Value::Num(e.num)); break;
     case race::Op::REFRESH_AUTO_PAUSE: v.set("deferred", Value::Bool(e.deferred)); break;
-    case race::Op::START_MUSIC: v.set("biome", Value::Str(e.str)); break;
+    case race::Op::START_MUSIC: v.set("track", Value::Str(e.str)); break;
     case race::Op::ITEM_PICKUP:
       v.set("id", e.id.toValue());
       v.set("item", Value::Str(e.str));
@@ -674,7 +674,7 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     return v;
   }
   if (op == "raceStart") {
-    race::Effects es = race::raceStart(json::str_field(in, "biome"), json::truthy(in.find("audioReady")));
+    race::Effects es = race::raceStart(json::str_field(in, "track"), json::truthy(in.find("audioReady")));
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));

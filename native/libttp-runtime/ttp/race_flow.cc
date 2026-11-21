@@ -595,7 +595,7 @@ Effects countdownTick(double n, const CupRace* cup) {
   return out;
 }
 
-Effects raceStart(const std::string& biome, bool audioReady) {
+Effects raceStart(const std::string& trackId, bool audioReady) {
   Effects out;
   Effect e;
   // roomState=playing in the snapshot lands phones on the drive screen
@@ -604,9 +604,9 @@ Effects raceStart(const std::string& biome, bool audioReady) {
   // the countdown has to be re-checked now that we are. DEFERRED off this stack
   // on purpose — see the header.
   e = mk(Op::REFRESH_AUTO_PAUSE); e.deferred = true; out.push_back(e);
-  // Background song for the whole race, from the biome's pool. The pick only
+  // Background song for the whole race: the track's own. The pick only
   // happens if the device can play it.
-  if (audioReady) { e = mk(Op::START_MUSIC); e.str = biome; out.push_back(e); }
+  if (audioReady) { e = mk(Op::START_MUSIC); e.str = trackId; out.push_back(e); }
   return out;
 }
 

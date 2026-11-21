@@ -116,11 +116,6 @@ class GameCoordinator(
      */
     private var fastForwarding = false
 
-    // The race-event drain's biome argument, re-encoded only when the biome
-    // changes. The bridge copies it in, so one array serves every call.
-    private var drainBiome: String? = null
-    private var drainBiomeArg: ByteArray? = null
-
     /**
      * THE FLAG FIRES ONCE. The race runs on through the flourish, so `racing` and
      * humans-all-done are both still true on every poll inside it — without this
@@ -1034,10 +1029,8 @@ class GameCoordinator(
      */
     private fun drainRaceEvents() {
         if (sessionHandle == 0) return
-        val biome = display.biome
-        if (biome != drainBiome) { drainBiome = biome; drainBiomeArg = TtpJson.arg(biome) }
         val answer = Ttp.ttp_race_events_live_json(
-            sessionHandle, net.roomHandle, drainBiomeArg,
+            sessionHandle, net.roomHandle,
             if (audio.ready) 1 else 0, if (fastForwarding) 1 else 0,
             Ttp.ttp_race_intermission_ms(), nowMs())
         // Nothing fired, which is nearly every frame: performing an empty list

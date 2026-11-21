@@ -127,8 +127,9 @@ export class NativeAudioDecider {
     return this._drain();
   }
 
-  startMusic(biome) {
-    fn.music(1, biome || '');
+  // The track's own song, or a fallback one for a track with none.
+  startMusic(trackId) {
+    fn.music(1, trackId || '');
     return this._drain();
   }
   stopMusic() { fn.music(2, null); return this._drain(); }

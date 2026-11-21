@@ -148,10 +148,10 @@ struct RaceFlowPerformer {
 
         // ---- audio ------------------------------------------------------
         case "start-music":
-            game.audio.music(biome: e["biome"] as? String)
+            game.audio.music(track: e["track"] as? String)
 
         case "stop-music":
-            game.audio.music(biome: nil)
+            game.audio.music(track: nil)
 
         case "stop-voices":
             game.audio.stopVoices()
