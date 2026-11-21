@@ -34,6 +34,7 @@ import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation, keyboardUp } from './orientation.js';
 import { initPressPaint } from './press.js';
+import { offerPlatform, showAppOffer, dropAppOffer } from './appOffer.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
@@ -158,6 +159,9 @@ const net = new ControllerNet({
     const inRoom = currentScreen && currentScreen !== 'name';
     const { status, conn } = linkCopy(state, info);
     if (status != null) setStatus(status);
+    // A refused join (checkRoom's answer included) or a closed room: drop the
+    // offer, so the name screen's status line says why.
+    if (state === 'error' || state === 'room_closed') dropAppOffer();
     if (inRoom && conn) showConn(conn);
   },
   onMessage: handleMessage,
@@ -868,6 +872,10 @@ if (shellName) {
   if (!isScenario) joinRace(shellName);
 } else {
   show('name');
+  // A phone browser is offered the app first (appOffer.js). A launcher too old
+  // to name the player lands here as well, and is already the app.
+  const offerOs = inShell || isScenario ? null : offerPlatform(navigator.userAgent);
+  if (offerOs) showAppOffer(offerOs, buzz);
 }
 window.__net = net; window.__wakeLock = wakeLock; // debug/test handles (parity with the display)
 

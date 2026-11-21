@@ -149,6 +149,107 @@ input[type=text]:disabled { opacity: 0.6; }
 #name.kb-open input[type=text] { padding-block: 0.55rem; }
 #name.kb-open .btn { width: auto; flex: none; margin-top: 0; }
 
+/* ---- app offer (appOffer.js) ----
+   While <html> has .app-offer-up the name screen keeps only its wordmark, and
+   the Paper Balloon app comes up as a sheet along the bottom edge, edge to edge:
+   PAPER you read, its one action the app. The browser is the underlined line
+   under it, as the display's "Continue on this device", and picking it leaves
+   the app as a quiet row under Join (.app-nudge, below). Landscape lays the
+   sheet out as one row, the app beside its buttons. */
+#app-offer { display: none; }
+.app-offer-up #name-form, .app-offer-up #name-status { display: none; }
+.app-offer-up #name {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch; justify-items: center;
+  padding-bottom: 0;
+}
+.app-offer-up #app-offer {
+  grid-row: 2; justify-self: stretch;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center; gap: 1.2rem 2rem;
+  /* The section's side padding is the screen edge; the sheet runs past it. */
+  margin: 0 calc(-1 * var(--edge-right)) 0 calc(-1 * var(--edge-left));
+  --offer-pad: max(1.4rem, calc((100% - 42rem) / 2));
+  padding: 1.2rem max(var(--safe-right), var(--offer-pad)) calc(var(--safe-bottom) + 0.9rem) max(var(--safe-left), var(--offer-pad));
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+  animation: app-offer-rise 0.42s cubic-bezier(0.3, 0.7, 0.2, 1) both;
+}
+@keyframes app-offer-rise { from { transform: translateY(100%); } }
+/* iOS Safari fills the bands outside the page, the status bar's and the one
+   behind its bottom toolbar, with the BODY's background: not the root's, not
+   theme-color, not a fixed element's. White while the sheet is up, so the
+   sheet runs on under the toolbar (the status bar band goes white with it),
+   and the name screen paints the page's paper itself. */
+html.app-offer-up body { background: var(--surface); }
+.app-offer-up #name { background: var(--paper); }
+.app-offer__app { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.app-offer__icon { flex: none; width: 4.25rem; height: 4.25rem; border-radius: 23%; }
+.app-offer__name {
+  margin: 0; font-family: var(--font-display); font-weight: 700;
+  font-size: 1.3rem; line-height: 1.1; color: var(--ink); text-wrap: balance;
+}
+.app-offer__line { margin: 0.3rem 0 0; font-weight: 700; font-size: 0.95rem; color: var(--ink-2); }
+/* A fact under the pitch: smaller, not fainter (--ink-3 misses 4.5:1 on white). */
+.app-offer__size {
+  display: flex; align-items: center; gap: 0.25rem;
+  margin: 0.25rem 0 0; font-weight: 700; font-size: 0.8rem; color: var(--ink-2);
+}
+.app-offer__size svg {
+  flex: none; width: 0.85rem; height: 0.85rem;
+  fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.app-offer__actions { display: grid; gap: 0.15rem; }
+#app-offer-link { margin-top: 0; text-decoration: none; }
+.app-offer__browser {
+  background: none; border: 0; padding: 0.55rem;
+  font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; color: var(--ink-2);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+.app-offer__browser:active, .app-offer__browser.held { color: var(--ink); }
+/* Portrait: the sheet stacks, and stands in for the rotate overlay until the
+   player picks, since the app turns the phone itself; "Play in the browser"
+   hands over to the overlay. Nothing else is on screen, so the small-phone
+   font tiers (sized for a landscape page) are reset. */
+@media (orientation: portrait) {
+  html.app-offer-up { font-size: 16px; }
+  .app-offer-up .rotate { display: none; }
+  .app-offer-up .name-wordmark { font-size: clamp(34px, 11vw, 50px); }
+  .app-offer-up #app-offer {
+    grid-template-columns: minmax(0, 1fr); gap: 1.4rem;
+    --offer-pad: max(1.4rem, calc((100% - 24rem) / 2));
+    padding-top: 1.6rem; padding-bottom: calc(var(--safe-bottom) + 1.2rem);
+  }
+  .app-offer__icon { width: 4.75rem; height: 4.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-offer-up #app-offer { animation: none; }
+}
+/* The second stage: the app as a CHOICE under Join once the player picked the
+   browser. Gone while the keyboard is up, which has no height to spare. */
+.app-nudge { display: none; }
+.app-offer-nudge .app-nudge {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin-top: 0.75rem; padding: 0.5rem 0.9rem 0.5rem 0.55rem;
+  color: var(--ink); text-decoration: none;
+  background: var(--surface); border-radius: var(--r);
+  box-shadow: inset 0 0 0 2px var(--edge);
+  transition: transform var(--press-up) ease, background-color var(--press-up) ease;
+}
+.app-nudge:active, .app-nudge.held {
+  transform: scale(0.97); background: var(--press);
+  transition: transform 0s, background-color 0s;
+}
+#name.kb-open .app-nudge { display: none; }
+.app-nudge__icon { flex: none; width: 2.4rem; height: 2.4rem; border-radius: 23%; }
+.app-nudge__title { flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; line-height: 1.15; }
+.app-nudge__chev {
+  flex: none; width: 0.6rem; height: 1rem;
+  fill: none; stroke: var(--ink-2); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+}
+
 /* ---- lobby: one grammar for both pages ---- */
 /* Three rows, and the middle one is the page: a slim RIBBON on top (name, the
    page's key, settings), the CHOICES as a tile grid taking everything between,

@@ -12,7 +12,9 @@
 import * as Gallery from './gallery-common.js';
 var CONTROLLER_CARDS = [
   { key: 'device-choice',   title: 'Device chooser', url: '/display/index.html?scenario=device-choice' },
+  { key: 'app-offer',       title: 'App offer' },
   { key: 'name',            title: 'Name input' },
+  { key: 'app-nudge',       title: 'Name input · app nudge' },
   { key: 'name-connecting', title: 'Connecting…' },
   { key: 'lobby-host',      title: 'Lobby (host, car page)', perColor: true },
   { key: 'lobby-race',      title: 'Lobby (host, race page)', perColor: true },

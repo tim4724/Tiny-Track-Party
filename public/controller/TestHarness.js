@@ -14,6 +14,7 @@ import { renderResultsBoard } from './resultsBoard.js';
 import { linkCopy, showConn } from './linkStatus.js';
 import { setInputMode } from './driveSurface.js';
 import { syncCloseButton } from './closeButton.js';
+import { showAppOffer } from './appOffer.js';
 const { ROOM_STATE } = window;
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
@@ -203,6 +204,16 @@ export function runControllerScenario(opts) {
       el('name-input').value = '';
       el('name-input').dispatchEvent(new Event('input'));  // Join greys out, as on the live page
       el('name-status').textContent = '';
+      break;
+
+    case 'app-offer':
+    case 'app-nudge':
+      // The sheet looks the same on both platforms; only its link differs. The
+      // nudge is the name screen after the player picked the browser.
+      show('name');
+      showAppOffer('ios', () => {});
+      if (scenario === 'app-nudge') el('app-offer-browser').click();
+      el('name-input').dispatchEvent(new Event('input'));
       break;
 
     case 'name-connecting':
