@@ -13046,15 +13046,20 @@ def glacier_tongue_build(lite):
     lighter where it turns to the sun, snow drifted on its margins and lying
     in drifts across it; the snout rounding off and thinning into the snow
     short of the crossing (a cliff there stood up as a slab of ice). Built
-    over the plain and draped, its rim sunk in the snow it lies in. The box's build is the bare ice alone, in a fifth of the
-    facets: without its crevasses the firn is white on the white massif."""
+    over the plain and draped, its rim sunk in the snow it lies in. The
+    box's build is the bare ice alone, in a fifth of the facets: without its
+    crevasses the firn is white on the white massif."""
     Z1, FIRN = 62.0, -32.0
     Z0, STEP, COLS = (FIRN - 4.0, 9.0, 4) if lite else (-60.0, 3.0, 8)
-    CRACKS = () if lite else (-52.0, -45.5, -39.0)
+    # The crevasses, each (z, wide, from column, to column, skew along Z per
+    # unit across): spaced, cut off and turned unevenly (evenly spaced, the
+    # full width and square across, they read as stripes).
+    CRACKS = () if lite else ((-55.0, 0.6, 2, 6, 0.05), (-51.5, 0.9, 1, 4, -0.04), (-49.0, 0.5, 4, 7, 0.03),
+                              (-43.0, 0.8, 2, 7, -0.05), (-39.5, 0.5, 1, 3, 0.06))
     SUN_T = (-0.122, 0.979, 0.163)              # the renderer's kToSun in this frame (glacier_peaks')
     zs = [Z0 + STEP * i for i in range(int((Z1 - Z0) / STEP))] + [Z1 - 1.0, Z1]
-    for c in CRACKS:                            # a crevasse is a slot between two close stations
-        zs = [z for z in zs if abs(z - c) > 1.2 and abs(z - c - 0.7) > 1.2] + [c, c + 0.7]
+    for c, w, _, _, _ in CRACKS:                   # a crevasse is a slot between two close stations
+        zs = [z for z in zs if abs(z - c) > 1.2 and abs(z - c - w) > 1.2] + [c, c + w]
     zs = sorted(zs)
     def half(z):
         at = min(1.0, max(0.0, (z + 61.0) / 136.0))
@@ -13076,14 +13081,15 @@ def glacier_tongue_build(lite):
             else:
                 y = 0.4 + 0.12 * math.sin(2 * math.pi * bowed(x, z) / 9.0) + 0.22 * jitter(i, j, 41.0)
                 y = 0.15 + (y - 0.15) * min(1.0, (Z1 - z) / 8.0)   # and thins to a lip (clear of the land: no flicker)
-                if any(c - 0.1 < z < c + 0.8 for c in CRACKS) and 1 < j < COLS - 1:
+                if any(c - 0.01 < z < c + w + 0.01 and j0 < j < j1 for c, w, j0, j1, _ in CRACKS):
                     y -= 0.2                    # a slot's lips sag into it
-            row.append((x, y, z))
+            skew = sum(t * x for c, w, _, _, t in CRACKS if c - 0.01 < z < c + w + 0.01)
+            row.append((x, y, z + skew))
         rows.append(row)
     tones = {}
     for i in range(len(rows) - 1):
         a, b = rows[i], rows[i + 1]
-        crack = any(abs(zs[i] - c) < 1e-6 for c in CRACKS)
+        crack = [(j0, j1) for c, _, j0, j1, _ in CRACKS if abs(zs[i] - c) < 1e-6]
         for j in range(COLS):
             q = (a[j], a[j + 1], b[j + 1], b[j])
             tris = ((q[0], q[1], q[2]), (q[0], q[2], q[3])) if (i + j) % 2 else ((q[0], q[1], q[3]), (q[1], q[2], q[3]))
@@ -13094,7 +13100,7 @@ def glacier_tongue_build(lite):
                 cx, cz = sum(p[0] for p in t) / 3, sum(p[2] for p in t) / 3
                 lit = n[0] * SUN_T[0] + n[1] * SUN_T[1] + n[2] * SUN_T[2] > 0.979
                 drift = noise2(cx / 5.0, cz / 7.0, 43.0) + 0.12 * jitter(i, 2 * j + k, 53.0)   # drifts, ragged
-                if crack and 1 <= j <= COLS - 2:
+                if crack and crack[0][0] <= j < crack[0][1]:
                     tone = ('blue', 16)                                  # the slot
                 elif cz < FIRN or drift > 0.22 or (j in (0, COLS - 1) and drift > -0.15):
                     tone = ('white', 2)                                  # firn, a drift, the margin's snow
@@ -14513,6 +14519,19 @@ def rprop_lobe(r, at, color, scale=(1, 1, 1), yaw=0.0):
         return trees_round(sphere(r, at, color, subdiv=1, flat=False, scale=scale, yaw=yaw))
     return sphere(r, at, color, subdiv=2, flat=False, scale=scale, yaw=yaw)
 
+def apple(r, at, out, color):
+    """An apple: a ball eight sides round and four high, shaded round, its
+    pole pointing `out` (a Blender vector, off the crown), so its outline has
+    eight sides from the road and from beside the tree alike (twenty faces
+    showed six). 48 triangles: past 64 a far form no longer keeps a shape
+    whole, and an 80-face ball cost the lap's vista a quarter more."""
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=8, ring_count=4, radius=r)
+    o = bpy.context.active_object
+    o.location = P(*at)
+    o.rotation_mode = 'QUATERNION'
+    o.rotation_quaternion = Vector((0.0, 0.0, 1.0)).rotation_difference(out.normalized())
+    return trees_round(paint(o, color))
+
 def apple_tree(x, z, seed, lite, apples=3, lite_fruit=False):
     k = 0.8 + 0.4 * hash01(x, z, seed)                     # a quarter either way
     lx, lz = 0.1 * (hash01(x, z, seed, 1) - 0.5), 0.1 * (hash01(z, x, seed, 2) - 0.5)
@@ -14522,7 +14541,8 @@ def apple_tree(x, z, seed, lite, apples=3, lite_fruit=False):
     a = hash01(x, z, seed, 3) * 6.28
     if lite:
         trees_round(sphere(1.9 * k, (cx, cy, cz), 0x6cae55, subdiv=1, flat=False, scale=(1.0, 0.84, 1.0)))
-        # One lobe, and for the scatter's tree a few apples on it.
+        # One lobe, and for the scatter's tree a few apples on it, balls of
+        # twenty faces shaded round (apple()'s 48 are the full tier's).
         fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
         for j in range(apples if lite_fruit else 0):
             trees_round(sphere(0.34 * k, (cx + 1.75 * k * math.cos(a + 2.1 * j), cy + (-0.5, 0.45, -0.1)[j % 3] * k,
@@ -14543,11 +14563,8 @@ def apple_tree(x, z, seed, lite, apples=3, lite_fruit=False):
                 strut((x, 1.9 * k, z), (px, cy + (dy - 0.6) * k, pz), 0.3 * k, TREES_BARK)
     # apples a racer can count, sat on the crown's skin where a ray in to
     # its middle first meets it (at a fixed reach they sank into a flat face
-    # and showed as red slivers, or hung clear of it). Each a ball of twenty
-    # faces shaded round (round 34: not a cube). A finer ball is past the 64
-    # triangles a far form keeps whole, and its simplified error held the
-    # orchard's near form out to the vista. Three a tree where four cubes
-    # were (two on the scatter's tree), so the lap costs what it did.
+    # and showed as red slivers, or hung clear of it). Three a tree, each
+    # an apple() (round 34: not a cube).
     fruit = 0xffc044 if hash01(x, z, seed, 5) > 0.85 else 0xcf534f
     bpy.context.view_layer.update()
     with plain_parts():
@@ -14566,7 +14583,7 @@ def apple_tree(x, z, seed, lite, apples=3, lite_fruit=False):
             if hit:
                 (bx, by, bz), (nx, ny, nz) = hit
                 q = 0.2 * k                                 # the apple's radius, less what sinks into the skin
-                trees_round(sphere(0.32 * k, (bx + nx * q, bz + nz * q, -by - ny * q), fruit, flat=False))
+                apple(0.32 * k, (bx + nx * q, bz + nz * q, -by - ny * q), Vector((nx, ny, nz)), fruit)
 
 ORCH_SP = 8.4   # metres between trees (2.1 u)
 
@@ -16516,12 +16533,12 @@ def tree_willow():
 
 @piece(REAL)
 def tree_apple():
-    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, False, apples=2))
+    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, False))
 
 @piece(REAL)
 def tree_apple_lite():
-    # The lite tier's: the orchard's lite tree, one lobe, two apples on it.
-    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, True, apples=2, lite_fruit=True))
+    # The lite tier's: the orchard's lite tree, one lobe, three apples on it.
+    scatter_tree(lambda: apple_tree(0.0, 0.0, 3, True, lite_fruit=True))
 
 @piece(REAL)
 def lawn_shrub():
