@@ -2356,16 +2356,21 @@ export const TRACKS = {
       { model: 'set-snake-humps-purple', u: 0.975, lat: 7.5 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
       { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 },
-      // The toy box's classics left out on the board's middle (each its own
-      // piece, to keep or drop): set from the grid straight's frame, so lat
-      // is minus the board's x and u its z.
+      // The toy box's classics left out on the board (each its own piece, to
+      // keep or drop), as a child left a game: a line of dominoes run across
+      // the middle into the chessmen, knocking the pawn over (the chess row
+      // stands at the dominoes' end, along their line); the teddy sat by the
+      // rocking horse with the ring stack, looking at the race; the top
+      // spinning by the dice; the pull-along snake watching the cars. Set
+      // from the grid straight's frame, so lat is minus the board's x and u
+      // its z.
       { model: 'set-board-top', u: 0.025335, lat: -10, yaw: 0 },
       { model: 'set-board-rocking-horse', u: 0.078951, lat: -16, yaw: -90 },
-      { model: 'set-board-teddy', u: 0.121281, lat: -14, yaw: -163 },
-      { model: 'set-board-ring-stack', u: 0.138212, lat: -30, yaw: 0 },
-      { model: 'set-board-chess', u: 0.132565, lat: -44, yaw: -140 },
-      { model: 'set-board-pull-snake', u: 0.983007, lat: -28, yaw: -100 },
-      { model: 'set-board-dominoes', u: 0.036623, lat: -31, yaw: 40 }
+      { model: 'set-board-teddy', u: 0.093061, lat: -12.5, yaw: -130 },
+      { model: 'set-board-ring-stack', u: 0.115638, lat: -20, yaw: 0 },
+      { model: 'set-board-dominoes', u: 0.064003, lat: -34.6615, yaw: 25.821 },
+      { model: 'set-board-chess', u: 0.113661, lat: -43.18, yaw: 25.821 },
+      { model: 'set-board-pull-snake', u: 0.983007, lat: -28, yaw: -100 }
     ],
     // The dive is the board's snake, from the top deck down to the board.
     // The climbs stay plain road: painted as the board's ladders, their
