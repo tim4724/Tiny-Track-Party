@@ -25753,9 +25753,9 @@ def train_car(x, y, z, kind, color):
     else:
         box((1.15, 0.62, 0.62), (x, y + 0.69, z), color)
         box((1.25, 0.12, 0.7), (x, y + 1.06, z), 0xfdf4de)
-        for dx in (-0.3, 0.05, 0.4):                                         # its windows
+        for dx in (-0.34, -0.01, 0.32):                                      # its windows, inside the body's round
             for sz in (-1, 1):
-                box((0.24, 0.22, 0.02), (x + dx - 0.06, y + 0.8, z + sz * 0.315), 0x8ecae6)
+                box((0.2, 0.18, 0.02), (x + dx, y + 0.78, z + sz * 0.315), 0x8ecae6)
 
 @piece(1.0)
 def block_town():
