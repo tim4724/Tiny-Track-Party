@@ -107,9 +107,10 @@ export const MAX_BUFFER_H = 2160;
 const FRESH_FRAMES = 2;
 
 // DEV. `?cars=,,tk-stock-hatch-muscle,tk-jeep-b` draws roster car i
-// with concept car i instead (public/assets/concepts/, the asset gallery's
-// Concept cars). Only the GLB fetched changes: names, stats, thumbnails and
-// everything C++ decides stay the roster's. An empty entry keeps that car.
+// with concept car i instead (public/assets/concepts/,
+// scripts/gen-concept-cars.py). Only the GLB fetched changes: names, stats,
+// thumbnails and everything C++ decides stay the roster's. An empty entry
+// keeps that car.
 const CONCEPT_CARS = (new URLSearchParams(location.search).get('cars') || '').split(',');
 
 // The most `?supersample=` may ask for. A ceiling on the debug ceiling: this is
@@ -536,13 +537,6 @@ export class Stage {
   // a new variant on a settled field would leave the roster identical and the
   // rebuild would be skipped, which is precisely the bug the biome pick had.
   bench(model) { this._bench = model || ''; }
-  // DEV, the asset gallery's KIT FIELD: the models to stand beyond the track,
-  // by GLB name. Same latch shape as bench() — held here and pushed in
-  // _rebuild — and a SCENE input, since the field is meshed at build.
-  kitField(models) { this._kitField = Array.isArray(models) ? models : []; }
-  // Where the built field put them, in the order given. Empty until the build
-  // that stands one has finished, so callers await their rebuild first.
-  kitLayout() { return this.display ? this.display.kitLayout() : []; }
   modelVariant(model, variant) {
     this._variants = { ...(this._variants || {}), [model]: variant | 0 };
   }
@@ -602,11 +596,8 @@ export class Stage {
           // phase. Whether it qualifies is C++'s call; a refusal (a changed
           // id list) just falls through to the build below.
           const variants = this._variants || {};
-          // The KIT FIELD is a SCENE input, not a roster one: it is meshed at
-          // build, and its models are a fetch list this side owns.
-          const kit = this._kitField || [];
           const sceneSig = JSON.stringify([this._track.id, this._biome,
-                                           !!this._showcase, this._bench || '', variants, kit]);
+                                           !!this._showcase, this._bench || '', variants]);
           const rosterSig = JSON.stringify(roster);
           if (sceneSig === this._sceneSig && rosterSig === this._rosterSig) {
             continue; // nothing the renderer can see
@@ -620,7 +611,6 @@ export class Stage {
             }
             this.display.showcase(!!this._showcase); // latched; see showcase()
             this.display.bench(this._bench || '');   // …and see bench()
-            this.display.kitField(kit);              // …and see kitField()
             for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;

@@ -1033,21 +1033,10 @@ target_link_libraries(showcase_check PRIVATE libttp_runtime ttp_strict_fp ttp_wa
 ttp_emscripten_cli(showcase_check)
 add_test(NAME showcase COMMAND showcase_check)
 
-# ---- Behavioural: the gallery's kit field -----------------------------------
-# Same standing as showcase_check — no corpus, no oracle. It holds the four
-# properties the field is useless without (nothing overlaps, nothing reorders,
-# rows stay inside their width, a footprint-less model still gets ground), each
-# of which would otherwise only be found by flying out there and squinting.
-#
-# kitfield.h is HEADER-ONLY (the renderer needs it and may not link this
-# library), so there is no source file to add above — this target is the only
-# place the packing is compiled outside the renderer, and the only place it runs.
-add_executable(kitfield_check runtimetest/kitfield_check.cc)
-target_link_libraries(kitfield_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
-ttp_emscripten_cli(kitfield_check)
-add_test(NAME kitfield COMMAND kitfield_check)
-
-# The set pieces' moving parts (ttp/set_motion.h), header-only like kitfield.h.
+# The set pieces' moving parts (ttp/set_motion.h). HEADER-ONLY (the renderer
+# needs it and may not link this library), so there is no source file to add
+# above — this target is the only place the motion is compiled outside the
+# renderer, and the only place it runs.
 add_executable(setmotion_check runtimetest/setmotion_check.cc)
 target_link_libraries(setmotion_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(setmotion_check)

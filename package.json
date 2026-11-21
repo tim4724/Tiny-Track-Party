@@ -17,7 +17,6 @@
     "check:tvos-race-remote": "node scripts/check-tvos-race-remote.mjs",
     "check:tvos-party": "node scripts/tvos-party-check.mjs",
     "dev": "node --watch server/index.js",
-    "fetch:kits": "node scripts/fetch-kits.mjs",
     "fetch:music": "node scripts/fetch-music.mjs",
     "gen:licenses": "node scripts/gen-upstream-licenses.mjs",
     "gen:schematics": "node scripts/gen-track-schematics.js",

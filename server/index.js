@@ -20,11 +20,6 @@ const REVIEW_NOTE_MAX = 48 * 1024 * 1024;
 // vendored dependency, served via the remap below. Restricted to .js so
 // package artifacts / binaries can't be walked.
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
-// The Kenney kits the game's models are PICKED FROM, and candidates for more,
-// for the asset gallery's kit browser. `npm run fetch:kits` fills this (a
-// cache: gitignored and dockerignored, so it is never in an image), which is
-// why the route below is allowed to 404 — the gallery reads that as "not fetched" and says so.
-const KITS_DIR = path.join(__dirname, '..', '.cache', 'kenney-kits');
 const APP_VERSION = require('../package.json').version;
 // The image copies this one file of `scripts/` (see the Dockerfile), so the route
 // below serves it on a deploy too. It stays optional all the same: a missing shot
@@ -79,7 +74,7 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
-  // 3D assets — glTF binary. The Kenney GLBs are self-contained (no .gltf/.bin
+  // 3D assets — glTF binary. The GLBs are self-contained (no .gltf/.bin
   // companions are served); without this they'd fall back to octet-stream.
   '.glb': 'model/gltf-binary',
   // Audio. The race itself is asset-free Web Audio synthesis, but the sound
@@ -197,7 +192,7 @@ const server = http.createServer((req, res) => {
     sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });
     return;
   }
-  // Manifest of the Kenney kit's GLBs, so the asset gallery
+  // Manifest of the kit's GLBs, so the asset gallery
   // (/gallery-assets.html) stays in sync with the directory instead of a
   // hand-maintained list. Read-only listing of one fixed asset folder.
   //
@@ -349,36 +344,11 @@ const server = http.createServer((req, res) => {
     if (!/^\/[\w.-]+\.js$/.test(urlPath.slice('/partyplug'.length))) { res.writeHead(404); res.end('Not Found'); return; }
     baseDir = PARTYPLUG_DIR;
     lookupPath = urlPath.slice('/partyplug'.length);
-  } else if (urlPath.startsWith('/kits/')) {
-    // The kit cache, for /gallery-assets.html's kit browser: its manifest, one
-    // preview render per model, and the models themselves — the browser stages a
-    // candidate on the showroom grid by handing the renderer its bytes.
-    //
-    // Reachable here is not the same as shipped: a kit model ENTERS the game by
-    // being copied into public/assets/toycar and recorded in its SOURCES.json.
-    // Nothing may load one of these at play time, because this cache exists on
-    // one laptop and in no image.
-    const rest = urlPath.slice('/kits'.length);
-    if (!/^\/(index|shortlist)\.json$/.test(rest)
-        && !/^\/[\w-]+\/previews\/[\w.-]+\.png$/.test(rest)
-        && !/^\/[\w-]+\/models\/[\w.-]+\.glb$/.test(rest)) {
-      res.writeHead(404); res.end('Not Found'); return;
-    }
-    baseDir = KITS_DIR;
-    lookupPath = rest;
   }
 
-  let filePath = path.join(baseDir, lookupPath);
+  const filePath = path.join(baseDir, lookupPath);
   // Directory-traversal guard. The trailing separator is load-bearing.
   if (!filePath.startsWith(baseDir + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
-
-  // A kit the game has not shipped from yet keeps its palette in the kit cache
-  // (`npm run fetch:kits`), under the name its staged models reference — so the
-  // kit browser draws them coloured. Dev only: no image has the cache.
-  if (!IS_PROD && /^\/assets\/toycar\/Textures\/[\w-]+\.png$/.test(urlPath)
-      && !fs.existsSync(filePath)) {
-    filePath = path.join(KITS_DIR, 'textures', path.basename(urlPath));
-  }
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not Found'); return; }
 

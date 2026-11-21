@@ -9,9 +9,9 @@
 #       Then: scripts/dedupe-wheel-meshes.mjs, scripts/gen-kit-colors.mjs and a
 #       wasm rebuild, scripts/capture-car-thumbs.js.
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py [-- name ...]
-#       the CONCEPT cars (toy_cars.CARS) into public/assets/concepts/ with the
-#       index.json the asset gallery's "Concept cars" field lists them from.
-#       Nothing ships them; `?cars=<name>,...` races them on the web.
+#       the CONCEPT cars (toy_cars.CARS) into public/assets/concepts/ with an
+#       index.json listing them. Nothing ships them; `?cars=<name>,...` races
+#       them on the web.
 #
 # The earlier families — Kenney Car Kit conversions, cars designed from its
 # parts, the roster cars remixed — are in git history with the converter that
@@ -106,10 +106,9 @@ def build(name, out):
 
 
 def write_index(tris):
-    """OUT/index.json, the gallery's list: every concept car with its triangle
-    count and what it is, in toy_cars.CARS order. A roster car's first
-    variation names it as `base`, which the gallery stands ahead of the group
-    so the shipped car heads its own variations. Counts for cars not rebuilt
+    """OUT/index.json: every concept car with its triangle count and what it
+    is, in toy_cars.CARS order. A roster car's first variation names it as
+    `base`, the shipped car its variations are of. Counts for cars not rebuilt
     this run are carried over."""
     path = os.path.join(OUT, 'index.json')
     old = {}

@@ -12,8 +12,6 @@
 #include "TtpRendererImpl.h"
 #include "TtpRendererKit.h"
 
-#include "ttp/kitfield.h"   // header-only; the renderer may not link libttp-runtime
-
 
 namespace {
 // Terrain value noise: integer lattice hash, cosine-eased bilinear blend.
@@ -2701,14 +2699,6 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb) {
     for (int w = 0; w < 4; w++) {
         const Wall& W = walls[w];
         const float3 mid = W.o + W.t * (0.5f * W.len);
-        const float reach = 0.5f * W.len + 3.0f;
-        if (mKitFieldMaxX > mKitFieldMinX   // the gallery's field wins, as in the ring
-                && mid.x + reach > mKitFieldMinX - ttp::rt::kKitFieldClear
-                && mid.x - reach < mKitFieldMaxX + ttp::rt::kKitFieldClear
-                && mid.z + reach > mKitFieldMinZ - ttp::rt::kKitFieldClear
-                && mid.z - reach < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
-            continue;
-        }
         mHillAnchors.push_back({ mid.x, mid.z, top - 1.0f });
         // The face, in columns and in rows (the dado band, the rail's, the
         // wall over it in two), the window's hole left out of the first.
@@ -2908,13 +2898,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
 
 
 
-    // The gallery's kit field, off in every build but its own. BEFORE the hill
-    // ring, which is the one thing in the scene that reaches as far out as the
-    // field does: the ring reads the bounds this leaves behind and stands no
-    // hill inside them, so the field gets the clear horizon a browser needs
-    // instead of a row of models parked behind a mountain.
     phases.mark("prologue");
-    buildKitField(tb);
 
     // Horizon hill ring (environment.js buildHillRingGeometry, 'dome' shape):
     // 18 squashed spheres, fully deterministic index math, theme colours cycled,
@@ -2953,20 +2937,6 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 r = 150 + (i % 3) * 18;
             }
             const float cx = std::cos(a) * r, cz = std::sin(a) * r;
-            // The gallery's kit field takes precedence over the horizon where
-            // the two meet (DEV; mKitField* is empty in every other build). A
-            // hill is the only thing out there big enough to hide a row of
-            // models behind, and a browser you have to fly around a mountain to
-            // read is not one. Skipped whole rather than moved: the ring is
-            // deterministic index math, and nudging one feature would land it
-            // on its neighbour.
-            if (mKitFieldMaxX > mKitFieldMinX
-                    && (cx + sx) * sf > mKitFieldMinX - ttp::rt::kKitFieldClear
-                    && (cx - sx) * sf < mKitFieldMaxX + ttp::rt::kKitFieldClear
-                    && (cz + sz) * sf > mKitFieldMinZ - ttp::rt::kKitFieldClear
-                    && (cz - sz) * sf < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
-                continue;
-            }
             mHillAnchors.push_back({ cx, cz, sy - 1.0f }); // authored coords
             const float3 hc = srgbToLinear(
                     tb.hillColors.empty() ? 0x8cc578u
@@ -3272,7 +3242,6 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         };
         if (mTerrainAmp <= 0) {
             flatSheet(-G, -G, G, G);
-            kitFieldApron(mGround, groundY, TILE, white);
         } else {
             // Heightfield grid over the terrain region, flat sheet as a 4-strip
             // ring out to ±G. One mesh, one material instance — the relief costs
@@ -3329,7 +3298,6 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             flatQuad(mTerrainX1, -G, G, G);             // east strip
             flatQuad(mTerrainX0, -G, mTerrainX1, mTerrainZ0); // north strip
             flatQuad(mTerrainX0, mTerrainZ1, mTerrainX1, G);  // south strip
-            kitFieldApron(mGround, groundY, TILE, white);
 
             // Depth-pass stand-in (see the caster note before bakeShadowMap):
             // the relief must NOT cast — a heightfield rendered into its own

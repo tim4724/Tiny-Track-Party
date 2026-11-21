@@ -80,8 +80,8 @@
 // the cars are now. Nothing accumulates, so nothing needs resetting between
 // races, an undrawn wind cannot drift it, and the two renderers agree.
 //
-// Header-only for kitfield.h's reason: the renderer needs it and may not link
-// libttp-runtime (native/CLAUDE.md); `setmotion` ctests it.
+// Header-only because the renderer needs it and may not link libttp-runtime
+// (native/CLAUDE.md); `setmotion` ctests it.
 #pragma once
 
 #include <algorithm>

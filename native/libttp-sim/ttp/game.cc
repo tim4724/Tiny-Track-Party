@@ -69,8 +69,8 @@ static const double DRIFT_RELEASE_T = 0.4;
 static const double DRIFT_SLIP = 0.3;        // rad at full lock
 static const double DRIFT_SLIP_RATE = 8.0;   // 1/s ease of the drawn slip
 // ---- contact ----
-// The collider's rectangle IS the Kenney mesh AABB — CAR_STATS halfLen/halfWid,
-// measured off the meshes — with no tolerance: the toy bodies are boxes, and
+// The collider's rectangle IS the car mesh's AABB (the cars scripts/toy_cars.py
+// builds) — CAR_STATS halfLen/halfWid, measured off the meshes — with no tolerance: the toy bodies are boxes, and
 // the widest part of the open-wheel cars is the tyres, so any shrink reads as
 // wheels resting inside each other.
 // Contact is resolved by sequential impulses: each pass re-runs SAT on the

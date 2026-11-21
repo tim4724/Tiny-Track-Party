@@ -201,9 +201,7 @@ Put a phone defect that is ENGINE-shaped there, not a second copy of a behaviour
 the Chromium specs already cover.
 
 `/gallery.html` is a manual no-relay preview surface; `/gallery-assets.html` is one
-live scene you fly, and is dev-only. Its KIT FIELD stands models the game does not
-ship, out of a cache no test has (`npm run fetch:kits`) — so what is gated is the
-packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
+live scene you fly, and is dev-only.
 `/gallery-landmarks.html` is the same kind of page for each track's set pieces;
 how its camera poses look is judged by eye, so `gallery-landmarks.spec.js` pins
 the set layout and the scenery read-back reaching the page, the lap score

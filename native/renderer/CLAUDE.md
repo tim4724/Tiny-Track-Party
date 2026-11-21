@@ -466,7 +466,7 @@ what was measured and not taken; the rules it left:
 **THE STATIC SCENE IS A FUNCTION OF ITS KEY, and a build whose key matches the
 resident one rebuilds only the FIELD.** The key is the shim's
 (`track|biome|showcase|backend`, `bakeKeyFor`) plus the inputs the renderer
-latches — shadows, the bench, the model variants, the kit field — whose setters
+latches — shadows, the bench, the model variants — whose setters
 drop it on a change (`dropStaticKey`). The track, its dressing, the sky and the
 sun bake stay up across a join, a leave, a race launch and a restart; `rebuildField`
 rebuilds the cars, and `resetRace` puts back what a race left on the static

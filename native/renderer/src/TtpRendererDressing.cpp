@@ -8,7 +8,6 @@
 #include <map>
 
 #include "ttp/canonical.h"
-#include "ttp/kitfield.h"   // header-only; the renderer may not link libttp-runtime
 
 
 // The seed of one candidate spot of a seeded scatter: the pass's seed mixed
@@ -493,10 +492,10 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                     * mat4f::scaling(float3{ p.s, p.s, p.s });
             tcm.setTransform(tcm.getInstance(mPropInstances[m][k]->getRoot()), xf);
             // A prop model may name ONE node "spin", and the renderer turns it
-            // about its own origin every frame — which is how the toy train
-            // drives its rails (scripts/gen-trainset.mjs). Collected here
-            // because that is where the instances are; per frame it is one
-            // transform each and nothing else in the set moves.
+            // about its own origin every frame (a toy train walking a ring of
+            // rails). Collected here because that is where the instances are;
+            // per frame it is one transform each and nothing else in the set
+            // moves.
             const utils::Entity spin = spinNode(mPropAssets[m], mPropInstances[m][k]);
             if (!spin.isNull()) mPropSpins.push_back(spin);
             k++;
@@ -763,137 +762,6 @@ void TtpRenderer::setModelVariant(const char* model, int variant) {
 void TtpRenderer::setModelBench(const char* model) {
     const int id = modelIdByName(model);
     if (id != mBenchModel) { mBenchModel = id; dropStaticKey(); }
-}
-
-// The field's MODELS are kit<i>.glb, which the count does not name, so any
-// build that stands one is a full build.
-void TtpRenderer::setKitField(int count) {
-    const int n = count > 0 ? count : 0;
-    if (n || n != mKitFieldCount) dropStaticKey();
-    mKitFieldCount = n;
-}
-
-// The kit field's own ground, appended to the ground sheet so it costs no
-// material and no draw call of its own — the same tiling surface, a hair higher.
-//
-// The lift is what makes it a CLEAR surface rather than a patch of world: the
-// beach biome's sea covers everything past its shore radius, which is every
-// piece of ground far enough out to hold a field, so without this the whole
-// browser reads through a blue sheet. Raised, the field stands on a sandbar and
-// the sea closes around it. On a dry biome the lift is invisible.
-void TtpRenderer::kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const {
-    if (mKitFieldMaxX <= mKitFieldMinX) return;   // no field in this build
-    const float m = ttp::rt::kKitFieldClear * 0.5f;
-    const float x0 = mKitFieldMinX - m, x1 = mKitFieldMaxX + m;
-    const float z0 = mKitFieldMinZ - m, z1 = mKitFieldMaxZ + m;
-    const float y = groundY + ttp::rt::kKitFieldLift;
-    const uint32_t base = (uint32_t) ground.verts.size();
-    ground.verts.push_back({ x0, y, z0, col });
-    ground.verts.push_back({ x1, y, z0, col });
-    ground.verts.push_back({ x0, y, z1, col });
-    ground.verts.push_back({ x1, y, z1, col });
-    ground.uvs.insert(ground.uvs.end(),
-            { { x0 / tile, z0 / tile }, { x1 / tile, z0 / tile },
-              { x0 / tile, z1 / tile }, { x1 / tile, z1 / tile } });
-    ground.normals.insert(ground.normals.end(), 4, float3{ 0, 1, 0 });
-    ground.idx.insert(ground.idx.end(),
-            { base, base + 2, base + 1, base + 1, base + 2, base + 3 });
-}
-
-// The KIT FIELD: every model the gallery handed over, standing on clear ground
-// beside the track. Not scenery and not a bench — those two stage what the game
-// draws, and this stages what it COULD, which is why it takes no theme, gets no
-// scatter and reads its models straight out of the shell's fetch list.
-//
-// Where it goes is derived, not authored: past the track's own footprint AND
-// past the terrain grid, so the field cannot land on the road whatever track the
-// gallery is holding, and lands on ground that is FLAT — two models on a
-// hillside are two models at different heights, and comparing them is the whole
-// point.
-void TtpRenderer::buildKitField(const TrackBin& tb) {
-    mKitLayout = "[]";
-    mKitFieldMinX = mKitFieldMinZ = 0.0f;
-    mKitFieldMaxX = mKitFieldMaxZ = -1.0f;   // inverted: no field
-    if (mKitFieldCount <= 0) return;
-
-    // Pass one: load them all and measure. The footprint has to come off the
-    // loaded asset — a GLB's AABB is not in the fetch list, and the pack cannot
-    // start until every model has one.
-    mKitAssets.assign((size_t) mKitFieldCount, nullptr);
-    std::vector<std::vector<gltfio::FilamentInstance*>> roots((size_t) mKitFieldCount);
-    std::vector<ttp::rt::KitFootprint> foot((size_t) mKitFieldCount);
-    std::vector<filament::Aabb> boxes((size_t) mKitFieldCount);
-    for (int i = 0; i < mKitFieldCount; i++) {
-        const std::string name = "kit" + std::to_string(i) + ".glb";
-        mKitAssets[(size_t) i] = loadInstancedProp(name.c_str(), 1, roots[(size_t) i]);
-        if (!mKitAssets[(size_t) i]) continue;
-        const filament::Aabb bb = mKitAssets[(size_t) i]->getBoundingBox();
-        boxes[(size_t) i] = bb;
-        foot[(size_t) i] = { bb.max.x - bb.min.x, bb.max.z - bb.min.z };
-        // The kits ship plenty of models at metallicFactor 1, which under real
-        // PBR renders near-BLACK — the same trap buildScenery documents, and a
-        // candidate judged black is a candidate rejected for the wrong reason.
-        for (auto* in : roots[(size_t) i]) {
-            MaterialInstance* const* mis = in->getMaterialInstances();
-            for (size_t m = 0; m < in->getMaterialInstanceCount(); m++) {
-                mis[m]->setParameter("metallicFactor", 0.0f);
-                mis[m]->setParameter("roughnessFactor", 1.0f);
-            }
-        }
-    }
-
-    // Past the track's own extent AND past the terrain grid, whichever reaches
-    // further. Out there groundSurfaceY answers the flat ground height, which is
-    // what a field is for: two models on a hillside are two models at different
-    // heights, and the whole point is to compare them.
-    float maxX = 0.0f, minZ = 0.0f;
-    for (const auto& s : tb.samples) {
-        maxX = std::max(maxX, s.pos.x);
-        minZ = std::min(minZ, s.pos.z);
-    }
-    const float ox = std::max(maxX, mTerrainX1) + ttp::rt::kKitFieldStandoff;
-    const float oz = minZ;
-
-    const std::vector<ttp::rt::KitSpot> spots = ttp::rt::kit_field_layout(foot);
-    auto& tcm = mEngine->getTransformManager();
-    mKitFieldMinX = mKitFieldMaxX = ox;
-    mKitFieldMinZ = mKitFieldMaxZ = oz;
-    std::string json = "[";
-    for (int i = 0; i < mKitFieldCount; i++) {
-        const size_t k = (size_t) i;
-        const float x = ox + spots[k].x, z = oz + spots[k].z;
-        // The APRON's height, not the terrain's: the field is placed past the
-        // terrain grid precisely so the ground under it is flat, and it stands
-        // on its own sheet (kitFieldApron) rather than on the world's.
-        const float y = tb.groundY + ttp::rt::kKitFieldLift;
-        // The ground the field covers, for whatever else wants to keep off it
-        // (the horizon ring does). Each model's own cell, not its centre.
-        mKitFieldMinX = std::min(mKitFieldMinX, x - foot[k].w * 0.5f);
-        mKitFieldMaxX = std::max(mKitFieldMaxX, x + foot[k].w * 0.5f);
-        mKitFieldMinZ = std::min(mKitFieldMinZ, z - foot[k].d * 0.5f);
-        mKitFieldMaxZ = std::max(mKitFieldMaxZ, z + foot[k].d * 0.5f);
-        if (mKitAssets[k] && !roots[k].empty()) {
-            // Seat it on its own AABB: the spot is where the model's FOOTPRINT
-            // centres and the ground is where its underside sits, neither of
-            // which is where its origin happens to be.
-            const filament::Aabb& bb = boxes[k];
-            const mat4f xf = mat4f::translation(float3{
-                    x - (bb.min.x + bb.max.x) * 0.5f, y - bb.min.y,
-                    z - (bb.min.z + bb.max.z) * 0.5f });
-            tcm.setTransform(tcm.getInstance(roots[k][0]->getRoot()), xf);
-        }
-        // Keys sorted, like every JSON this ABI answers. A model that failed to
-        // load still gets its entry: the chrome indexes this list by the same
-        // order it provided, so a hole would shift every name after it.
-        char buf[192];
-        std::snprintf(buf, sizeof(buf),
-                "%s{\"d\":%.3f,\"h\":%.3f,\"w\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f}",
-                i ? "," : "", (double) foot[k].d,
-                (double) (boxes[k].max.y - boxes[k].min.y), (double) foot[k].w,
-                (double) x, (double) y, (double) z);
-        json += buf;
-    }
-    mKitLayout = json + "]";
 }
 
 void TtpRenderer::buildLandmarks(const TrackBin& tb) {
@@ -1462,12 +1330,11 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    // NO LM_TRAIN. The wind-up loco that ran an oval here is the Holiday Kit's
-    // own train set now — a composed model on the playroom's prop scatter
-    // (scripts/gen-trainset.mjs, theme.cc) — so the oval, its sleepers and the
-    // per-frame walk went with the placement. buildTrainModel SURVIVES in
-    // TtpRendererKit.h: it is the asset gallery's model bench, which is where
-    // retired shapes live.
+    // NO LM_TRAIN. The playroom's train runs round the room on its own rails
+    // now, a track's set piece (set-room-train, theme.cc), so the oval, its
+    // sleepers and the per-frame walk went with the placement. buildTrainModel
+    // SURVIVES in TtpRendererKit.h: it is the asset gallery's model bench,
+    // which is where retired shapes live.
 
     if (!mLandmarks.verts.empty()) {
         accumulateNormals(mLandmarks);

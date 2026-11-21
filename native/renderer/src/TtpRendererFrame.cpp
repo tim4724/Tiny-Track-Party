@@ -3536,8 +3536,8 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     double tMark = tFrame0;
 
     // Cars follow the contract poses: basis (right, up, forward) + pos. GLB
-    // assets get an extra half-turn — Kenney vehicles are modelled facing -Z
-    // (same fix as the Three.js renderer's base yaw).
+    // assets get an extra half-turn — the cars (scripts/toy_cars.py) are
+    // modelled facing -Z (same fix as the Three.js renderer's base yaw).
     const TtpCarInput* cars = ttp_frame_cars(&input);
     const uint32_t nCars = std::min<uint32_t>(input.carCount, (uint32_t) mCars.size());
     // Conformed car positions, kept for the props that test against the car's

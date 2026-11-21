@@ -175,24 +175,16 @@ void ttp_display_bench(const char* model) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setModelBench(model);
 }
 
-void ttp_display_kit_field(int count) {
-    if (g_disp && g_disp->renderer) g_disp->renderer->setKitField(count);
-}
-
-const char* ttp_display_kit_field_layout(void) {
-    // The renderer owns the string (it is written once per build), so this
-    // hands back its buffer rather than copying into a static of its own.
-    return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
-}
-
 const char* ttp_display_set_layout(void) {
-    // The renderer owns the string, as with the kit field above.
+    // The renderer owns the string (it is written when the static scene
+    // builds), so this hands back its buffer rather than copying into a static
+    // of its own.
     return (g_disp && g_disp->renderer) ? g_disp->renderer->setLayout()
                                         : TtpRenderer::kNoSetLayout;
 }
 
 const char* ttp_display_scatter_layout(void) {
-    // The renderer owns the string, as with the kit field above.
+    // The renderer owns the string, as with the set layout above.
     return (g_disp && g_disp->renderer) ? g_disp->renderer->scatterLayout() : "[]";
 }
 
