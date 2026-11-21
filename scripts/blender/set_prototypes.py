@@ -18658,7 +18658,8 @@ def ore_line():
     # and DRAPE: each run lies on the ground as it is drawn (toward the east
     # bend the land rises to the road's embankment, and rails built level
     # ran under it out of sight). A little train rides it (anim_path on a
-    # draped chain, each wagon facing its way): a mine loco hauling three
+    # draped chain, each wagon facing its way and tipped up and down the
+    # trestle's ramps with the rails): a mine loco hauling three
     # carts of the shaft's gold ore out of the loading shed, the length of
     # the line at a mine train's walking pace against the racers down the
     # start straight, into the yard and the dark of the adit, home under
@@ -18758,16 +18759,21 @@ def ore_line():
                     strut(foot[0], head[1], 0.16, TIMBER)
             s += BENT
         group([o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH'], 'drape_line%d' % run)
-    # the train's loop: up out of the ground inside the headframe's loading
-    # shed, where no one sees it (the headframe stands 1.26 world on from the
-    # line's end, the shed's middle 0.3 short of that end: headframe()), the
-    # length of the line (over the trestle), in along the portal's line and
-    # down into the ground behind the adit, then home under everything
+    # the train's loop: up an incline out of the ground inside the
+    # headframe's loading shed, where no one sees it (the headframe stands
+    # 1.26 world on from the line's end, the shed's middle 0.3 short of that
+    # end: headframe()), the length of the line (over the trestle), in along
+    # the portal's line, on level through the adit's dark into the rock and
+    # down into the ground there, then home under everything. Each wagon
+    # pitches with the line (f=2), so the two ends turn it out of sight: it
+    # climbs out of the shed's floor at a slant, not standing on its tail,
+    # and dives behind the adit's dark, where its cab swung up out of the
+    # mouth when it dived just inside.
     SHED = total - 0.3 / k
-    loop = [(-8.0, -3.0, 0.0), (-5.2, Y, 0.0)]
+    loop = [(-10.6, -3.0, 0.0), (-7.6, Y, 0.0)]
     loop += [(p[0], ry(s), p[1]) for p, s in ((on(s)[0], s) for s in ss if s < SHED - 1.0)]
-    (ex, ez), _ = on(SHED)
-    loop += [(ex, Y, ez), (ex, -12.0, ez)]
+    (ex, ez), (dx, dz) = on(SHED)
+    loop += [(ex, Y, ez), (ex + 6.0 * dx, Y - 3.0, ez + 6.0 * dz), (ex + 6.0 * dx, -12.0, ez + 6.0 * dz)]
     loop.reverse()
     for i, p in enumerate(loop):
         marker('path_drapeore_%d' % i, p)
@@ -18780,10 +18786,10 @@ def ore_line():
     # length behind it was only ever seen at the headframe
     PHASE = 0.27
     x0, z0 = pts[0]
-    with animated('anim_path:c=drapeore:p=%.1f:o=%.4f:f=1#0' % (period, PHASE), (x0, Y, z0)):
+    with animated('anim_path:c=drapeore:p=%.1f:o=%.4f:f=2#0' % (period, PHASE), (x0, Y, z0)):
         mine_loco((x0, Y, z0), yaw=math.pi / 2)
     for n in range(1, 4):
-        with animated('anim_path:c=drapeore:p=%.1f:o=%.4f:f=1#%d' % (period, (PHASE - n * gap) % 1.0, n), (x0, Y, z0)):
+        with animated('anim_path:c=drapeore:p=%.1f:o=%.4f:f=2#%d' % (period, (PHASE - n * gap) % 1.0, n), (x0, Y, z0)):
             ore_cart((x0, Y, z0), yaw=math.pi / 2, ore_color='yellow')
 
 # The lite tier's build of a canyon piece (the Android TV box draws
@@ -20211,9 +20217,9 @@ def mine_loco(at, yaw=0.0):
         box((0.12, 1.2, 0.12), at2(sx * 0.5, 1.4, -0.75), 'slate', yaw=yaw)        # down into the body's round
     box((1.3, 0.14, 1.0), at2(0, 2.05, -0.6), 'red', yaw=yaw)
     box((0.4, 0.3, 0.2), at2(0, 1.0, 1.15), 'yellow', yaw=yaw)
-    for sx in (-1, 1):
+    for sx in (-1, 1):                                          # (under the frame: flush with the body's sides, the two flickered)
         for sz in (-1, 1):
-            cyl(0.26, 0.16, at2(sx * 0.6 - (0.16 if sx > 0 else 0), 0.3, 0.1 + sz * 0.6), ROPE, segs=8, axis='across', yaw=yaw)
+            cyl(0.26, 0.16, at2(sx * 0.54 - (0.16 if sx > 0 else 0), 0.3, 0.1 + sz * 0.6), ROPE, segs=8, axis='across', yaw=yaw)
 
 # ---- GULCH: the stamp mill and its ore tramway ----------------------------------------
 # Across the start straight from the adit, the mine's stamp mill steps down
@@ -21182,7 +21188,8 @@ def ranch_fence():
     # Crag: the ranch's range fence along the start straight (+X the road,
     # Z along it), post and two rails at a real fence's height, 36 units of
     # it with the ranch's gateway in the middle: two tall posts under a
-    # cross beam, a board hanging from it, the gate swung open (the herd
+    # cross beam, a board hanging from it on two short chains (a board
+    # under the beam on nothing read as floating), the gate swung open (the herd
     # inside it is set-ranch-herd). It drapes: every post stands on the
     # ground as drawn. The start is open range to the skyline, not a canyon.
     def fence():
@@ -21199,8 +21206,21 @@ def ranch_fence():
         for z in (-2.0, 2.0):                                                     # the gateway's posts and beam
             box((0.16, 2.3, 0.16), (0, 1.15, z), TIMBER)
         box((0.14, 0.14, 4.6), (0, 2.25, 0), TIMBER)
-        box((0.05, 0.4, 1.5), (0, 1.9, 0), 0x9a7b55)                              # the ranch's board
-        box((0.06, 0.1, 1.1), (0.01, 1.9, 0), 0xfde4c7)
+        box((0.05, 0.4, 1.5), (0, 1.82, 0), 0x9a7b55)                             # the ranch's board
+        box((0.06, 0.1, 1.1), (0.01, 1.82, 0), 0xfde4c7)
+        # hung from the beam on two chains of three links: an oval facing the
+        # road into the beam, one turned a quarter (edge on, a bar), an oval
+        # into the board (three blocks read as brackets). The box's build
+        # hangs it on one bar each: in its four-way cell a chain reads as
+        # that bar, at a sixth of the triangles.
+        for z in (-0.52, 0.52):
+            if LITE:
+                fig_block((0.03, 0.2, 0.03), (0, 2.1, z), 'slate')
+                continue
+            for y in (2.165, 2.035):
+                o = cyl(0.03, 0.022, (-0.011, y, z), 'slate', segs=8, axis='across', stem=True)
+                o.scale[0] = 1.25                                                 # the long way up
+            fig_block((0.06, 0.075, 0.022), (0, 2.1, z), 'slate')
         for y in (0.22, 0.46):                                                    # the gate, swung in
             box((1.9, 0.07, 0.05), (-0.95, y, -2.0), 0x9a7b55)
         box((0.07, 0.5, 0.07), (-1.9, 0.27, -2.0), 0x9a7b55)
@@ -23352,34 +23372,47 @@ def wellhead():
     # Sidewinder: a flowing well past the lone jack, at the east bend's exit:
     # no pump on it, only its christmas tree, at a real one's size beside a
     # car: the casing head on its cellar collar, two red master valves with
-    # white hand wheels, the cross with a wing valve each side, one turned
-    # down to the flowline going into the ground, a gauge on the cap; a
-    # flush dirt pad (+X is the road).
+    # white hand wheels, the cross with a wing valve each side, one going on
+    # as the flowline, through an elbow and down into the ground, a gauge on
+    # the cap; a flush dirt pad (+X is the road). Every part is TURNED, as a
+    # real tree's are, and shaded round: built of red blocks and a square
+    # bar to the ground, it read as a stack of boxes.
     ground_poly([(-1.5, 0.03, -1.5), (1.5, 0.03, -1.5), (1.5, 0.03, 1.5), (-1.5, 0.03, 1.5)],
                 [(0, 1, 2, 3)], 0xb8a686)
     # Every part ends INSIDE the next (a flange into its valve, an arm into
-    # the cross): faces sharing a plane flickered, the spool's square bar
-    # exactly the cross's width.
-    cyl(0.45, 0.14, (0, 0, 0), 'slate', segs=12)                                # the cellar's collar
-    cyl(0.32, 0.3, (0, 0.14, 0), 'grey', segs=12)                               # the casing head
-    for y in (0.5, 0.96):                                                       # the master valves, flanged
-        cyl(0.24, 0.1, (0, y - 0.08, 0), 'grey', segs=10)
-        box((0.36, 0.34, 0.36), (0, y + 0.17, 0), 'red')
-        box((0.16, 0.1, 0.1), (0.24, y + 0.17, 0), 'slate')                     # a stem out of its bonnet
-        cyl(0.22, 0.06, (0.3, y + 0.17, 0), 'white', segs=12, axis='across')    # and its hand wheel, toward the road
-    cyl(0.24, 0.1, (0, 1.22, 0), 'grey', segs=10)
-    box((0.42, 0.4, 0.42), (0, 1.5, 0), 'red')                                  # the cross
+    # the cross), and no two turned parts on one axis share a radius: faces
+    # sharing a plane flickered, the spool's square bar exactly the cross's
+    # width. A part whose two ends are buried has no caps: the world draws a
+    # piece's every triangle, seen or not.
+    def lathed(r, h, at, color, segs=10, axis='up', caps=True):
+        return cyl(r, h, at, color, segs=segs, axis=axis, smooth=True, stem=True, caps=caps)
+    lathed(0.45, 0.14, (0, 0, 0), 'slate')                                       # the cellar's collar
+    lathed(0.32, 0.3, (0, 0.14, 0), 'grey')                                      # the casing head
+    for y in (0.5, 0.96):                                                        # the master valves, flanged,
+        lathed(0.24, 0.1, (0, y - 0.08, 0), 'grey', segs=8)                     # each body up into the next flange
+        lathed(0.2, 0.4, (0, y, 0), 'red', caps=False)
+        lathed(0.1, 0.16, (0.14, y + 0.19, 0), 'red', segs=10, axis='across')     # its bonnet toward the road,
+        lathed(0.035, 0.1, (0.28, y + 0.19, 0), 'slate', segs=6, axis='across', caps=False)   # the stem out of it
+        lathed(0.2, 0.05, (0.36, y + 0.19, 0), 'white', segs=10, axis='across')  # and its hand wheel on a hub
+        lathed(0.06, 0.04, (0.4, y + 0.19, 0), 'slate', segs=6, axis='across')
+    lathed(0.24, 0.1, (0, 1.22, 0), 'grey', segs=8)
+    lathed(0.22, 0.42, (0, 1.29, 0), 'red')                                      # the cross
+    lathed(0.12, 1.24, (0, 1.5, -0.62), 'red', segs=10, axis='along', caps=False)   # its arms, through it
     for sz in (-1, 1):
-        box((0.22, 0.22, 0.5), (0, 1.5, sz * 0.4), 'red')                       # its arms
-        cyl(0.2, 0.08, (0, 1.5, sz * 0.62 - 0.04), 'grey', segs=10, axis='along')   # a flange
-        box((0.34, 0.36, 0.3), (0, 1.5, sz * 0.8), 'red')                       # the wing valves
-        box((0.1, 0.14, 0.1), (0, 1.73, sz * 0.8), 'slate')                     # their stems, up
-        cyl(0.2, 0.06, (0, 1.78, sz * 0.8), 'white', segs=12)                   # and wheels
-    strut((0, 1.5, 0.88), (0, -0.05, 1.4), 0.16, 'slate')                       # the flowline, down into the ground
-    cyl(0.18, 0.08, (0, 1.5, -0.97), 'grey', segs=10, axis='along')             # the other wing blanked off
-    cyl(0.18, 0.2, (0, 1.68, 0), 'white', segs=12)                              # the cap
-    box((0.08, 0.2, 0.08), (0.0, 1.96, 0), 'slate')                             # the gauge's stem
-    cyl(0.16, 0.06, (0.0, 2.14, -0.03), 'white', segs=12, axis='along')         # the gauge
+        lathed(0.2, 0.08, (0, 1.5, sz * 0.62 - 0.04), 'grey', segs=8, axis='along')   # a flange
+        lathed(0.18, 0.32, (0, 1.5, 0.64 if sz > 0 else -0.96), 'red', axis='along', caps=False)   # the wing valves
+        lathed(0.21, 0.08, (0, 1.5, sz * 0.96 - 0.04), 'grey', segs=8, axis='along')  # their outer flanges
+        lathed(0.035, 0.14, (0, 1.64, sz * 0.8), 'slate', segs=6, caps=False)   # their stems, up
+        lathed(0.18, 0.05, (0, 1.76, sz * 0.8), 'white', segs=10)               # and wheels
+    # the flowline: on out of the near wing into an elbow's fitting and down
+    # from it into the ground
+    lathed(0.08, 0.32, (0, 1.5, 0.98), 'slate', segs=10, axis='along', caps=False)
+    lathed(0.1, 0.22, (0, 1.39, 1.28), 'slate', segs=10)
+    lathed(0.08, 1.55, (0, -0.1, 1.28), 'slate', segs=10, caps=False)
+    # (the far wing's outer flange is its blank)
+    lathed(0.18, 0.2, (0, 1.68, 0), 'white')                                     # the cap
+    lathed(0.025, 0.14, (0.0, 1.86, 0), 'slate', segs=6, caps=False)            # the gauge's stem
+    lathed(0.16, 0.08, (0.0, 2.14, -0.04), 'white', axis='along')                # the gauge
     join_still('wellhead')
 
 @piece(1.0)
@@ -23431,7 +23464,7 @@ def headframe():
             box((0.12, 1.7, 0.12), (WX, cy, ZC), 'red', roll=k * math.pi / 4)
         box((0.34, 0.34, 0.3), (WX, cy, ZC), 'slate')
     HX = 10.6                                                                    # the hoist house, its drum's window
-    strut((WX - 0.86, cy, ZC), (WX - 0.86, 1.4, ZC), 0.09, ROPE)                 # down the shaft
+    strut((WX - 0.86, cy, ZC), (WX - 0.86, 1.0, ZC), 0.09, ROPE)                 # down the shaft, through the collar house's roof
     strut((WX + 0.1, cy + 0.88, ZC), (HX - 1.3, 1.2, ZC), 0.09, ROPE)            # and away over the road to the drum
     for sz in (-1, 1):                                                           # the backstays, to the inside verge
         strut((XL * 0.82, H + 0.1, ZC + sz * 0.85), (7.3, -0.3, ZC + sz * 1.1), 0.24, TIMBER)
@@ -23480,7 +23513,7 @@ def headframe():
 
 lite_too('boomtown-north', 'boomtown-south', 'miners-camp', 'stamp-mill', 'headframe', 'tailings-dump',
          'ranch-herd', 'ranch-herd-east', 'wash-bed', 'wash-bed-ford', 'wash-bed-end', 'wash-road-reach',
-         'pipe-yard', 'ore-line', 'water-works', 'loading-chute', 'crag-saguaros')
+         'pipe-yard', 'ore-line', 'water-works', 'loading-chute', 'crag-saguaros', 'ranch-fence')
 
 # ====================================================================================
 # PLAYROOM
