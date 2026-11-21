@@ -3187,7 +3187,13 @@ export function runDisplayScenario(opts, ctx) {
     // session whose frames never run (holdFrame idles every card) would queue
     // beats forever — and ?scenario=bench too, since audio work would perturb the
     // reading it exists to take.
-    const audible = !inIframe && !!window.__audio && window.__audio.offline;
+    //
+    // Or when a page asks for it with ?sfx=1 on a racing frame: the music
+    // gallery plays a song under audition over the race's own sound. This
+    // scenario never starts the game's music, so the song is the only one, and
+    // that page owns the context (window.__audio): its unlock, level and pause.
+    const sfx = kind === 'racing' && new URLSearchParams(location.search).get('sfx') === '1';
+    const audible = !!window.__audio && (sfx || (!inIframe && window.__audio.offline));
 
     // Self-driving preview: every car is one of the sim's own AI racers (same personas
     // main.js hands the wasm for the live CPU fill), so the gallery shows real bot

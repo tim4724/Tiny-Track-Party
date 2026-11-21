@@ -1,7 +1,8 @@
 // @ts-check
 // The music gallery (/gallery-music.html): every catalogue track listed by cup,
 // a picked track's race running in the frame beside its songs (the draft's
-// pick and options, its cup's shipped pool), a candidate whose file is not on
+// pick and options, its cup's shipped pool) with the race's own sound under
+// the song, a candidate whose file is not on
 // the server said to be missing, and a pick posted for that track. The draft,
 // the candidate files and the picks endpoint are mocked: the real draft and
 // candidates are local, and the real endpoint writes the checkout.
@@ -50,6 +51,27 @@ test('music gallery: the tracks, a track\'s race and songs, and a pick', async (
   await expect(gone.first().locator('.tag--missing')).toHaveText('missing');
   await expect(page.locator('.mu-song[data-song="paradise_found.mp3"] .tag--draft').first()).toHaveText('option');
   await expect(page.locator('.mu-song .tag--shipped')).not.toHaveCount(0);
+
+  // Game sound (on by default): the race's own voices through its own bus,
+  // started by a gesture on this page, held by Pause and cut by the switch.
+  expect(frame.url()).toContain('sfx=1');
+  await page.locator('.mu-song[data-song="paradise_found.mp3"] .play').first().click();
+  const sound = () => frame.evaluate(() => {
+    const a = window.__audio;
+    return { state: a.ctx && a.ctx.state, gain: a.master ? a.master.gain.value : -1, voices: a._voices.size, music: !!a._music };
+  });
+  await expect.poll(async () => { const s = await sound(); return s.state === 'running' && s.gain > 0 && s.voices > 0; },
+                    { timeout: 30000 }).toBe(true);
+  await page.locator('#mu-pause').click();
+  await expect.poll(async () => (await sound()).state).toBe('suspended');
+  await page.locator('#mu-pause').click();
+  await expect.poll(async () => (await sound()).state).toBe('running');
+  await page.locator('#mu-sfx').click();
+  await expect(page.locator('#mu-sfx')).toHaveText('Game sound: off');
+  expect(await sound()).toMatchObject({ gain: 0, music: false });   // nor did the game start its own song
+  // The same button stops the song; the race runs on.
+  await page.locator('.mu-song[data-song="paradise_found.mp3"] .play').first().click();
+  await expect(page.locator('#mu-now')).toHaveClass(/is-idle/);
 
   // A pick is posted for this track, with the note typed beside it.
   await page.locator('#mu-note').fill('warm and easy');
