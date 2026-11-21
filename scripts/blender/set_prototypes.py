@@ -27354,48 +27354,46 @@ def swept_beam(pts, w, h, color):
 def board_rocking_horse():
     # A dapple-grey rocking horse about 40 cm long on red bow rockers, its
     # red saddle and bridle, dark mane and tail, a peg through its head for
-    # hands: rocking gently on its rockers' arc (the turn is about the arc's
-    # middle, so the bow stays on the board).
+    # hands. It stands still: rocking by itself it read as unreal (round 35).
     RA, HALF = 10.0, 4.3                                  # the bow's radius, half its length
     def bow(z):
         return RA - math.sqrt(RA * RA - z * z)
     GREY, DARK, RED, GOLD, CREAMC = 0x9aa1b4, 0x38383d, 0xe66a5a, 0xf2c14e, 0xfdf4de
-    with animated('anim_sway:a=x:d=5:p=3.4#rock', (0, RA, 0)):
-        n = 12 if LITE else 20
-        for sx in (-1, 1):                                                           # the rockers, bent smooth
-            swept_beam([(sx * 0.95, bow(z) + 0.22, z) for z in (-HALF + 2 * HALF * i / n for i in range(n + 1))], 0.3, 0.44, RED)
-        with rounded_over():
-            for z in (-2.9, 0.0, 2.9):                                               # the slats between them
-                box((2.0, 0.2, 0.5), (0, bow(z) + 0.42, z), CREAMC)
-            for sz, lean in ((1, 0.35), (-1, -0.35)):                                # the legs, splayed to the bows
-                for sx in (-1, 1):
-                    bar((sx * 0.95, bow(sz * 2.9) + 0.5, sz * 2.9), (sx * 0.55, 3.3, sz * 1.55), 0.42, 0.42, GREY)
-        sphere(1.0, (0, 3.75, 0), GREY, subdiv=2 if LITE else 3, scale=(0.78, 0.82, 2.25), flat=False)   # the body
-        neck = sphere(1.0, (0, 5.0, 2.2), GREY, subdiv=2, scale=(0.52, 1.25, 0.6), flat=False)
-        neck.rotation_euler.x = 0.55
-        head = sphere(1.0, (0, 6.05, 3.05), GREY, subdiv=2, scale=(0.5, 0.55, 1.05), flat=False)
-        head.rotation_euler.x = 0.55
-        muzzle = sphere(1.0, (0, 5.58, 3.82), DARK, subdiv=2, scale=(0.42, 0.4, 0.42), flat=False)
-        muzzle.rotation_euler.x = 0.55
-        for sx in (-1, 1):                                                                # its small parts plainly chamfered
-            box((0.18, 0.5, 0.26), (sx * 0.22, 6.7, 2.55), GREY, pitch=-0.3)            # ears
-            box((0.12, 0.2, 0.2), (sx * 0.44, 6.2, 3.15), DARK)                          # eyes
-            bar((sx * 0.8, 4.35, -0.3), (sx * 0.8, 3.15, -0.3), 0.08, 0.14, DARK)        # stirrup leathers
-            box((0.12, 0.3, 0.42), (sx * 0.8, 3.05, -0.3), GOLD)                         # and irons
-        box((1.12, 0.2, 0.22), (0, 5.85, 3.42), RED, pitch=0.55)                          # the bridle's band
-        m = 1 if LITE else 4
-        for k in range(m):                                                                # the mane, down the neck's back
-            t = -0.6 + 1.5 * (k + 0.5) / m
-            box((0.26, 1.6 if LITE else 0.46, 0.4), (0, 5.0 + 1.06 * t + 0.29, 2.2 + 0.65 * t - 0.47), DARK, pitch=-0.55)
-        with rounded_over():
-            box((1.9, 0.18, 0.18), (0, 6.15, 2.85), 0xc8955a)                             # the peg for hands
-            box((1.7, 0.36, 1.6), (0, 4.5, -0.3), RED)                                     # the saddle
-            box((1.74, 0.14, 1.0), (0, 4.38, 0.75), GOLD)                                  # its front, raised
-        tail = sphere(1.0, (0, 3.7, -2.55), DARK, subdiv=2, scale=(0.24, 0.95, 0.32), flat=False)
-        tail.rotation_euler.x = 0.5
-        if not LITE:
-            for x, y, z, s in ((0.66, 3.9, 0.9, 0.3), (0.6, 3.5, -1.1, 0.26), (-0.66, 3.85, 0.4, 0.3), (-0.62, 3.6, -1.4, 0.24)):
-                sphere(1.0, (x, y, z), 0xfdf4de, subdiv=1, scale=(0.08, s, s), flat=False)   # dapples
+    n = 12 if LITE else 20
+    for sx in (-1, 1):                                                           # the rockers, bent smooth
+        swept_beam([(sx * 0.95, bow(z) + 0.22, z) for z in (-HALF + 2 * HALF * i / n for i in range(n + 1))], 0.3, 0.44, RED)
+    with rounded_over():
+        for z in (-2.9, 0.0, 2.9):                                               # the slats between them
+            box((2.0, 0.2, 0.5), (0, bow(z) + 0.42, z), CREAMC)
+        for sz, lean in ((1, 0.35), (-1, -0.35)):                                # the legs, splayed to the bows
+            for sx in (-1, 1):
+                bar((sx * 0.95, bow(sz * 2.9) + 0.5, sz * 2.9), (sx * 0.55, 3.3, sz * 1.55), 0.42, 0.42, GREY)
+    sphere(1.0, (0, 3.75, 0), GREY, subdiv=2 if LITE else 3, scale=(0.78, 0.82, 2.25), flat=False)   # the body
+    neck = sphere(1.0, (0, 5.0, 2.2), GREY, subdiv=2, scale=(0.52, 1.25, 0.6), flat=False)
+    neck.rotation_euler.x = 0.55
+    head = sphere(1.0, (0, 6.05, 3.05), GREY, subdiv=2, scale=(0.5, 0.55, 1.05), flat=False)
+    head.rotation_euler.x = 0.55
+    muzzle = sphere(1.0, (0, 5.58, 3.82), DARK, subdiv=2, scale=(0.42, 0.4, 0.42), flat=False)
+    muzzle.rotation_euler.x = 0.55
+    for sx in (-1, 1):                                                                # its small parts plainly chamfered
+        box((0.18, 0.5, 0.26), (sx * 0.22, 6.7, 2.55), GREY, pitch=-0.3)            # ears
+        box((0.12, 0.2, 0.2), (sx * 0.44, 6.2, 3.15), DARK)                          # eyes
+        bar((sx * 0.8, 4.35, -0.3), (sx * 0.8, 3.15, -0.3), 0.08, 0.14, DARK)        # stirrup leathers
+        box((0.12, 0.3, 0.42), (sx * 0.8, 3.05, -0.3), GOLD)                         # and irons
+    box((1.12, 0.2, 0.22), (0, 5.85, 3.42), RED, pitch=0.55)                          # the bridle's band
+    m = 1 if LITE else 4
+    for k in range(m):                                                                # the mane, down the neck's back
+        t = -0.6 + 1.5 * (k + 0.5) / m
+        box((0.26, 1.6 if LITE else 0.46, 0.4), (0, 5.0 + 1.06 * t + 0.29, 2.2 + 0.65 * t - 0.47), DARK, pitch=-0.55)
+    with rounded_over():
+        box((1.9, 0.18, 0.18), (0, 6.15, 2.85), 0xc8955a)                             # the peg for hands
+        box((1.7, 0.36, 1.6), (0, 4.5, -0.3), RED)                                     # the saddle
+        box((1.74, 0.14, 1.0), (0, 4.38, 0.75), GOLD)                                  # its front, raised
+    tail = sphere(1.0, (0, 3.7, -2.55), DARK, subdiv=2, scale=(0.24, 0.95, 0.32), flat=False)
+    tail.rotation_euler.x = 0.5
+    if not LITE:
+        for x, y, z, s in ((0.66, 3.9, 0.9, 0.3), (0.6, 3.5, -1.1, 0.26), (-0.66, 3.85, 0.4, 0.3), (-0.62, 3.6, -1.4, 0.24)):
+            sphere(1.0, (x, y, z), 0xfdf4de, subdiv=1, scale=(0.08, s, s), flat=False)   # dapples
 
 @piece(1.0)
 def board_ring_stack():
