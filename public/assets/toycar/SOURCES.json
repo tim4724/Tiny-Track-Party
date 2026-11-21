@@ -292,6 +292,8 @@
     "set-glacier-seracs-a.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-seracs-b-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-glacier-seracs-b.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-glacier-tongue-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-glacier-tongue.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-grounded-trawler-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-grounded-trawler.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-hay-meadow.glb": { "generated": "scripts/gen-set-prototypes.mjs" },

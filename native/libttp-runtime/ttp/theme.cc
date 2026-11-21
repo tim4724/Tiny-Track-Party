@@ -677,7 +677,10 @@ Theme snowTheme() {
   t.road.line = 0xc2d6e6;
   t.road.kerbA = 0xeff4f9; t.road.kerbB = 0xdde7f0;  // whisper-contrast bank pair
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb
-  deriveRoad(t.road, false, false, false);
+  // The slab's sides and belly a cold concrete, not the asphalt: under a
+  // crossing the belly filled the top of the picture in near-black slate.
+  t.road.skirt = 0x8e94a8;
+  deriveRoad(t.road, false, true, false);
   ambientKind(t.ambient, AMB_FLAKE);
   t.ambient.count = 3200; t.ambient.size = 0.3f; t.ambient.tint = 0xffffff;
   // A pair of geese crossing high.
@@ -688,10 +691,11 @@ Theme snowTheme() {
   t.hasIce = true; t.ice = { 0xa9d7ee, 0xf0f8fd };
   t.gate = 0xdfe9f6;  // cold-cast gate grade
   t.gantry.pylon = 0x3f7bd9; t.gantry.finial = 0xfff6eb;  // pops against the white world
-  // Bridges on stone piers: slate in courses on a footing, under a dressed
-  // cap, snow lying on both. A shade over the rock rule's 35-45%, because a
-  // pier stands in the deck's shadow, where that slate reads near-black.
-  t.pier = { PIER_STONE, 0x6f7783, 0x5a616c, 0x7a828d, 0x5a616c, 0xf3f7fb };
+  // Bridges on stone piers: granite in courses on a footing, under a dressed
+  // cap, snow lying on both. The range's lit rock (set_prototypes.py ROCK),
+  // not slate: a pier stands in the deck's shadow, where slate read
+  // near-black, a dark tower in a white world.
+  t.pier = { PIER_STONE, 0x8a90a4, 0x777d93, 0x9ea4b6, 0x777d93, 0xf3f7fb };
   // The snowman that used to head this list is a Holiday Kit model now, in the
   // prop scatter below — one greeter a track became several a lap.
   t.landmarks = { LM_CABIN };
