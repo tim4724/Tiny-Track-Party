@@ -1012,16 +1012,19 @@ def r29edge_round(o):
 ROUND_OVER = False
 
 @contextlib.contextmanager
-def rounded_over():
+def rounded_over(on=True):
     """Every block box() makes inside, ROUND_OVER_T or more across in the
     game, rounded over in two segments, ROUND_OVER_SHARE of its thinnest
     side (not in the box's tier): a toy's body, cab and roof, where
     CHAMFER's capped cut on a block a unit across read as a hard edge. A
     person's three tenths (r29edge_round) blew a tractor's bonnet up into a
     bolster. Thinner trim (a rail, a window, a slit) keeps the plain
-    chamfer: rounded, it reads as a pill. Also a decorator on a builder."""
+    chamfer: rounded, it reads as a pill. Also a decorator on a builder;
+    rounded_over(False) inside one keeps a row of small blocks (hazard
+    stripes, an auger's paddles) plain, where each rounded on its own read
+    as a string of beads or cushions."""
     global ROUND_OVER
-    was, ROUND_OVER = ROUND_OVER, True
+    was, ROUND_OVER = ROUND_OVER, on
     try:
         yield
     finally:
@@ -13448,9 +13451,9 @@ def rotary_plough(x, z, yaw, k=1.0, y=0.0):
     if not WORKS_LITE:
         box(sz(0.18, 0.06, 0.18), at(-0.45, 2.1, -0.3), GREY, yaw=yaw)
     box(sz(1.24, 0.95, 0.9), at(0, 1.2, 0.3), ORANGE, yaw=yaw)                          # the cab
-    box(sz(1.0, 0.4, 0.06), at(0, 1.36, 0.76), GLASS, yaw=yaw)                          # windscreen
+    box(sz(0.84, 0.32, 0.06), at(0, 1.32, 0.76), GLASS, yaw=yaw)                        # windscreen (inside the cab's round)
     for sd in (-1, 1):
-        box(sz(0.06, 0.4, 0.6), at(sd * 0.63, 1.36, 0.32), GLASS, yaw=yaw)              # side glass
+        box(sz(0.06, 0.32, 0.5), at(sd * 0.63, 1.32, 0.32), GLASS, yaw=yaw)             # side glass
         if not WORKS_LITE:
             box(sz(0.06, 0.2, 0.12), at(sd * 0.8, 1.42, 0.72), DARK, yaw=yaw)               # mirrors
         if not WORKS_LITE:
@@ -13469,15 +13472,16 @@ def rotary_plough(x, z, yaw, k=1.0, y=0.0):
     for sd in (-1, 1):
         box(sz(0.1, 1.06, 0.74), at(sd * 0.98, 0.7, 1.5), ORANGE, yaw=yaw)              # cheeks
         box(sz(0.14, 0.1, 0.9), at(sd * 0.98, 0.14, 1.5), GREY, yaw=yaw)                # skids
-    if not WORKS_LITE:
-        for g in range(5):                                                                  # hazard blocks
-            box(sz(0.4, 0.14, 0.08), at(-0.8 + 0.4 * g, 1.2, 1.87), AMBER if g % 2 == 0 else DARK, yaw=yaw)
-    box(sz(1.76, 0.22, 0.22), at(0, 0.62, 1.58), GREY, yaw=yaw)                          # the reel's shaft
-    for i in range(4):
-        a = i * math.pi / 2
-        for sd in (-1, 1):                                                               # paddles
-            box(sz(0.8, 0.08, 0.3), at(sd * 0.44, 0.62 + 0.2 * math.cos(a), 1.58 + 0.2 * math.sin(a)),
-                0xcf534f, yaw=yaw, pitch=-a)
+    with rounded_over(False):
+        if not WORKS_LITE:
+            for g in range(5):                                                              # hazard blocks
+                box(sz(0.4, 0.14, 0.08), at(-0.8 + 0.4 * g, 1.2, 1.87), AMBER if g % 2 == 0 else DARK, yaw=yaw)
+        box(sz(1.76, 0.22, 0.22), at(0, 0.62, 1.58), GREY, yaw=yaw)                      # the reel's shaft
+        for i in range(4):
+            a = i * math.pi / 2
+            for sd in (-1, 1):                                                           # paddles
+                box(sz(0.8, 0.08, 0.3), at(sd * 0.44, 0.62 + 0.2 * math.cos(a), 1.58 + 0.2 * math.sin(a)),
+                    0xcf534f, yaw=yaw, pitch=-a)
     # the chute, its hood turned ahead: parked, it throws nothing
     box(sz(0.34, 1.1, 0.34), at(0.3, 1.8, 1.4), ORANGE, yaw=yaw)
     box(sz(0.4, 0.34, 0.9), at(0.3, 2.3, 1.75), ORANGE, yaw=yaw)
@@ -13518,9 +13522,9 @@ def plough_truck(x, z, yaw, k=1.0, y=0.0):
     box(sz(0.5, 0.3, 0.3), at(0, 0.6, -1.85), DARK, yaw=yaw)                            # the spinner's chute
     cyl(0.36 * k, 0.07 * k, at(0, 0.34, -1.95), ORANGE, segs=10)                        # the spinner
     box(sz(1.24, 0.95, 0.95), at(0, 1.2, 0.72), YELLOW, yaw=yaw)                        # the cab
-    box(sz(1.0, 0.4, 0.06), at(0, 1.36, 1.2), GLASS, yaw=yaw)
+    box(sz(0.84, 0.32, 0.06), at(0, 1.32, 1.2), GLASS, yaw=yaw)                         # (inside the cab's round)
     for sd in (-1, 1):
-        box(sz(0.06, 0.4, 0.62), at(sd * 0.63, 1.36, 0.76), GLASS, yaw=yaw)
+        box(sz(0.06, 0.32, 0.54), at(sd * 0.63, 1.32, 0.76), GLASS, yaw=yaw)
         if not WORKS_LITE:
             box(sz(0.06, 0.2, 0.12), at(sd * 0.8, 1.42, 1.16), DARK, yaw=yaw)
         if not WORKS_LITE:
@@ -13538,10 +13542,11 @@ def plough_truck(x, z, yaw, k=1.0, y=0.0):
         box(sz(0.12, 0.14, 0.7), at(sd * 0.3, 0.5, 1.5), DARK, yaw=yaw)
         a = yaw + sd * 0.5
         box(sz(1.25, 0.62, 0.12), at(sd * 0.55, 0.52, 1.72), ORANGE, yaw=a, pitch=-0.18)
-        box(sz(1.27, 0.12, 0.13), at(sd * 0.55, 0.86, 1.67), DARK, yaw=a, pitch=-0.18)   # the hazard strip
-        if not WORKS_LITE:
-            for g in range(2):
-                box(sz(0.3, 0.13, 0.14), at(sd * (0.25 + 0.6 * g), 0.86, 1.86 - 0.33 * g), YELLOW, yaw=a, pitch=-0.18)
+        with rounded_over(False):
+            box(sz(1.27, 0.12, 0.13), at(sd * 0.55, 0.86, 1.67), DARK, yaw=a, pitch=-0.18)   # the hazard strip
+            if not WORKS_LITE:
+                for g in range(2):
+                    box(sz(0.3, 0.13, 0.14), at(sd * (0.25 + 0.6 * g), 0.86, 1.86 - 0.33 * g), YELLOW, yaw=a, pitch=-0.18)
         box(sz(1.27, 0.1, 0.1), at(sd * 0.55, 0.2, 1.78), GREY, yaw=a)                   # the cutting edge
     box(sz(0.2, 0.7, 0.2), at(0, 0.55, 2.05), ORANGE, yaw=yaw)                          # the V's nose
 
@@ -22753,12 +22758,14 @@ def sidewinder_loco(at):
             for sx in (() if LITE else (-0.44, 0.44)):
                 cyl(0.22, 0.08, (x + sx, y + 0.22, z + sz + dz), 'slate', segs=8, axis='across')
     box((1.0, 0.18, 4.0), (x, y + 0.48, z), 'dark')               # the frame
-    box((0.82, 0.9, 2.5), (x, y + 1.02, z + 0.65), 'red')          # the long hood
-    box((0.84, 0.16, 2.52), (x, y + 0.96, z + 0.65), 'white')      # its white stripe
+    box((0.82, 0.9, 2.5), (x, y + 1.02, z + 0.65), 'red')['share'] = 0.1   # the long hood, softened (a fifth puffed it up)
+    for sx in (-0.39, 0.39):
+        box((0.06, 0.16, 2.3), (x + sx, y + 0.96, z + 0.65), 'white')   # its white stripe, inside the round
+    box((0.64, 0.16, 0.06), (x, y + 0.96, z + 1.88), 'white')
     box((1.0, 1.5, 1.1), (x, y + 1.32, z - 1.25), 'red')           # the cab
     box((1.06, 0.12, 1.2), (x, y + 2.1, z - 1.25), 'white')        # its roof
     for sx in (-0.51, 0.51):
-        box((0.04, 0.42, 0.7), (x + sx, y + 1.55, z - 1.25), 0x8ecae6)
+        box((0.04, 0.42, 0.6), (x + sx, y + 1.55, z - 1.25), 0x8ecae6)
     box((0.5, 0.36, 0.04), (x, y + 1.6, z - 0.69), 0x8ecae6)      # the windscreen over the hood
     cyl(0.1, 0.3, (x, y + 1.47, z + 1.3), 'slate', segs=8)        # the exhaust
     box((0.5, 0.2, 0.06), (x, y + 1.0, z + 1.92), 'yellow')        # the headlamp's plate
@@ -26960,7 +26967,7 @@ def windup_robot(x, z, body, tag):
     box((0.06, 0.16, 0.16), (x + 0.5, 1.45, z + 0.15), 0x5a8fd8)
     box((0.8, 0.75, 0.95), (x, 2.3, z), TIN)
     for sd in (-1, 1):
-        box((0.06, 0.2, 0.2), (x + 0.42, 2.38, z + sd * 0.22), 0xf2c14e)
+        box((0.06, 0.2, 0.2), (x + 0.42, 2.38, z + sd * 0.19), 0xf2c14e)
     box((0.06, 0.08, 0.4), (x + 0.42, 2.1, z), 0x38383d)
     box((BAR, 0.45, BAR), (x, 2.9, z), 0x38383d)
     box((0.26, 0.26, 0.26), (x, 3.18, z), 0xe66a5a)
@@ -27055,20 +27062,27 @@ def windup_knights():
 @rounded_over()
 def windup_bus(x, z, body, tag, decks=2):
     """A tin town bus (two decks) or tram (one, a pantograph on its roof) a
-    racer and a bit long, facing +X: its body in one colour, cream window
-    bands, its wheels and its key in its back."""
+    racer and a bit long, facing +X: its body one rounded block in one
+    colour, cream window bands laid on it as panels, its wheels and its key
+    in its back. (Built as a stack of slabs, deck on belt on deck, each
+    rounded over on its own, it read as a pile of cushions.)"""
     for sx in (-0.7, 0.7):
         for sz in (-1, 1):
             cyl(0.24, 0.14, (x + sx, 0.24, z + sz * 0.42 - (0.14 if sz < 0 else 0.0)), 0x38383d, segs=10, axis='along')
-    y = 0.22
+    bands, y = [], 0.22
     for d in range(decks):
-        box((2.4, 0.5 if d == 0 else 0.3, 1.0), (x, y + (0.25 if d == 0 else 0.15), z), body)
         y += 0.5 if d == 0 else 0.3
-        box((2.3, 0.46, 0.94), (x, y + 0.23, z), 0xfdf4de)
-        for dx in (-0.84, -0.28, 0.28, 0.84):
-            box((0.38, 0.3, 0.98), (x + dx, y + 0.24, z), 0x8ecae6)
-        box((0.06, 0.3, 0.7), (x + 1.14, y + 0.24, z), 0x8ecae6)
+        bands.append(y)
         y += 0.46
+    box((2.4, y + 0.04 - 0.22, 1.0), (x, (y + 0.04 + 0.22) / 2, z), body)['share'] = 0.1   # its corners as round as a car's
+    for yb in bands:
+        for sd in (-1, 1):
+            box((2.2, 0.46, 0.06), (x, yb + 0.23, z + sd * 0.51), 0xfdf4de)
+            for dx in (-0.84, -0.28, 0.28, 0.84):
+                box((0.38, 0.3, 0.06), (x + dx, yb + 0.24, z + sd * 0.535), 0x8ecae6)
+        for ex in (-1, 1):
+            box((0.06, 0.46, 0.8), (x + ex * 1.21, yb + 0.23, z), 0xfdf4de)
+        box((0.06, 0.3, 0.6), (x + 1.235, yb + 0.24, z), 0x8ecae6)
     box((2.44, 0.16, 1.04), (x, y + 0.08, z), body)
     for sd in (-1, 1):
         box((0.06, 0.16, 0.16), (x + 1.2, 0.5, z + sd * 0.3), 0xf2c14e)
