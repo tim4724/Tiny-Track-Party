@@ -857,8 +857,8 @@ final class AudioDevice {
         let index = Int(position)
         guard index >= 0, index < sample.frames else { return (0, 0) }
         let fraction = Float(position - Double(index))
-        // Looping interpolates ACROSS the seam: the baked loops are exactly
-        // 1.000 s, so frame 0 is the successor of the last one.
+        // Looping interpolates ACROSS the seam: each baked loop is exactly one
+        // period, so frame 0 is the successor of the last one.
         let next = loop ? (index + 1) % sample.frames : min(index + 1, sample.frames - 1)
         let channels = sample.channels
         let a0 = sample.data[index * channels], a1 = sample.data[next * channels]

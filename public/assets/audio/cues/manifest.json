@@ -8,7 +8,7 @@
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "010e58c4ea57703397930c7c810a6e8c0053547cc67a25a7d2cad347ac462b9b",
+    "sharedSha256": "4605d20799eda3836e70b292f0181a59acc959a3b0c6dc4b89ee26195f485df4",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -777,6 +777,38 @@
       },
       "variant": "bubble",
       "sourceSha256": "04f7b7b83cbadd94ac8585ad784fd7e76dce189abf1a2328074d1845d640fb31"
+    },
+    "rain": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "storm",
+      "loopSeconds": 10,
+      "playback": {
+        "gainFormula": "0.045 * l",
+        "smoothTauSec": 0.08,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "rain.wav",
+          "channels": 2,
+          "sampleRate": 32000,
+          "frames": 320000,
+          "durationSec": 10,
+          "body60Sec": 10,
+          "peak": 0.899991,
+          "rms": 0.119635,
+          "sha256": "15725837e2865e973189f003115ce9d5eba00b7a98f5ac38874ad4a86064a607",
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, and its own loop: the bed is generated whole (seeded, at its own rate, stereo) and only the output gain moves with level. Its loop closes on itself by construction, so the kept window is the whole loop, whatever it starts on.",
+      "sourceSha256": "631f8b876b9b0ca73cff35dc2a07e50bc3530b5ee9b5d211b3201e57ebc0c860"
     },
     "rocket_fire": {
       "kind": "sustained",

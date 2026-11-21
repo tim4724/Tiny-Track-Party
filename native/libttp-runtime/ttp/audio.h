@@ -84,6 +84,9 @@ inline double landHardness(double vh) {
 // Off the deck the tyres unload and the engine flares: its level rises by this
 // for the whole flight (the device glides the pitch in and out).
 inline constexpr double ENGINE_FLARE = 0.15;
+// The rain bed under a race whose sky rains. One steady level: its loudness
+// (well under the engines and the song) is the cue's own gain in cues.js.
+inline constexpr double RAIN_LEVEL = 1;
 
 // The monster-truck engine: the same recorded loop, pitch down, a touch louder,
 // top end muffled.
@@ -245,6 +248,13 @@ class Decider {
   void frame(const std::vector<Car>& cars, const std::vector<Rocket>& rockets,
              const AiIds& aiIds, double nowMs, std::vector<Command>& out);
 
+  // The sky the race is run under: its theme's ambient kind (theme.h AmbKind),
+  // held until the next call. AMB_RAIN starts the rain bed NOW, before the
+  // race's first frame, and every frame() keeps it up; any other sky stops a
+  // bed that was playing and is otherwise silent. The bed is nobody's: it is
+  // everywhere at once, so no distance, and its subject is no car (Id::None).
+  void weather(uint32_t ambient, std::vector<Command>& out);
+
   // ---- race events ----
   // `pos` is the event's source world point, or null: the car's own point for a
   // car event (null = that car is already gone), the rocket's track point for
@@ -295,6 +305,7 @@ class Decider {
   double lastLap_;
   std::string musicFile_;             // last picked song's file ("" = none yet)
   int rosterCount_ = 0;
+  uint32_t ambient_ = 0;              // weather(): AMB_NONE until a race names its sky
 };
 
 // The C++ `Math.random`: the source Decider draws from when none is injected.

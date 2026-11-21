@@ -139,7 +139,7 @@ class AudioDevice(
     fun start() {
         mixer.start()
         // The palette is DECODED off the frame's thread, and that is not tidiness:
-        // every sustained stop is a 1 s 48 kHz WAV and the engine loop needs a
+        // every sustained stop is a WAV to decode and the engine loop needs a
         // MediaCodec, so [CueBank.load] is hundreds of milliseconds of work, and
         // the shell renders on the main-thread Choreographer ([DisplayHost] says
         // why). The thread retires after this one job. `bank.ready` flips inside

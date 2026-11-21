@@ -953,7 +953,7 @@ const RACE_PERFORMERS = {
   // attract race is silent for free.
   'bind-session': () => {
     scene.bindSession(session.h);
-    audioDecide.bind(session.h);
+    sfx(audioDecide.bind(session.h));
   },
   // Off the packed HUD rows — the last snapshot parse on this path went with
   // the welcome relight's. Emitted twice: to dress the grid at final size before
@@ -1012,7 +1012,7 @@ const RACE_PERFORMERS = {
     // …and with it any countdown still waiting on that race's scene: an abort
     // mid-gate would otherwise start one over the lobby a moment later.
     pendingCountdown = null;
-    if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
+    if (session) { scene.bindSession(0); sfx(audioDecide.bind(0)); session.dispose(); session = null; }
   },
   // ALWAYS place the track, not only on the effect's `placeTrack`. That flag
   // answers "did the PICK move" (a random re-roll, a cup rewind), which was the
