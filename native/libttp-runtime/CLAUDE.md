@@ -210,18 +210,21 @@ has no signal, not a free frame.
 
 `ttp/audio.{h,cc}` behind `runtime/ttp_audio.h` decides which cue at what gain,
 which sustained voice at what level, the audibility curve, the scrub throttle, the
-rocket jet lifecycle and the music shuffle. The device half is browser code — see
-`public/display/CLAUDE.md`.
+rocket jet lifecycle, the music shuffle, and the rain bed under a race whose sky
+rains (the track's theme ambient, read at bind). The device half is browser code —
+see `public/display/CLAUDE.md`.
 
 **Nothing about a car crosses to decide a sound.** `ttp_audio_frame(nowMs)` reads
 the bound session's Game itself, so the shell hands over a clock and takes back
 commands. A cue crosses as a CODE and a voice's identity is an opaque interned
 SUBJECT, so no car id is handed back and a rocket cannot collide with a peer index.
 
-Three rules live only on the C side and are invisible above the ABI, which is why
+Four rules live only on the C side and are invisible above the ABI, which is why
 the `abi` ctest asserts each: only the BOUND session is heard (so the lobby's attract
-race is silent for free), the end-of-race fast-forward is MUTED, and a disposed
-handle takes its queued beats with it.
+race is silent for free), the end-of-race fast-forward is MUTED, a disposed
+handle takes its queued beats with it, and a PAUSED race decides nothing (the TV
+shells keep framing through a pause, so anything decided there would sound again
+under the overlay).
 
 **Two things the checks pin:** the distance metric must be
 `sqrt(dx*dx+dy*dy+dz*dz)` and never `hypot` — one ULP flips a knee of the curve

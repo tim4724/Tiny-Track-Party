@@ -1607,8 +1607,8 @@ void audioThroughAbi() {
   check(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT) != nullptr
         && std::strcmp(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT), "engine_putt") == 0,
         "TTP_CUE_ENGINE_PUTT names the engine loop");
-  check(ttp_audio_cue_id(TTP_CUE_SAND) != nullptr, "the last code names a cue");
-  check(ttp_audio_cue_id(TTP_CUE_SAND + 1) == nullptr, "and nothing past it");
+  check(ttp_audio_cue_id(TTP_CUE_RAIN) != nullptr, "the last code names a cue");
+  check(ttp_audio_cue_id(TTP_CUE_RAIN + 1) == nullptr, "and nothing past it");
   {
     Value s = parseOrNull(ttp_audio_song_json(0), "audio_song_json(0)");
     check(s.type == Value::OBJ && s.find("file") && s.find("gain") && s.find("artist"),
@@ -1746,6 +1746,89 @@ void audioThroughAbi() {
     }
   }
   ttp_audio_music(TTP_AUD_MUSIC_STOP, nullptr);
+  ttp_audio_drain();
+}
+
+// The weather and the pause, both decided off the bound session and so
+// invisible above the ABI. A track whose sky rains (Driftwood's storm) has the
+// rain bed under its race from the bind on; a dry one has none, and binding a
+// dry race (or none) after a wet one is the bed's falling edge. A paused race
+// decides nothing: the TV shells keep framing through the pause, so a voice
+// decided there would play under the overlay after the freeze had stopped it.
+void weatherThroughAbi() {
+  ttp_audio_bind(0);
+  ttp_audio_drain();
+  struct Heard { int rain = 0, rainStops = 0, voices = 0, all = 0; double level = 0; };
+  auto hear = []() {
+    Heard h;
+    const TtpAudioBlock* b = ttp_audio_drain();
+    const TtpAudioCmd* cmds = ttp_audio_cmds(b);
+    for (uint32_t i = 0; i < b->count; i++) {
+      h.all++;
+      if (cmds[i].kind == TTP_AUD_VOICE) h.voices++;
+      if (cmds[i].code != TTP_CUE_RAIN) continue;
+      if (cmds[i].kind == TTP_AUD_VOICE) { h.rain++; h.level = cmds[i].level; }
+      if (cmds[i].kind == TTP_AUD_VOICE_STOP) h.rainStops++;
+    }
+    return h;
+  };
+  const int wet = ttp_session_begin("driftwood", 7, 3, nullptr);
+  const int dry = ttp_session_begin("tidepool", 7, 3, nullptr);
+  check(wet && dry, "a wet and a dry session opened");
+  for (int h : {wet, dry}) {
+    ttp_add_human(h, "0", nullptr);
+    ttp_add_bot(h, "\"ai-1\"", 1, 0, 7, nullptr);
+  }
+  double nowMs = 0;
+  auto step = [&](int h) {
+    ttp_process_input(h, "0", 7, 0.2, 0, 0, 0);
+    ttp_update(h, 1000.0 / 60.0);
+    ttp_events_json(h);
+    nowMs += 1000.0 / 60.0;
+    ttp_audio_frame(nowMs);
+    return hear();
+  };
+
+  ttp_audio_bind(wet);
+  check(hear().rain == 1, "binding a wet race starts the bed before its first frame");
+  ttp_session_start(wet, 3);
+  int wetFrames = 0, rainFrames = 0, carVoices = 0;
+  double level = 0;
+  for (int f = 0; f < 300; f++, wetFrames++) {   // the countdown, then the race
+    const Heard h = step(wet);
+    if (h.rain) { rainFrames++; level = h.level; }
+    carVoices += h.voices - h.rain;
+  }
+  check(rainFrames == wetFrames, "the storm rains on every frame of its race, the grid included ("
+        + std::to_string(rainFrames) + " of " + std::to_string(wetFrames) + ")");
+  check(level > 0 && level <= 1, "at a level the device can play");
+  check(carVoices > 0, "with the cars voiced over it");
+
+  ttp_pause(wet);
+  ttp_audio_stop_voices();   // the freeze plan's stop-voices
+  check(hear().all == 1, "the freeze is one stop-all");
+  int paused = 0;
+  for (int f = 0; f < 30; f++) paused += step(wet).all;
+  check(paused == 0, "a paused race decides nothing (" + std::to_string(paused) + " commands)");
+  ttp_resume(wet);
+  check(step(wet).rain == 1, "and the rain comes back with the race");
+
+  ttp_audio_bind(dry);
+  const Heard bound = hear();
+  check(bound.rainStops == 1 && bound.all == 1, "binding a dry race after a wet one stops the bed");
+  ttp_session_start(dry, 3);
+  int dryRain = 0;
+  for (int f = 0; f < 300; f++) dryRain += step(dry).rain;
+  check(dryRain == 0, "and a dry sky never rains");
+
+  // Leaving a wet race (dispose-session unbinds) stops the bed with it.
+  ttp_audio_bind(wet);
+  hear();
+  ttp_audio_bind(0);
+  check(hear().rainStops == 1, "unbinding a wet race stops the bed");
+  ttp_dispose(wet);
+  ttp_dispose(dry);
+  ttp_audio_stop_voices();
   ttp_audio_drain();
 }
 
@@ -5900,6 +5983,7 @@ int main(int argc, char** argv) {
   fastlaneThroughAbi();
   themeThroughAbi();
   audioThroughAbi();
+  weatherThroughAbi();
   uiShippedCatalogue();
   uiProgression();
   uiCorpusThroughAbi(argv[3]);

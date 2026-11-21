@@ -102,6 +102,10 @@ const SILENCE_EPS = 1e-9;
 const ONESHOT_SECONDS = 4;   // render window; every one-shot is trimmed back out of it
 const VOICE_SECONDS = 3;     // render window for sustained voices…
 const VOICE_KEEP_SECONDS = 1; // …of which the LAST second is kept as the loop
+// A voice that brings its OWN loop (the rain bed: `loopSeconds`, `rate` and
+// `channels` on its variant in cues.js) is rendered for that loop plus the same
+// settling time, and keeps the whole loop.
+const VOICE_SETTLE_SECONDS = VOICE_SECONDS - VOICE_KEEP_SECONDS;
 
 // ── the palette ───────────────────────────────────────────────────────────────
 
@@ -135,7 +139,8 @@ const ONESHOTS = [
 
 // Sustained voices. Each is a 1.000 s loop — the cached noise source is exactly
 // ctx.sampleRate frames, so a 1 s loop reproduces the runtime's own seam, and
-// every LFO in the set is integer Hz so the window closes at LFO phase 0.
+// every LFO in the set is integer Hz so the window closes at LFO phase 0. The
+// exception is a voice that brings its own loop (VOICE_SETTLE_SECONDS above).
 //
 // The output gain is NOT baked in: each stop is divided by the voice's analytic
 // gain at its level, so the file is the unit-gain TIMBRE and the player applies
@@ -169,6 +174,13 @@ const VOICES = {
     levelInvariant: true,
     param: () => ({ bandpassHz: [340, 3200], Q: [1, 0.8], flutterLfoHz: [23, 37] }),
     note: 'ONE file, like drift: both bands and both flutters are static, so only the output gain moves with level.',
+  },
+  rain: {
+    variant: 'storm',
+    levels: [1],
+    levelInvariant: true,
+    param: () => ({}),
+    note: 'ONE file, and its own loop: the bed is generated whole (seeded, at its own rate, stereo) and only the output gain moves with level. Its loop closes on itself by construction, so the kept window is the whole loop, whatever it starts on.',
   },
   boost: {
     variant: 'smooth',
@@ -344,9 +356,11 @@ const RECHECK_MAX_FRACTION = 1e-3;   // at most 0.1% of samples may differ at al
 //   • the filter sweeps the level stops exist to sample, cross-checked against
 //     the `param` descriptions above;
 //   • sha256 of the shared DSP prelude and of every picked variant block, for
-//     the manifest — the part no parse can derive.
+//     the manifest — the part no parse can derive;
+//   • the loop a voice brings of its own, if it does: its length, rate and
+//     channels are properties of the variant, read off the module.
 async function auditCueSource() {
-  const { DEFAULT_PICKS } = await import(pathToFileURL(CUES_JS).href);
+  const { DEFAULT_PICKS, resolveVariant } = await import(pathToFileURL(CUES_JS).href);
   const src = fs.readFileSync(CUES_JS, 'utf8');
   const blockOf = (cue, variant) => {
     const b = variantBlock(src, cue, variant);
@@ -432,8 +446,16 @@ async function auditCueSource() {
   for (const [cue, spec] of Object.entries(VOICES)) {
     const vBlock = blockOf(cue, spec.variant);
     const set = voiceSet(vBlock, `${cue}/${spec.variant}`);
-    voices[cue] = { ...set, gain: (l) => evalLevelExpr(set.gainExpr, l) };
+    // The loop: its own, or the last second of the render at the bake's rate.
+    const v = resolveVariant(cue);
+    const loop = v.loopSeconds
+      ? { seconds: v.loopSeconds, rate: v.rate, channels: v.channels, own: true }
+      : { seconds: VOICE_KEEP_SECONDS, rate: SR, channels: 1, own: false };
+    voices[cue] = { ...set, gain: (l) => evalLevelExpr(set.gainExpr, l), loop };
     if (rolledJitter(vBlock).length) bad.push(`${cue}/${spec.variant}: a sustained voice must not jitter`);
+    if (loop.own && !(Number.isInteger(loop.seconds) && loop.rate > 0 && loop.channels > 0)) {
+      bad.push(`${cue}/${spec.variant}: its own loop needs whole loopSeconds, a rate and channels`);
+    }
 
     // Cross-check the stop DESCRIPTIONS both ways. A `param` key that moves with
     // level and matches no sweep cues.js schedules is a fiction; a sweep with no
@@ -470,20 +492,22 @@ async function auditCueSource() {
 // ── the bake ──────────────────────────────────────────────────────────────────
 
 // One sustained voice at one level, rendered and normalised to the unit-gain
-// timbre: the last VOICE_KEEP_SECONDS of the render, divided by the analytic
+// timbre: the last loop of the render (interleaved), divided by the analytic
 // gain cues.js applies at that level. Everything about the voices — the bake,
 // the crossfade audit — goes through this, so there is one definition of what a
 // "stop" is.
-async function timbre(page, cue, level, gain) {
+async function timbre(page, cue, level, voice) {
+  const { seconds, rate, channels } = voice.loop;
   const res = await page.evaluate((j) => window.__bakeRender(j), {
-    method: 'voice', cue, level, channels: 1, frames: VOICE_SECONDS * SR, seed: NOISE_SEED,
+    method: 'voice', cue, level, channels, sampleRate: rate,
+    frames: (VOICE_SETTLE_SECONDS + seconds) * rate, seed: NOISE_SEED,
   });
-  // Keep the LAST second: by then both the gain and the filter targets have
+  // Keep the LAST loop: by then both the gain and the filter targets have
   // settled (tau ≤ 0.08 s, so 2 s ≈ 25 time constants), the loop point is a
   // whole noise-buffer period, and the LFOs are back at phase 0.
-  const all = toFloats(res.channels[0]);
-  const keep = all.subarray((VOICE_SECONDS - VOICE_KEEP_SECONDS) * SR, VOICE_SECONDS * SR);
-  const g = gain(level);
+  const from = VOICE_SETTLE_SECONDS * rate;
+  const keep = interleave(res.channels.map((c) => toFloats(c).subarray(from, from + seconds * rate)));
+  const g = voice.gain(level);
   const out = new Float32Array(keep.length);
   for (let i = 0; i < keep.length; i++) out[i] = keep[i] / g;
   return out;
@@ -510,8 +534,9 @@ async function bake(page, args, voices) {
     for (const level of spec.levels) {
       const name = spec.levels.length === 1 ? cue : `${cue}-l${String(Math.round(level * 100)).padStart(3, '0')}`;
       if (!wanted(name)) continue;
-      const floats = await timbre(page, cue, level, voices[cue].gain);
-      stops.push({ name, cue, level, floats, channels: 1, sampleRate: SR });
+      const floats = await timbre(page, cue, level, voices[cue]);
+      const { channels, rate } = voices[cue].loop;
+      stops.push({ name, cue, level, floats, channels, sampleRate: rate });
     }
     if (!stops.length) continue;
     // One headroom scalar for the whole cue (same for every stop, so crossfades
@@ -556,14 +581,14 @@ async function crossfadeAudit(page, voices) {
       continue;
     }
     const stops = [];
-    for (const l of spec.levels) stops.push({ l, f: await timbre(page, cue, l, voices[cue].gain) });
+    for (const l of spec.levels) stops.push({ l, f: await timbre(page, cue, l, voices[cue]) });
 
     let worst = 0, worstAt = 0, worstSpan = '';
     for (let i = 0; i + 1 < stops.length; i++) {
       const a = stops[i], b = stops[i + 1];
       for (const w of [0.25, 0.5, 0.75]) {
         const l = a.l + w * (b.l - a.l);
-        const truth = await timbre(page, cue, l, voices[cue].gain);
+        const truth = await timbre(page, cue, l, voices[cue]);
         let se = 0, ss = 0;
         for (let k = 0; k < truth.length; k++) {
           const blend = (1 - w) * a.f[k] + w * b.f[k];
@@ -730,6 +755,8 @@ async function main() {
       } else if (r.kind === 'sustained') {
         cues[r.cue] = cues[r.cue] || {
           kind: 'sustained', loop: true, variant: r.spec.variant,
+          // A loop of its own (the top-level loopSeconds is everyone else's).
+          ...(voices[r.cue].loop.own ? { loopSeconds: voices[r.cue].loop.seconds } : {}),
           // Quoted verbatim from the picked variant's set(level), which is also
           // what was divided out of every stop below — one expression, one copy.
           playback: { gainFormula: voices[r.cue].gainExpr, smoothTauSec: voices[r.cue].gainTau,

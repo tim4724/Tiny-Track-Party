@@ -2978,7 +2978,7 @@ export function runDisplayScenario(opts, ctx) {
         });
         window.__engine = engine;
         scene.bindSession(engine.h);                          // bind-session
-        if (audible) window.__audioDecide.bind(engine.h);
+        if (audible) sfx(window.__audioDecide.bind(engine.h));
         // The manifest's own count, and the same E2E override the live launch
         // reads — not a 3 retyped here.
         engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
@@ -3187,7 +3187,7 @@ export function runDisplayScenario(opts, ctx) {
     field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
                                      { carIndex: f.carIndex, cell: !f.ai }));
     scene.bindSession(engine.h); // the renderer draws this session's cars
-    if (audible) window.__audioDecide.bind(engine.h); // …and the audio hears it
+    if (audible) window.__audio.apply(window.__audioDecide.bind(engine.h)); // …and the audio hears it
 
     const live = kind === 'racing' || kind === 'bench';
 
@@ -3214,7 +3214,7 @@ export function runDisplayScenario(opts, ctx) {
       engine = newSession();
       window.__engine = engine;
       scene.bindSession(engine.h);
-      if (audible) window.__audioDecide.bind(engine.h);
+      if (audible) window.__audio.apply(window.__audioDecide.bind(engine.h));
       logDeal(log);
     }
 

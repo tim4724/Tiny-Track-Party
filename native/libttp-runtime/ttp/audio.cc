@@ -17,6 +17,7 @@
 #include <random>
 
 #include "ttp/jsmath.h"
+#include "ttp/theme.h"
 
 namespace ttp {
 namespace rt {
@@ -214,6 +215,10 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
   humans_.clear();
   for (const Car& c : cars) if (!aiIds.has(c.id)) humans_.push_back(c.hasPos ? &c.pos : nullptr);
 
+  // The weather, under everything (weather() says when it starts and stops).
+  // A dry sky that was never wet emits nothing, so no recorded frame moves.
+  voice(out, "rain", Id::None(), ambient_ == AMB_RAIN ? RAIN_LEVEL : 0, nullptr);
+
   // Curb scrub — loudness by distance to the nearest human. Unlike the one-shot
   // cues this is a continuous grind on a single shared throttle, so only
   // in-scene scrubs (>= the FLOOR) compete and the loudest wins the window — a
@@ -286,6 +291,14 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
   }
   airborne_.swap(airNext_);
   humans_.clear();  // it points into the caller's `cars`; never hold that past the call
+}
+
+// The bed starts with the bind rather than waiting for the first frame: the
+// shell's first frame is the countdown's, which a device that has to make the
+// bed's loop before it can play it would stall.
+void Decider::weather(uint32_t ambient, std::vector<Command>& out) {
+  ambient_ = ambient;
+  voice(out, "rain", Id::None(), ambient_ == AMB_RAIN ? RAIN_LEVEL : 0, nullptr);
 }
 
 // intensity = how hard the scrub (from speed); dist = the shared throttle's

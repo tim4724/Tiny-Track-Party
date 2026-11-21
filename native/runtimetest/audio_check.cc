@@ -53,6 +53,7 @@
 #include "ttp/json_read.h"
 #include "ttp/race_session.h"
 #include "ttp/race_track.h"
+#include "ttp/theme.h"
 #include "ttp/util.h"
 
 using namespace ttp;
@@ -826,6 +827,44 @@ bool checkAirVoices() {
   return ok;
 }
 
+// The weather, which no corpus world reaches either (no trace races under a
+// sky that rains): a raining sky lays the bed under every frame, as no car's
+// voice, a sky never named is dry, and a dry sky after a wet one is the bed's
+// falling edge.
+bool checkRainBed() {
+  bool ok = true;
+  auto expect = [&](bool cond, const char* what) {
+    if (!cond) { std::fprintf(stderr, "FAIL rain bed: %s\n", what); ok = false; }
+  };
+  const auto rain = [](const std::vector<au::Command>& out, au::Command::Kind kind) {
+    int n = 0;
+    for (const au::Command& c : out) if (c.kind == kind && std::strcmp(c.name, "rain") == 0) n++;
+    return n;
+  };
+  au::Decider dec;
+  std::vector<au::Command> out;
+  dec.frame({}, {}, au::AiIds(), 0, out);
+  expect(out.empty(), "a sky never named is dry");
+  dec.weather(ttp::rt::AMB_RAIN, out);
+  expect(rain(out, au::Command::VOICE) == 1, "naming a raining sky starts the bed at once");
+  for (int f = 0; f < 2; f++) {
+    out.clear();
+    dec.frame({}, {}, au::AiIds(), 0, out);
+    expect(rain(out, au::Command::VOICE) == 1, "a raining sky lays the bed on every frame");
+    expect(out.size() == 1 && out[0].level == au::RAIN_LEVEL && out[0].id.isNull(),
+           "at its one level, as no car's voice");
+  }
+  out.clear();
+  dec.weather(ttp::rt::AMB_FLAKE, out);
+  expect(rain(out, au::Command::VOICE_STOP) == 1 && out.size() == 1,
+         "a dry sky after a wet one stops the bed");
+  out.clear();
+  dec.frame({}, {}, au::AiIds(), 0, out);
+  dec.weather(ttp::rt::AMB_NONE, out);
+  expect(out.empty(), "and says nothing after, nor does a dry sky after a dry one");
+  return ok;
+}
+
 // Landings are decided off car height, which no recorded snapshot carries, so
 // the corpus can never reach them. Stated here instead: a car coming down hard
 // thumps once on the frame it lands, a skim off a crest makes no sound, and a
@@ -876,7 +915,7 @@ int landingChecks() {
 }
 
 int main(int argc, char** argv) {
-  if (!checkDriftVoice() || !checkAirVoices()) return 1;
+  if (!checkDriftVoice() || !checkAirVoices() || !checkRainBed()) return 1;
   std::string fixture, outPath;
   if (corpus::wants_record(argc, argv, &fixture, &outPath)) {
     // The traces directory is still needed: the trace cases record only the

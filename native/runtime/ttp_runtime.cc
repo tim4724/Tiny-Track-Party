@@ -31,6 +31,7 @@
 #include "ttp/jsonnum.h"
 #include "ttp/race_track.h"
 #include "ttp/shot_hold.h"
+#include "ttp/theme.h"
 #include "ttp/race_track_json.h"
 #include "ttp/schematic.h"
 #include "ttp/json_parse.h"
@@ -283,6 +284,7 @@ static void audio_forget_session(int handle);
 
 struct RuntimeSession {
   int handle = 0;
+  std::string trackId;  // what it was begun on: the audio reads its sky by it
   std::unique_ptr<Centerline> centerline;
   GameTrack track;
   std::string forceItem;
@@ -675,10 +677,10 @@ void audioFlush() {
 const char* const AUDIO_CUES[] = {
   "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
   "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
-  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land", "sand",
+  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land", "sand", "rain",
 };
 const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
-static_assert(AUDIO_CUE_COUNT == TTP_CUE_SAND,
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_RAIN,
               "TTP_CUE_* must run 1..N over the table above");
 
 int32_t audioCueCode(const char* name) {
@@ -756,6 +758,13 @@ void ttp_audio_bind(int session) {
   if (b.session == session) return;
   b.session = session;
   b.pending.clear();  // whatever the last race had left to say, it is over
+  // The sky the race is run under, read once here rather than per frame: the
+  // track's own theme, the one its cup resolves to (ttp_theme_set_models'
+  // reading). A dev ?biome= override restyles the picture, not the weather.
+  RuntimeSession* rs = get(session);
+  const char* track = rs ? rs->trackId.c_str() : "";
+  b.dec.weather(rs ? ttp::rt::resolve_theme(ttp::rt::biome_for_track(track), track).ambient.kind
+                   : (uint32_t) ttp::rt::AMB_NONE, b.cmds);
 }
 
 void ttp_audio_frame(double nowMs) {
@@ -774,6 +783,11 @@ void ttp_audio_frame(double nowMs) {
   // into the next race's countdown. Flushing above still happens: the finish's
   // own cues are the race's last word, not the first frame of silence.
   if (rs->session ? rs->session->ended() : rs->eng->raceOver()) return;
+  // NOR DOES A PAUSED ONE. The freeze stops every voice, and the TV shells keep
+  // calling this through the pause, so anything decided here would start a
+  // sound again under the overlay: the rain, which no car's frozen state can
+  // hold at zero, and the engines of cars frozen at speed.
+  if (rs->session ? rs->session->paused() : rs->pausedBare) return;
   Game* eng = rs->eng;
   const au::AiIds ai = audioAiIds(*rs);
 
@@ -963,6 +977,7 @@ int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* 
     return 0;
   }
   rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
+  rs->trackId = trackId;
   int h = g_next++;
   rs->handle = h;
   g_sessions[h] = std::move(rs);

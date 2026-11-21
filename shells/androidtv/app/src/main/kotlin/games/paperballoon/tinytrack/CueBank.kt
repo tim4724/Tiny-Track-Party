@@ -124,7 +124,7 @@ class CueBank(private val assets: AssetManager) {
     fun cue(code: Int): Cue? = table.getOrNull(code)
 
     /**
-     * Decode the whole palette. SLOW — every stop is a 1 s 48 kHz WAV and the
+     * Decode the whole palette. SLOW — every stop is a WAV to decode and the
      * engine loop needs a MediaCodec — so this runs on the caller's thread and the
      * caller is expected not to be the frame's. [AudioDevice.start] does it on the
      * cue thread.

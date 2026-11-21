@@ -346,7 +346,9 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    cue's detune spread; see `scripts/bake-cues.mjs` for why the jitter is the
    player's job), but the device is more than a sampler: the engine voice is a
    live passthrough (rate/gain steered per command) and the master-bus
-   compressor is part of the mix contract. `public/display/Audio.js` and
+   compressor is part of the mix contract. A sustained stop loops on its OWN
+   length, rate and channel count: the noise beds are 1 s mono, the rain bed is
+   not. `public/display/Audio.js` and
    `shells/tvos/TinyTrackParty/Audio/AudioDevice.swift` are the two
    implementations to compare.
    **The MUTE is one state with two flippers**, and only one of them is yours.
