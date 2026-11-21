@@ -23633,13 +23633,14 @@ def headframe():
     # headframe: a timber portal astride it (placed on the road, +X its
     # left, the bend's inside), its legs on both verges leaning in to a deck
     # of two girders over the road six units up, braced in X's down each
-    # side; the red sheave wheel on the deck over the right-hand kerb,
-    # turning as the cage winds (anim_spin), the cable down from it into the
-    # collar house over the shaft between the right-hand legs, and over it
-    # and away across the road to the hoist house on the inside verge. The
+    # side; the red sheave wheel on the deck over the right-hand kerb, the
+    # rope down from it winding a skip up out of the collar house over the
+    # shaft between the right-hand legs to tip into a chute and back down
+    # (THE HOIST, below), and over it and away across the road to the hoist
+    # house on the inside verge. The
     # backstays lean from the deck's far end down to the inside verge, so
     # the racers pass under the wheel, the girders, the backstays and the
-    # cable in turn. The skips tip down a chute into the ore bin standing on
+    # cable in turn. The skip tips down a chute into the ore bin standing on
     # its own legs over the loading shed behind the right-hand legs, where
     # the ore line (set-ore-line) ends: its train comes out of the shed
     # loaded. The hoist house is a boarded engine house under a tin roof,
@@ -23664,18 +23665,50 @@ def headframe():
     for x in (-2.6, 0.0, 2.6):                                                   # their ties
         box((0.22, 0.2, 2.0), (x, H + 0.35, ZC), TIMBER)
     box((2.2, 0.16, 2.1), (-3.0, H + 0.33, ZC), TIMBER)                          # the sheave deck
-    WX, cy = -3.25, H + 1.35
+    WX, cy = -3.55, H + 1.35
     for sz in (-0.6, 0.6):                                                       # the wheel's posts and axle
         box((0.22, 1.2, 0.22), (WX, H + 0.95, ZC + sz), TIMBER)
     box((0.2, 0.2, 1.4), (WX, cy, ZC), 'slate')
-    with animated('anim_spin:a=z:w=-1.5', (WX, cy, ZC)):                        # the wheel turns, in the cable's plane
-        torus(0.88, 0.09, (WX, cy, ZC), 'red', segs=12, axis='along')
+    # THE HOIST. A skip winds up out of the shaft through the collar house's
+    # roof to the chute's head, stands there while it tips into the chute,
+    # comes down again and stands in the shaft while it fills: one timing
+    # (anim_bob/anim_sway with a rest r and a hold t, `o` 0 so every part of
+    # it keeps step) for the skip, the rope and the wheel. The rope comes off
+    # the wheel's outer side (RX) straight down to the skip's bail, in three
+    # lengths sliding one into the next, each moving its share of the skip's
+    # climb (the top one fixed, the middle half, the bottom with the skip),
+    # each a little thinner than the one it slides into: the rope reaches
+    # from the wheel to the bail at every moment, no end of it ever shows,
+    # and it never stretches. The wheel turns as far as the rope runs, the
+    # rope's speed the rim's. The wheel stands out over the deck's end so the
+    # skip climbs clear of the frame's side (its girts and braces).
+    RX, CLIMB, PERIOD, REST, HOLD = WX - 0.86, 3.55, 14.0, 0.25, 0.25
+    def hoist(verb, amount, tag):
+        return 'anim_%s:%s:p=%.0f:r=%.2f:t=%.2f:o=0#%s' % (verb, amount, PERIOD, REST, HOLD, tag)
+    with animated(hoist('sway', 'a=z:d=%.1f' % -math.degrees(CLIMB / 0.86), 'wheel'), (WX, cy, ZC)):
+        torus(0.88, 0.09, (WX, cy, ZC), 'red', segs=12, axis='along')           # (the rope at 0.86 runs in its rim)
         for k in range(4):
             box((0.12, 1.7, 0.12), (WX, cy, ZC), 'red', roll=k * math.pi / 4)
         box((0.34, 0.34, 0.3), (WX, cy, ZC), 'slate')
+    BAIL = 0.95                                                                  # the bail's bar, the skip standing in the shaft
+    rowed(strut((RX, 5.15, ZC), (RX, cy, ZC), 0.11, ROPE), 6)                    # the rope's fixed length off the wheel
+    with animated(hoist('bob', 'h=%.3f' % (CLIMB / 2), 'rope'), (RX, 3.15, ZC)):
+        rowed(strut((RX, 3.15, ZC), (RX, 5.5, ZC), 0.09, ROPE), 6)               # the middle length, half the climb
+    with animated(hoist('bob', 'h=%.2f' % CLIMB, 'skip'), (RX, BAIL, ZC)):
+        rowed(strut((RX, BAIL - 0.02, ZC), (RX, 3.5, ZC), 0.07, ROPE), 6)        # the bottom length, on the bail
+        rowed(box((0.5, 0.05, 0.08), (RX, BAIL, ZC), 'slate'), 10)               # the bail: its bar, its arms down
+        for sx in (-1, 1):                                                       # to the skip's pins
+            rowed(box((0.04, 0.24, 0.06), (RX + sx * 0.23, BAIL - 0.11, ZC), 'slate'), 10)
+        rowed(cyl(0.04, 0.5, (RX - 0.25, 0.75, ZC), 'slate', segs=8, axis='across', stem=True), 10)
+        # the skip tips on its pins toward the chute (-Z) while it stands at
+        # the top, a little after it arrives and back before it leaves
+        with animated('anim_sway:a=x:d=-35:p=%.0f:r=0.8:o=%.3f#tip' % (PERIOD, 1 - (0.5 * (1 - REST - HOLD) + 0.025)),
+                      (RX, 0.75, ZC)):
+            with rounded_over():
+                rowed(box((0.4, 0.5, 0.42), (RX, 0.6, ZC), 'slate'), 12)
+            rowed(box((0.22, 0.02, 0.24), (RX, 0.855, ZC), 'dark'), 12)         # its mouth
     HX = 10.6                                                                    # the hoist house, its drum's window
-    strut((WX - 0.86, cy, ZC), (WX - 0.86, 1.0, ZC), 0.09, ROPE)                 # down the shaft, through the collar house's roof
-    strut((WX + 0.1, cy + 0.88, ZC), (HX - 1.3, 1.2, ZC), 0.09, ROPE)            # and away over the road to the drum
+    strut((WX + 0.1, cy + 0.88, ZC), (HX - 1.3, 1.2, ZC), 0.09, ROPE)            # and the rope away over the road to the drum
     for sz in (-1, 1):                                                           # the backstays, to the inside verge
         strut((XL * 0.82, H + 0.1, ZC + sz * 0.85), (7.3, -0.3, ZC + sz * 1.1), 0.24, TIMBER)
     strut((7.3, 0.05, ZC - 1.1), (7.3, 0.05, ZC + 1.1), 0.2, TIMBER)            # their sill
@@ -23683,6 +23716,7 @@ def headframe():
     box((1.3, 1.3, 1.5), (-4.25, 0.45, ZC), BOARD)
     box((1.42, 0.12, 1.62), (-4.25, 1.15, ZC), RUST)
     box((0.06, 0.9, 0.6), (-3.58, 0.35, ZC), 'dark')                             # its gate, toward the road
+    box((0.6, 0.03, 0.56), (RX, 1.215, ZC), 'dark')                              # the shaft's mouth in its roof, the skip's way
     # the ore bin over the loading shed behind the right-hand legs, where
     # the ore line ends, open along the line (-Z) for the train
     SX, SZ = -5.5, -0.2
@@ -23700,7 +23734,7 @@ def headframe():
         f = (y - 2.0) / 1.1
         box((1.62 + 0.3 * f, 0.08, 1.92 + 0.3 * f), (SX, y, SZ), 'slate')
     rock_lump(0.75, (SX, 3.1, SZ), 'yellow', (1.1, 0.35, 1.25), 0.3, seed=2.0)   # ore heaped in it
-    strut((-3.4, 4.4, ZC - 0.6), (SX + 0.4, 3.3, SZ + 0.3), 0.32, TIMBER)        # the skips' chute into it
+    strut((RX, 4.05, ZC - 0.42), (SX + 0.4, 3.3, SZ + 0.3), 0.32, TIMBER)        # the chute from under the skip's lip into it
     for s in (-1, 1):                                                            # a ladder up a right-hand leg
         box((0.08, 3.6, 0.08), (XR + 0.05, 1.8, ZC + 1.55 + s * 0.16), TIMBER)
     for i in range(7):

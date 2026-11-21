@@ -44,7 +44,7 @@
 // d degrees, p seconds, h height, r radius (watch, hop), c chain, o phase
 // offset (0..1), f facing for a path (0 rest, 1 yaw, 2 full, 3 yaw and banked
 // into its turns: a flier, set_motion_bank), s size (smoke),
-// n segments (flutter).
+// n segments (flutter), t hold (a one-way sway or bob: below).
 //
 // FLUTTER is the one verb that bends its part. The part is a cloth built flat
 // and held at its node's pivot (a point of the hoist); the renderer finds its
@@ -68,7 +68,13 @@
 // is also the one move a person makes of their own: one small move and a
 // rest, never a whole-body rock (a body that moves rides something: a swing,
 // a ring). b 1 makes a bob BOUNCE (fast off the ground, slow at the top)
-// instead of a smooth rise and fall.
+// instead of a smooth rise and fall. t on a one-way sway or bob (one with a
+// rest) is its HOLD: the share of its period it stands at the far end, the
+// way up and the way down each easing in and out over half of what the rest
+// and the hold leave (`anim_bob:h=3.5:p=14:r=0.25:t=0.25`, a mine's skip:
+// up, held while it tips, down, held while it fills). A wheel winding its
+// rope (`anim_sway:a=z:d=-236:p=14:r=0.25:t=0.25`) with the same p, r, t and
+// `o` turns as far as the skip has climbed at every moment.
 // On a path `o` is where it starts round its loop; on sway, bob or waddle it
 // puts the part IN STEP: it counts from its placement's clock, not its own,
 // `o` of a cycle on, so parts of one piece keep time (a robot's legs and body,
@@ -105,7 +111,9 @@ struct SetMotion {
   char swayAxis = 'z';
   float swayDeg = 25.0f, swayPeriod = 2.0f;  // a sway under ~20 degrees does not read
   float swayRest = -1.0f;                    // < 0: either side, no rest
+  float swayHold = 0.0f;                     // a one-way sway's share held at d
   float bobHeight = 0.2f, bobPeriod = 3.0f, bobRest = 0.0f;
+  float bobHold = 0.0f;                      // a one-way bob's share held at h
   bool bobBounce = false;
   float waddleDeg = 12.0f, waddlePeriod = 0.9f;
   float watchRadius = 26.0f, watchDeg = 60.0f;
@@ -181,10 +189,12 @@ inline bool parse_set_motion(const char* name, SetMotion& m, std::string* unknow
       } else if (v == "sway") {
         if (key == 'a') m.swayAxis = axis; else if (key == 'd') m.swayDeg = f;
         else if (key == 'p' && f > 0) m.swayPeriod = f;
-        else if (key == 'r') m.swayRest = std::min(0.95f, std::max(0.0f, f)); else known = false;
+        else if (key == 'r') m.swayRest = std::min(0.95f, std::max(0.0f, f));
+        else if (key == 't') m.swayHold = std::min(0.9f, std::max(0.0f, f)); else known = false;
       } else if (v == "bob") {
         if (key == 'h') m.bobHeight = f; else if (key == 'p' && f > 0) m.bobPeriod = f;
         else if (key == 'r') m.bobRest = std::min(0.95f, std::max(0.0f, f));
+        else if (key == 't') m.bobHold = std::min(0.9f, std::max(0.0f, f));
         else if (key == 'b') m.bobBounce = f != 0; else known = false;
       } else if (v == "waddle") {
         if (key == 'd') m.waddleDeg = f; else if (key == 'p' && f > 0) m.waddlePeriod = f;
@@ -260,11 +270,20 @@ inline float set_motion_falloff(float d, float r, float inner) {
 
 // One swing out and back, eased at both ends, in the first (1 - rest) of a
 // period, then still: 0 at rest, 1 at the top. `u` is the clock in periods.
-inline float set_motion_once(float u, float rest) {
+// A `hold` stands it at the top for that share of the period between.
+inline float set_motion_once(float u, float rest, float hold = 0.0f) {
   constexpr float TAU = 6.28318530718f;
   const float a = 1 - rest;
   u -= std::floor(u);
-  return u < a ? 0.5f - 0.5f * std::cos(TAU * u / a) : 0.0f;
+  if (hold <= 0) return u < a ? 0.5f - 0.5f * std::cos(TAU * u / a) : 0.0f;
+  // Up, held at the far end, down, each way half of what the hold leaves of
+  // the move (never less than a tenth of it).
+  hold = std::min(hold, 0.9f * a);
+  const float ramp = 0.5f * (a - hold);
+  if (u < ramp) return 0.5f - 0.5f * std::cos(0.5f * TAU * u / ramp);
+  if (u < ramp + hold) return 1.0f;
+  if (u < a) return 0.5f + 0.5f * std::cos(0.5f * TAU * (u - ramp - hold) / ramp);
+  return 0.0f;
 }
 
 inline SetMotionPose set_motion_pose(const SetMotion& m, float t, float phase,
@@ -274,12 +293,12 @@ inline SetMotionPose set_motion_pose(const SetMotion& m, float t, float phase,
   if (m.spin) p.spin = m.spinRate * t + (m.spinPinned ? m.spinTurn : phase) * TAU;
   if (m.sway) {
     p.sway = m.swayRest < 0 ? m.swayDeg * DEG * std::sin(TAU * (t / m.swayPeriod + phase))
-                            : m.swayDeg * DEG * set_motion_once(t / m.swayPeriod + phase, m.swayRest);
+                            : m.swayDeg * DEG * set_motion_once(t / m.swayPeriod + phase, m.swayRest, m.swayHold);
   }
   if (m.bob) {
     const float u = t / m.bobPeriod + phase;
     p.lift += m.bobHeight * (m.bobBounce ? std::fabs(std::sin(0.5f * TAU * u))
-                             : m.bobRest > 0 ? set_motion_once(u, m.bobRest)
+                             : m.bobRest > 0 ? set_motion_once(u, m.bobRest, m.bobHold)
                                              : 0.5f - 0.5f * std::cos(TAU * u));
   }
   if (m.waddle) {
