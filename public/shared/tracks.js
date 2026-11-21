@@ -655,7 +655,7 @@ export const TRACKS = {
     set: [
       // far enough out that her whole keel floats (at lat 17.5 her stern lay
       // over dry sand)
-      { model: 'set-pirate-ship', u: 0.483, lat: 24, yaw: 230, y: 0.15, scale: 1.4 },
+      { model: 'set-pirate-ship', u: 0.483, lat: 24, yaw: 50, y: 0.15, scale: 1.4 },
       // the jungle down the island's west flank, along the S: one piece
       // astride the road (set_prototypes.py COVE_ROAD: re-sample it if this u
       // or the road moves)

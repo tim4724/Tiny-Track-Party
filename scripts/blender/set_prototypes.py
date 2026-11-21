@@ -28669,27 +28669,28 @@ def pirate_ship():
     # the staff at her stern, three gun ports a side; her longboat
     # alongside. She stands in the sea, so nothing that belongs on land
     # rides with her. Her hull runs along +Z,
-    # parallel to the road at a placement yaw of 0 or 180 (180 on the
-    # track's right turns the longboat to the open sea). Both ride the
+    # parallel to the road at a placement yaw of 0 or 180 (0 on the
+    # track's right turns the longboat to the open sea, and shows the road
+    # her bow quarter with her sails set before their masts). Both ride the
     # swell (set_motion.h): a cove is an anchorage because it is sheltered,
     # so she rolls a few degrees on a slow period, which still swings the
     # masthead a unit, and heaves a little; the longboat bobs out of step.
     S, YAW, black = 0.65, 0.12, 0x38383d
-    LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; every sail aback, so from the road each hangs in front of its mast
+    LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; each sail hangs before its mast, the road's side
     with animated('anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2', (0.0, 0.0, 0.0), yaw=YAW):
         K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True)
-        own_sail(K, S, YAW, 0.67, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG, aback=True)   # (under her top: braced, a yard swings clear of it)
-        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.55, brace=BRACE, stretch=LONG, aback=True)
-        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=BRACE, stretch=LONG, aback=True)
+        own_sail(K, S, YAW, 0.67, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG)   # (under her top: braced, a yard swings clear of it)
+        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.55, brace=BRACE, stretch=LONG)
+        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=BRACE, stretch=LONG)
         poly([K(0.0, 4.5, 5.15), K(0.0, 3.3, 1.3), K(0.0, 8.6, 0.85)], [(0, 1, 2)], black)   # her jib
         for (z, _, head), k, p in zip(OWN_SHIP_MASTS, (0.55, 0.45), ('2.2#mast', '2.4#mizzen')):   # her colours at each masthead
             fx, fy, fz = K(0.0, head, z)
             own_jolly_roger((fx, fy - 0.3, fz), YAW + math.pi / 2, k, 'anim_flutter:p=' + p)
         if not LITE:
             own_jolly_roger(K(0.0, 4.25 + FIXPROP_CASTLE, -4.6), YAW + math.pi / 2, 0.5, 'anim_flutter:p=2.6#stern')
-    bx, bz = 3.4, -2.9
+    bx, bz = -3.4, 2.9
     with animated('anim_bob:h=0.08:p=3.4', (bx, 0.0, bz)):
-        own_rowboat((bx, 0.0, bz), yaw=0.9, scale=0.34, large=True)
+        own_rowboat((bx, 0.0, bz), yaw=0.9 + math.pi, scale=0.34, large=True)
 
 def own_plunder(kind, at, yaw=0.0, scale=1.0):
     """What the crew have lying about, each at the size the Pirate Kit's

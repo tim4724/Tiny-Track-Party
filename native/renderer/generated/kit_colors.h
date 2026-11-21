@@ -208570,8 +208570,8 @@ inline const Model kModels[] = {
     { 6275516277801467368ull, 6u, k_set_pirate_camp },  // set-pirate-camp.glb
     { 15070759507770195661ull, 3u, k_set_pirate_lookout_lite },  // set-pirate-lookout-lite.glb
     { 5201165686072397789ull, 3u, k_set_pirate_lookout },  // set-pirate-lookout.glb
-    { 11037215709734748403ull, 4u, k_set_pirate_ship_lite },  // set-pirate-ship-lite.glb
-    { 8584851989017878688ull, 5u, k_set_pirate_ship },  // set-pirate-ship.glb
+    { 4207483553674010354ull, 4u, k_set_pirate_ship_lite },  // set-pirate-ship-lite.glb
+    { 3454261769816324709ull, 5u, k_set_pirate_ship },  // set-pirate-ship.glb
     { 7292435983582551355ull, 6u, k_set_pirate_stockade_lite },  // set-pirate-stockade-lite.glb
     { 5920199208666097664ull, 6u, k_set_pirate_stockade },  // set-pirate-stockade.glb
     { 2318848088864241630ull, 1u, k_set_play_rug },  // set-play-rug.glb

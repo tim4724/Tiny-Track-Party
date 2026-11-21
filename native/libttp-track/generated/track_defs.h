@@ -216,7 +216,7 @@ constexpr FurnDef kBoxes_cove[] = {
   { 0x1.ee978d4fdf3b6p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SetDef kSet_cove[] = {
-  { "set-pirate-ship", 0x1.ee978d4fdf3b6p-2, 0x1.8p+4, 0x1.ccp+7, 0x1.3333333333333p-3, 0x1.6666666666666p+0, 1 },
+  { "set-pirate-ship", 0x1.ee978d4fdf3b6p-2, 0x1.8p+4, 0x1.9p+5, 0x1.3333333333333p-3, 0x1.6666666666666p+0, 1 },
   { "set-jungle-canopy", 0x1.4cccccccccccdp-1, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-jetty", 0x1.c28f5c28f5c29p-2, 0x1.7p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-pirate-stockade", 0x1.147ae147ae148p-1, 0x1.8p+3, 0x0p+0, 0x1.70a3d70a3d70ap-1, 0x1p+0, 1 },
