@@ -477,6 +477,7 @@
     "set-prize-at-anchor.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-promenade-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-promenade.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
+    "set-ranch-fence-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ranch-fence.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ranch-herd-east-lite.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
     "set-ranch-herd-east.glb": { "generated": "scripts/gen-set-prototypes.mjs" },
