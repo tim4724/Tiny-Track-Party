@@ -23690,23 +23690,28 @@ def headframe():
         for k in range(4):
             box((0.12, 1.7, 0.12), (WX, cy, ZC), 'red', roll=k * math.pi / 4)
         box((0.34, 0.34, 0.3), (WX, cy, ZC), 'slate')
-    BAIL = 0.95                                                                  # the bail's bar, the skip standing in the shaft
-    rowed(strut((RX, 5.15, ZC), (RX, cy, ZC), 0.11, ROPE), 6)                    # the rope's fixed length off the wheel
+    # (Each length a hair thinner than the one it slides into: the three
+    # 0.11, 0.09 and 0.07 across read as an aerial pulled out.)
+    BAIL, PIN = 1.005, 0.5                                                       # the bail's bar and the skip's pins, standing in the shaft
+    rowed(strut((RX, 5.15, ZC), (RX, cy, ZC), 0.09, ROPE), 6)                    # the rope's fixed length off the wheel
     with animated(hoist('bob', 'h=%.3f' % (CLIMB / 2), 'rope'), (RX, 3.15, ZC)):
-        rowed(strut((RX, 3.15, ZC), (RX, 5.5, ZC), 0.09, ROPE), 6)               # the middle length, half the climb
+        rowed(strut((RX, 3.15, ZC), (RX, 5.5, ZC), 0.085, ROPE), 6)              # the middle length, half the climb
     with animated(hoist('bob', 'h=%.2f' % CLIMB, 'skip'), (RX, BAIL, ZC)):
-        rowed(strut((RX, BAIL - 0.02, ZC), (RX, 3.5, ZC), 0.07, ROPE), 6)        # the bottom length, on the bail
-        rowed(box((0.5, 0.05, 0.08), (RX, BAIL, ZC), 'slate'), 10)               # the bail: its bar, its arms down
-        for sx in (-1, 1):                                                       # to the skip's pins
-            rowed(box((0.04, 0.24, 0.06), (RX + sx * 0.23, BAIL - 0.11, ZC), 'slate'), 10)
-        rowed(cyl(0.04, 0.5, (RX - 0.25, 0.75, ZC), 'slate', segs=8, axis='across', stem=True), 10)
-        # the skip tips on its pins toward the chute (-Z) while it stands at
-        # the top, a little after it arrives and back before it leaves
-        with animated('anim_sway:a=x:d=-35:p=%.0f:r=0.8:o=%.3f#tip' % (PERIOD, 1 - (0.5 * (1 - REST - HOLD) + 0.025)),
-                      (RX, 0.75, ZC)):
+        rowed(strut((RX, BAIL - 0.005, ZC), (RX, 3.5, ZC), 0.08, ROPE), 6)       # the bottom length, on the bail
+        rowed(box((0.1, 0.05, 0.62), (RX, BAIL, ZC), 'slate'), 10)               # the bail: its bar across the
+        for sz in (-1, 1):                                                       # road's way, its arms down to the
+            rowed(box((0.06, 0.53, 0.04), (RX, 0.745, ZC + sz * 0.27), 'slate'), 10)   # skip's pins
+        rowed(cyl(0.04, 0.62, (RX, PIN, ZC - 0.31), 'slate', segs=8, axis='along', stem=True), 10)
+        # The skip, rust red and heaped with the yellow ore, tips on its pins
+        # outward (-X) while it stands at the top, a little after it arrives
+        # and back before it leaves, its mouth over the chute's head: a tip
+        # broadside to the road and to the yard's side (tipped toward the
+        # bin, -Z, it was edge on to both).
+        with animated('anim_sway:a=z:d=45:p=%.0f:r=0.8:o=%.3f#tip' % (PERIOD, 1 - (0.5 * (1 - REST - HOLD) + 0.025)),
+                      (RX, PIN, ZC)):
             with rounded_over():
-                rowed(box((0.4, 0.5, 0.42), (RX, 0.6, ZC), 'slate'), 12)
-            rowed(box((0.22, 0.02, 0.24), (RX, 0.855, ZC), 'dark'), 12)         # its mouth
+                rowed(box((0.5, 0.55, 0.48), (RX, 0.575, ZC), RUST), 12)
+            rock_lump(0.19, (RX, 0.85, ZC), 'yellow', (1.2, 0.45, 1.1), 0.3, seed=4.0)
     HX = 10.6                                                                    # the hoist house, its drum's window
     strut((WX + 0.1, cy + 0.88, ZC), (HX - 1.3, 1.2, ZC), 0.09, ROPE)            # and the rope away over the road to the drum
     for sz in (-1, 1):                                                           # the backstays, to the inside verge
@@ -23716,7 +23721,7 @@ def headframe():
     box((1.3, 1.3, 1.5), (-4.25, 0.45, ZC), BOARD)
     box((1.42, 0.12, 1.62), (-4.25, 1.15, ZC), RUST)
     box((0.06, 0.9, 0.6), (-3.58, 0.35, ZC), 'dark')                             # its gate, toward the road
-    box((0.6, 0.03, 0.56), (RX, 1.215, ZC), 'dark')                              # the shaft's mouth in its roof, the skip's way
+    box((0.62, 0.03, 0.68), (RX, 1.215, ZC), 'dark')                             # the shaft's mouth in its roof, the skip's way
     # the ore bin over the loading shed behind the right-hand legs, where
     # the ore line ends, open along the line (-Z) for the train
     SX, SZ = -5.5, -0.2
@@ -23734,7 +23739,31 @@ def headframe():
         f = (y - 2.0) / 1.1
         box((1.62 + 0.3 * f, 0.08, 1.92 + 0.3 * f), (SX, y, SZ), 'slate')
     rock_lump(0.75, (SX, 3.1, SZ), 'yellow', (1.1, 0.35, 1.25), 0.3, seed=2.0)   # ore heaped in it
-    strut((RX, 4.05, ZC - 0.42), (SX + 0.4, 3.3, SZ + 0.3), 0.32, TIMBER)        # the chute from under the skip's lip into it
+    # The chute: an open trough, a floor and two sides and a board across
+    # its head, from under the tipped skip's lip down into the bin, ore
+    # lying in it; borne by a bearer off the near right-hand leg and a knee
+    # brace from lower down the leg (a solid plank, its head in the air).
+    head, foot = (RX - 0.54, PIN + CLIMB - 0.22, ZC), (SX + 0.25, 3.38, SZ + 0.55)
+    v = [b - a for a, b in zip(head, foot)]
+    n = math.sqrt(sum(c * c for c in v))
+    vh = math.hypot(v[0], v[2])
+    lat = (-v[2] / vh, 0.0, v[0] / vh)                                           # across it, level
+    up = [-v[0] * v[1] / n / n, 1 - v[1] * v[1] / n / n, -v[2] * v[1] / n / n]  # its floor's normal
+    upn = math.sqrt(sum(c * c for c in up))
+    up = [c / upn for c in up]
+    def on(t, a=0.0, u=0.0):
+        return tuple(head[i] + v[i] * t + lat[i] * a + up[i] * u for i in range(3))
+    beam(on(0, 0, -0.025), on(1, 0, -0.025), 0.4, TIMBER, d=0.05)                # its floor
+    for sd in (-1, 1):
+        beam(on(0, sd * 0.205, 0.035), on(1, sd * 0.205, 0.035), 0.05, TIMBER, d=0.19)   # its sides
+    beam(on(0, -0.23, 0.04), on(0, 0.23, 0.04), 0.05, TIMBER, d=0.18)             # the board across its head
+    for k, t in enumerate((0.3, 0.58, 0.84)):                                    # ore lying in it
+        rock_lump(0.08, on(t, 0.05 * (k - 1), 0.03), 'yellow', (1.2, 0.6, 1.0), 0.7 * k, seed=11.0 + k)
+    tb = (ZC - 1.025 - head[2]) / v[2]                                           # where it crosses the leg
+    lx = XR + (XR * 0.82 - XR) * (on(tb)[1] - 0.12 + 0.3) / (H + 0.3)
+    box((lx + 0.05 - (on(tb)[0] - 0.3), 0.12, 0.14), ((on(tb)[0] - 0.3 + lx + 0.05) / 2, on(tb)[1] - 0.1, on(tb)[2]), TIMBER)   # the bearer
+    strut((XR + (XR * 0.82 - XR) * 3.0 / (H + 0.3), 2.7, ZC - 1.3 + 0.45 * 3.0 / (H + 0.3)),
+          on(0.2, 0, -0.04), 0.1, TIMBER)                                         # the knee brace
     for s in (-1, 1):                                                            # a ladder up a right-hand leg
         box((0.08, 3.6, 0.08), (XR + 0.05, 1.8, ZC + 1.55 + s * 0.16), TIMBER)
     for i in range(7):
