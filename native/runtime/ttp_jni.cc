@@ -444,16 +444,6 @@ jobject n_ttp_display_hud(JNIEnv* env, jclass) {
     return env->NewDirectByteBuffer((void*) p, (jlong) (ttpHudBlockBytes(p)));
 }
 
-void n_ttp_display_kit_field(JNIEnv* env, jclass, jint a0) {
-    (void) env;
-    ttp_display_kit_field((int) a0);
-}
-
-jbyteArray n_ttp_display_kit_field_layout(JNIEnv* env, jclass) {
-    (void) env;
-    return toBytes(env, ttp_display_kit_field_layout());
-}
-
 void n_ttp_display_look(JNIEnv* env, jclass, jdouble a0, jdouble a1, jdouble a2, jdouble a3, jdouble a4, jdouble a5) {
     (void) env;
     ttp_display_look((double) a0, (double) a1, (double) a2, (double) a3, (double) a4, (double) a5);
@@ -1535,8 +1525,6 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_ground_y", "(DD)D", (void*) n_ttp_display_ground_y },
     { "ttp_display_hold", "(I)V", (void*) n_ttp_display_hold },
     { "ttp_display_hud", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_display_hud },
-    { "ttp_display_kit_field", "(I)V", (void*) n_ttp_display_kit_field },
-    { "ttp_display_kit_field_layout", "()[B", (void*) n_ttp_display_kit_field_layout },
     { "ttp_display_look", "(DDDDDD)V", (void*) n_ttp_display_look },
     { "ttp_display_look_fov", "(D)V", (void*) n_ttp_display_look_fov },
     { "ttp_display_model_variant", "([BI)V", (void*) n_ttp_display_model_variant },

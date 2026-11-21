@@ -1,6 +1,6 @@
 // setmotion_check — the set pieces' `anim_` grammar and poses (ttp/set_motion.h).
 //
-// A BEHAVIOURAL gate like kitfield_check: the motion has no JS twin and no
+// A BEHAVIOURAL gate like showcase_check: the motion has no JS twin and no
 // corpus. What it holds is what a moving part is useless or ugly without:
 //
 //   1. THE NAMES PARSE as the builders write them, a tag and an unknown verb

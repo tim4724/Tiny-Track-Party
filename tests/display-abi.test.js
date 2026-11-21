@@ -286,7 +286,7 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   assert.deepEqual(inv.props, stagedProps, 'the legend lists the staged props too');
   assert.deepEqual(inv.set, stagedSet, 'the legend lists the set row too');
   // 9 since the snowman and the wind-up train were retired as procedural kinds
-  // (the snow and playroom biomes plant Kenney models for both now), the
+  // (the snow and playroom biomes plant built models for both now), the
   // windmill for Crag's real-size windpump, and the playroom's five giants for
   // toys at their real size. The literal is the tripwire: a kind added and not
   // staged, or retired and left behind, has to come past this line.
@@ -300,10 +300,7 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
 // The full tier (the web, the Apple TV) is uncapped; the cap holds the LITE tier
 // (the Android TV box), which draws a model's lite build where it has one
 // (<model>-lite.glb, ttp/theme.h lite_models). So a prop over the cap gets a
-// lite build (its builder's, or scripts/bake-lite.mjs). The toy train set is
-// the one exception: an
-// animated ring of track, sparse by design, whose spin subtree a decimation
-// would break.
+// lite build (its builder's, or scripts/bake-lite.mjs).
 const PROP_VERTEX_CAP = 400;
 test('every biome prop the lite tier draws stays under the decoration vertex cap', async () => {
   const M = await load();
@@ -313,7 +310,6 @@ test('every biome prop the lite tier draws stays under the decoration vertex cap
   const glb = (m) => path.join(ROOT, 'public/assets/toycar', `${m}.glb`);
   for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
     for (const full of JSON.parse(propModels(nameAt(i)))) {
-      if (full === 'trainset') continue;
       const m = fs.existsSync(glb(`${full}-lite`)) ? `${full}-lite` : full;
       const b = fs.readFileSync(glb(m));
       const j = JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString());

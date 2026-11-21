@@ -37,9 +37,8 @@ test('every model wears the one colour atlas', () => {
 });
 
 // The CONCEPT CARS (public/assets/concepts/) are generated outright by
-// scripts/gen-concept-cars.py and shown only by the asset gallery, which lists
-// them from the index.json written beside them. A GLB the index misses is never
-// shown, and one the index names but the folder lacks fails the field's fetch.
+// scripts/gen-concept-cars.py, which writes the index.json beside them, and
+// raced on the web by `?cars=` (Stage.js). The index and the folder must agree.
 // They share the palette by URI, so a texture of their own would 404.
 test('the concept cars index lists exactly the GLBs beside it, all on the shared palette', () => {
   const dir = path.join(ROOT, 'public/assets/concepts');

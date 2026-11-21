@@ -87,7 +87,8 @@ struct GameProtocol {
     /// The livery palette, indexed by the dense colour slot
     /// `ttp_room_lowest_free_slot` hands out.
     let carColors: [String]
-    /// Kenney model base names, indexed by `carIndex`. This is the one roster
+    /// Car model base names (scripts/toy_cars.py builds them), indexed by
+    /// `carIndex`. This is the one roster
     /// field that never crosses the display ABI — it names BYTES TO FETCH, which
     /// is a platform job.
     let carModels: [String]

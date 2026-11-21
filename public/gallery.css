@@ -238,42 +238,7 @@ section.stage iframe {
 .legend__icon svg { width: 72%; height: 72%; display: block; }
 .legend__icon--small { width: 34px; height: 34px; border-radius: 9px; }
 
-/* The kit field's table of contents. A narrow column on the right, like the
-   legend it sits beside: the models themselves are IN the scene now, so this
-   panel is a way to find one among six hundred, not a way to look at it. */
-.kits {
-  position: absolute;
-  /* LEFT, opposite the legend: with the field up you want both — the legend
-     says what the scene ships, this says what it could. */
-  top: 12px; left: 12px;
-  width: 232px;
-  max-height: calc(100% - 24px);
-  display: flex; flex-direction: column;
-  padding: 10px 8px 10px 12px;
-  border-radius: 10px;
-  background: rgba(6, 6, 15, 0.88);
-  border: 1px solid rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  font-size: 11px; line-height: 1.5;
-  pointer-events: auto;   /* the list scrolls; see .legend for the trade */
-}
-.kits__bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  margin-bottom: 8px; padding-right: 4px;
-}
-/* The shortlist picker takes its own row; the filter and count share the next. */
-.kits__bar select { flex-basis: 100%; }
-.kits__bar input[type="search"] {
-  flex: 1; min-width: 0; padding: 4px 7px;
-  background: #14141f; color: #e8e8f0;
-  border: 1px solid rgba(255,255,255,0.16); border-radius: 6px;
-}
-.kits__count, .kits__empty { color: #8b93b8; }
-.kits__count { font-size: 10px; white-space: nowrap; }
-.kits__empty { line-height: 1.6; }
-#kit-body { overflow-y: auto; min-height: 0; }
-/* A row is a button: it flies the camera to that model in the field. */
+/* A list row is a button (the landmark gallery's pieces and review items). */
 .kit-row {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px;
   width: 100%; padding: 2px 4px;
@@ -315,11 +280,6 @@ section.stage iframe {
 .lm-note__row b { flex: none; width: 1.4em; color: #ff8fe9; }
 .kit-row--family { color: #9aa3c7; }
 .kit-row--member { padding-left: 16px; }
-/* A concept car's own description, under its name. */
-.kit-row__note { flex-basis: 100%; padding-bottom: 4px; color: #8b93b8; font-size: 10px; line-height: 1.4; }
-/* Already in the game: dimmed, because the eye is here for the candidates. */
-.kit-row--in { color: #78dc96; opacity: 0.55; }
-.kit-row--in .kit-row__name::after { content: ' ✓'; }
 /* Where the camera is standing right now. */
 .kit-row--at { background: #26264e; color: #fff; }
 

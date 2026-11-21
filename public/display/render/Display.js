@@ -134,7 +134,6 @@ export class Display {
     this._tagBytes = 0;
     this._pollPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
-    this._kitModels = [];    // …and its kit field; see kitField()
     // No slot→car-id list here anymore: the HUD block is indexed by slot and
     // hud() maps entries back to cars via ttp_display_slot_ids_json — the
     // built scene's OWN roster, not a copy this class authors.
@@ -168,8 +167,6 @@ export class Display {
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
       bench: mod.cwrap('ttp_display_bench', null, ['string']),
-      kitField: mod.cwrap('ttp_display_kit_field', null, ['number']),
-      kitLayout: mod.cwrap('ttp_display_kit_field_layout', 'string', []),
       setLayout: mod.cwrap('ttp_display_set_layout', 'string', []),
       scatterLayout: mod.cwrap('ttp_display_scatter_layout', 'string', []),
       release: mod.cwrap('ttp_display_release', null, []),
@@ -417,19 +414,6 @@ export class Display {
   modelVariant(model, variant) { this._fn.modelVariant(model, variant | 0); }
   bench(model) { this._fn.bench(model || ''); }
 
-  // DEV. The asset gallery's KIT FIELD: the models to stand on clear ground
-  // beyond the track, as GLB names this class fetches (`kit:<kit>/<model>` for
-  // the kits the game does not ship, see assetCache). Held rather than pushed,
-  // because unlike every other latch this one is a FETCH LIST — the bytes go
-  // over as kit<i>.glb during setTrack, and the count only means anything once
-  // they have. [] is no field, which is every caller but the gallery.
-  kitField(models) { this._kitModels = Array.isArray(models) ? models : []; }
-
-  // Where the built field put them, in the same order — footprint and spot per
-  // model (ttp_display_kit_field_layout). [] until a build with a field in it.
-  kitLayout() {
-    try { return JSON.parse(this._fn.kitLayout()) || []; } catch (_) { return []; }
-  }
   // DEV. Where the built track's set pieces stand (ttp_display_set_layout):
   // { length, groundY, pieces: [{ model, s, lat, x, y, z, cx, cz, hx, hz, top, … }] }.
   setLayout() {
@@ -519,9 +503,6 @@ export class Display {
     // a stand-in track with none of its own and stages every track's in a row.
     const setModels = this._showcase ? biomes.showcaseSetModels() : biomes.setModels(trackId);
     setModels.forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
-    // The KIT FIELD's models (dev; empty in play). There are hundreds of them,
-    // in the order the layout comes back in and the order the chrome names them.
-    this._kitModels.forEach((m, i) => want.push({ name: `kit${i}.glb`, tag: m }));
     want.push(...this._carWants(roster));
     for (const name of PROP_MODELS) {
       want.push({ name: `${name}.glb`, tag: name });
@@ -534,7 +515,6 @@ export class Display {
       if (ghostName) want.push({ name: ghostName, tag: name, from: `${name}.glb` });
     }
     await this._fetchPlanned(want, assets);
-    this._fn.kitField(this._kitModels.length);
 
     // The textures those models reference. The URI list comes from the ENGINE,
     // off the bytes it is holding — so a model the plan skipped still
@@ -616,8 +596,8 @@ export class Display {
   async _fetchPlanned(want, assets) {
     const need = new Set(this._json(this._fn.assetPlan(JSON.stringify(want))));
     const fetched = new Map();
-    // Concurrently: one await each would turn a kit field into a minute of round
-    // trips, and the asset cache makes a repeat fetch free anyway.
+    // Concurrently: one await each is a round trip per model, and the asset
+    // cache makes a repeat fetch free anyway.
     await Promise.all(want.map(async (w) => {
       if (w.from || !w.tag || !need.has(w.name)) return;
       const bytes = await assets.glb(w.tag);
@@ -888,23 +868,10 @@ export function assetCache() {
     return p;
   };
   const glb = (name) => {
-    const kit = kitPath(name);
-    if (kit) return raw(assetUrl(kit));
-    // `concept:<name>`: the asset gallery's concept cars (scripts/gen-concept-cars.py)
+    // `concept:<name>`: a concept car (scripts/gen-concept-cars.py; Stage.js `?cars=`)
     const concept = /^concept:([\w.-]+)$/.exec(name);
     if (concept) return raw(assetUrl(`/assets/concepts/${concept[1]}.glb`));
     return raw(assetUrl(`/assets/toycar/${name}.glb`));
   };
   return { raw, glb };
-}
-
-// DEV. `kit:<kit>/<model>` names a model from a Kenney kit the game does NOT
-// ship — the asset gallery's kit browser stages candidates on the showroom grid,
-// out of the local kit cache the server serves at /kits (npm run fetch:kits).
-// It is spelled as a MODEL NAME because that is all a car slot's `model` is: the
-// GLB to fetch, which never crosses the ABI, so nothing below this line — and
-// nothing in C++ — can tell a candidate from a shipped car.
-function kitPath(name) {
-  const m = /^kit:([\w-]+)\/([\w.-]+)$/.exec(name);
-  return m ? `/kits/${m[1]}/models/${m[2]}.glb` : null;
 }

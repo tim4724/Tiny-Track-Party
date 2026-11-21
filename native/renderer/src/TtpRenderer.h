@@ -209,23 +209,6 @@ public:
     void setModelVariant(const char* model, int variant);
     void setModelBench(const char* model);
 
-    // ---- the kit field (dev) ----------------------------------------------
-    // Stand `count` provided models — kit0.glb … kit<count-1>.glb — on clear
-    // ground beside the track, each seated on the surface at the size it would
-    // ship. That is the asset gallery's browser for the Kenney kits the game
-    // picks from: a sheet of preview renders can say what a model is, and only
-    // the field can say whether it belongs beside what already ships.
-    //
-    // Latched like the bench, and for the same reason — the field is meshed at
-    // buildScene. 0 builds no field, which is every caller but the gallery.
-    //
-    // kitFieldLayout() answers where they ended up: a JSON array in the same
-    // order, one {"d","h","w","x","y","z"} per model — its size, measured off
-    // its own glTF AABB, and the spot it stands on. The chrome frames a model
-    // from that, so the two cannot disagree about where one is or how big.
-    void setKitField(int count);
-    const char* kitFieldLayout() const { return mKitLayout.c_str(); }
-
     // ---- the set-piece layout (dev) ---------------------------------------
     // Where the track's set pieces ended up, for the landmark gallery's camera
     // (the shape is ttp_display_set_layout's). The footprint is mSetFeet's
@@ -367,7 +350,7 @@ public:
     // track, its dressing, the sky, the sun bake — is a function of `key`
     // (what the shim says the scene is OF: track, biome, showcase, backend)
     // plus the inputs latched on this class (shadows, the bench, the model
-    // variants, the kit field), whose setters drop it. The FIELD — the cars and
+    // variants), whose setters drop it. The FIELD — the cars and
     // everything sized by them — is a function of the roster. A join, a leave,
     // a launch or a restart on the same track changes only the field, so it is
     // all a build of a resident key pays (rebuildField); nothing static ever
@@ -2228,16 +2211,6 @@ private:
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
     int mModelVariant[4] = { 1, 1, 1, 4 };
     int mBenchModel = -1;
-    // The kit field: one asset per model (no instancing — every one of them is
-    // a different model, which is the point), and the layout the chrome reads
-    // back. Empty unless the gallery latched it on.
-    int mKitFieldCount = 0;
-    std::vector<filament::gltfio::FilamentAsset*> mKitAssets;
-    std::string mKitLayout = "[]";
-    // What ground the field ended up covering, so the horizon ring can leave it
-    // alone (see buildStatic). Inverted — max < min — when there is no
-    // field, which is every build but the gallery's.
-    float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
@@ -2446,10 +2419,9 @@ private:
     //
     // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
     // a byte-at-a-time FNV over the whole buffer, so consulting the cache
-    // re-read every model it was there to avoid re-reading. That is ~1.2 MB
-    // a build in play and tens of megabytes in the gallery's kit field. The name
-    // is exact because provideAsset is the only place an asset's bytes change,
-    // and it drops the entry.
+    // re-read every model it was there to avoid re-reading, ~1.2 MB a build
+    // in play. The name is exact because provideAsset is the only place an
+    // asset's bytes change, and it drops the entry.
     std::unordered_map<std::string, std::vector<std::string>> mAssetUriCache;
     std::vector<filament::MaterialInstance*> mSceneMatInstances;
 
@@ -2808,7 +2780,6 @@ private:
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
-    void buildKitField(const TrackBin& tb);
     void buildRoomRing(const TrackBin& tb);
     // The playroom's room (buildRoomRing), in world units: its walls stand
     // kRoomMargin past the lap's centreline on every side, kRoomH tall; a
@@ -2820,7 +2791,6 @@ private:
     static constexpr float kRoomSkirt = 2.2f, kRoomDado = 13.0f, kRoomRail = 0.7f;
     static constexpr float kRoomWinW = 34.0f, kRoomWinH = 24.0f, kRoomSill = 10.0f;
     static constexpr float kBuntPin = 16.0f, kBuntY = 31.0f, kBuntSag = 3.5f;
-    void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
     void buildSetPieces(const TrackBin& tb);

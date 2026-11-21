@@ -62,7 +62,8 @@ class GameProtocol private constructor(
     val carColors: List<String>,
 
     /**
-     * Kenney model base names, indexed by `carIndex`. The one roster field that
+     * Car model base names (scripts/toy_cars.py builds them), indexed by
+     * `carIndex`. The one roster field that
      * never crosses the display ABI — it names BYTES TO FETCH, a platform job.
      */
     val carModels: List<String>,

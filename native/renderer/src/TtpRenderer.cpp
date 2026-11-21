@@ -2571,7 +2571,6 @@ void TtpRenderer::releaseStatic() {
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
     for (auto*& a : mSetAssets) dropAsset(a);
-    for (auto*& a : mKitAssets) dropAsset(a);
     dropAsset(mBoxAsset);
     dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);
@@ -2614,7 +2613,6 @@ void TtpRenderer::releaseStatic() {
     mSetFeet.clear();
     mSetLayout = kNoSetLayout;
     mScatterLayout = "[]";
-    mKitAssets.clear();
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();

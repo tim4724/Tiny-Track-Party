@@ -19,8 +19,6 @@ public/assets/audio/_music-pool/
 # rebuilds it. They are a cache, not a source:
 #   music-masters/ the 256-320 kbps incompetech downloads the shipped VBR files
 #                  are encoded from (~164 MB) — `npm run fetch:music`
-#   kenney-kits/   the CC0 kits the game's models are styled after, for the
-#                  asset gallery's kit browser (~30 MB) — `npm run fetch:kits`
 .cache/
 # Local-only Claude Code state — keeps the .claude/ root committable for shared
 # project settings/hooks while excluding per-user runtime files (worktrees,
