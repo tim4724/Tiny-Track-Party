@@ -1096,9 +1096,7 @@ lap and no placement could be judged before it was built
 that see it, so a heavy one belongs where few cells look at once, and is
 priced on the box's 4P heavy seconds like any other geometry. A composed
 model whose node names point at two meshes is REFUSED by the merge and draws
-live-lit with nothing to say so, which is why `scripts/lib/glb-compose.mjs`
-renames them; a kit model shipped whole can carry the same flaw (the budget
-names it).
+live-lit with nothing to say so (the budget names it).
 
 **A set piece's MOVING PART is a node named `anim_...`** (the grammar is
 `ttp/set_motion.h`, the drawing `TtpRendererMotion.cpp`): baked unlit like
