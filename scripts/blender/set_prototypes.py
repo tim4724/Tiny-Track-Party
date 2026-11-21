@@ -14176,7 +14176,7 @@ def tractor(at, body=0xcf534f):
     box((1.4, 1.2, 1.3), (x - 0.8, y + 1.4, z), body)                   # under the cab
     for sx in (-1, 1):
         for sz in (-1, 1):
-            box((0.12, 1.3, 0.12), (x - 0.8 + sx * 0.6, y + 2.6, z + sz * 0.6), 0x2a2735)
+            box((0.12, 1.7, 0.12), (x - 0.8 + sx * 0.6, y + 2.4, z + sz * 0.6), 0x2a2735)   # down into the body's round
     box((1.7, 0.16, 1.6), (x - 0.8, y + 3.3, z), 'white')               # the cab's roof
     box((0.18, 1.0, 0.18), (x + 1.2, y + 2.0, z + 0.3), 0x2a2735)       # the exhaust
 
@@ -20208,7 +20208,7 @@ def mine_loco(at, yaw=0.0):
     box((1.2, 0.7, 2.0), at2(0, 0.75, 0.1), 0x3fa14e, yaw=yaw)
     box((1.3, 0.12, 2.2), at2(0, 0.42, 0.1), 'slate', yaw=yaw)
     for sx in (-1, 1):
-        box((0.12, 0.9, 0.12), at2(sx * 0.5, 1.55, -0.75), 'slate', yaw=yaw)
+        box((0.12, 1.2, 0.12), at2(sx * 0.5, 1.4, -0.75), 'slate', yaw=yaw)        # down into the body's round
     box((1.3, 0.14, 1.0), at2(0, 2.05, -0.6), 'red', yaw=yaw)
     box((0.4, 0.3, 0.2), at2(0, 1.0, 1.15), 'yellow', yaw=yaw)
     for sx in (-1, 1):
@@ -28675,12 +28675,12 @@ def pirate_ship():
     # so she rolls a few degrees on a slow period, which still swings the
     # masthead a unit, and heaves a little; the longboat bobs out of step.
     S, YAW, black = 0.65, 0.12, 0x38383d
-    LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; the main's aback, its mast behind it there
+    LONG, BRACE = 1.24, 0.75          # her yards braced round, the skull to the road; every sail aback, so from the road each hangs in front of its mast
     with animated('anim_sway:a=z:d=5:p=7.5+bob:h=0.12:p=5.2', (0.0, 0.0, 0.0), yaw=YAW):
         K = own_ship((0.0, -0.35 * S, 0.0), YAW, S, 'salmon', 'brown', stretch=LONG, ports=True)
         own_sail(K, S, YAW, 0.67, 3.3, 6.85, 2.2, black, mark=True, brace=BRACE, stretch=LONG, aback=True)   # (under her top: braced, a yard swings clear of it)
-        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.3, brace=BRACE, stretch=LONG, aback=True)
-        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=BRACE, stretch=LONG)
+        own_sail(K, S, YAW, 0.67, 7.95, 9.3, 1.5, black, belly=0.55, brace=BRACE, stretch=LONG, aback=True)
+        own_sail(K, S, YAW, -4.0, 4.9, 8.0, 1.9, black, belly=0.45, brace=BRACE, stretch=LONG, aback=True)
         poly([K(0.0, 4.5, 5.15), K(0.0, 3.3, 1.3), K(0.0, 8.6, 0.85)], [(0, 1, 2)], black)   # her jib
         for (z, _, head), k, p in zip(OWN_SHIP_MASTS, (0.55, 0.45), ('2.2#mast', '2.4#mizzen')):   # her colours at each masthead
             fx, fy, fz = K(0.0, head, z)
