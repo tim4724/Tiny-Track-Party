@@ -16938,22 +16938,23 @@ def park_engine(at, k=1.0, boiler='red', cab='green'):
     """A little tank engine facing +X on the rails at `at`: six wheels and
     their coupling rod, the footplate, a round boiler with its dome and
     chimney ahead, the cab with its roof and windows behind, buffers and a
-    lamp."""
+    lamp. Its blocks are rounded over like its riders' (r29edge_round), the
+    thin trim (rod, windows) left with the plain chamfer."""
     x, y, z = at
     park_wheels(x, y, z, k, (-0.5, 0.0, 0.5), 0.16, 0.26 * k)
     for s in (-1, 1):
         box((1.1 * k, 0.05 * k, 0.03 * k), (x, y + 0.13 * k, z + s * 0.37 * k), 'grey')        # the coupling rod
-    box((1.6 * k, 0.1 * k, 0.6 * k), (x, y + 0.34 * k, z), 'dark')                             # the footplate
+    r29edge_round(box((1.6 * k, 0.1 * k, 0.6 * k), (x, y + 0.34 * k, z), 'dark'))              # the footplate
     cyl(0.25 * k, 0.9 * k, (x - 0.2 * k, y + 0.64 * k, z), boiler, segs=10, axis='across', smooth=True)
     cyl(0.26 * k, 0.08 * k, (x + 0.7 * k, y + 0.64 * k, z), 'dark', segs=10, axis='across')    # the smokebox door
     cyl(0.09 * k, 0.3 * k, (x + 0.55 * k, y + 0.85 * k, z), 'dark', r2=0.12 * k, segs=8)       # the chimney
     cyl(0.1 * k, 0.14 * k, (x + 0.2 * k, y + 0.86 * k, z), 'yellow', segs=8)                   # the dome
-    box((0.5 * k, 0.62 * k, 0.6 * k), (x - 0.5 * k, y + 0.7 * k, z), cab)
-    box((0.62 * k, 0.07 * k, 0.7 * k), (x - 0.5 * k, y + 1.04 * k, z), 'dark')
+    r29edge_round(box((0.5 * k, 0.62 * k, 0.6 * k), (x - 0.5 * k, y + 0.7 * k, z), cab))
+    r29edge_round(box((0.62 * k, 0.07 * k, 0.7 * k), (x - 0.5 * k, y + 1.04 * k, z), 'dark'))
     for s in (-1, 1):
         box((0.26 * k, 0.2 * k, 0.02 * k), (x - 0.5 * k, y + 0.85 * k, z + s * 0.305 * k), 'sky')  # the cab's windows
-    box((0.06 * k, 0.12 * k, 0.6 * k), (x + 0.82 * k, y + 0.34 * k, z), 'red')                 # the buffer beam
-    box((0.1 * k, 0.1 * k, 0.1 * k), (x + 0.78 * k, y + 0.95 * k, z), 'yellow')                # the lamp
+    r29edge_round(box((0.06 * k, 0.12 * k, 0.6 * k), (x + 0.82 * k, y + 0.34 * k, z), 'red'))  # the buffer beam
+    r29edge_round(box((0.1 * k, 0.1 * k, 0.1 * k), (x + 0.78 * k, y + 0.95 * k, z), 'yellow')) # the lamp
 
 def park_coach(at, color, riders, k=1.0):
     """An open coach facing +X: four wheels, a low panelled body with its
@@ -16961,8 +16962,8 @@ def park_coach(at, color, riders, k=1.0):
     coach moves them)."""
     x, y, z = at
     park_wheels(x, y, z, k, (-0.42, 0.42), 0.14, 0.24 * k)
-    box((1.4 * k, 0.08 * k, 0.54 * k), (x, y + 0.3 * k, z), 'dark')
-    box((1.35 * k, 0.26 * k, 0.6 * k), (x, y + 0.47 * k, z), color)
+    r29edge_round(box((1.4 * k, 0.08 * k, 0.54 * k), (x, y + 0.3 * k, z), 'dark'))
+    r29edge_round(box((1.35 * k, 0.26 * k, 0.6 * k), (x, y + 0.47 * k, z), color))
     box((1.37 * k, 0.05 * k, 0.62 * k), (x, y + 0.6 * k, z), 'white')                          # the body's rail
     for n, shirt in enumerate(riders):
         dx = (0.33 - 0.66 * n) * k
