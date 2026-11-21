@@ -294,7 +294,7 @@ class Car:
         return body, children
 
 
-# The wheel every car rides on: a slate tyre with a chamfered shoulder, its
+# The wheel every car rides on: a slate tyre with a chamfered shoulder each side, its
 # outer face a white rim dished in to the hub, a six-sided nut standing out
 # of it (WHEEL_NUT). Turned about its axle in WHEEL_SIDES
 # flats and shaded round (the one round thing on a car), each ring of the
@@ -307,8 +307,9 @@ WHEEL_SECTION = (
     ((-0.6, 0.3), (-1.0, 0.48), WHITE),     # the dish, out to the rim
     ((-1.0, 0.48), (-1.0, 0.8), TYRE),      # the side wall
     ((-1.0, 0.8), (-0.6, 1.0), TYRE),       # the shoulder
-    ((-0.6, 1.0), (1.0, 1.0), TYRE),        # the tread, square to the back face: no one sees that edge
-    ((1.0, 1.0), (1.0, 0.0), TYRE),         # the back face
+    ((-0.6, 1.0), (0.6, 1.0), TYRE),        # the tread
+    ((0.6, 1.0), (1.0, 0.8), TYRE),         # the inner shoulder, as round as the outer (it shows as the car turns)
+    ((1.0, 0.8), (1.0, 0.0), TYRE),         # the back face
 )
 
 
