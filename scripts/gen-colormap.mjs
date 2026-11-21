@@ -28,6 +28,8 @@ const SIZE = 128, CELL_W = 16, CELL_H = 32;
 const SWATCHES = {
   ochre:    [0, 0, 0xdfb25a, 0xdfb25a, 0xb48234],
   snow:     [16, 0, 0xf8fcfe, 0xf8fcfe, 0xc2e1f6],
+  palmwood: [96, 0, 0xc09a72, 0xc09a72, 0x825c43],
+  palmleaf: [112, 0, 0x54b573, 0x54b573, 0x2f7a45],
   pink:     [0, 32, 0xf378f0, 0xf278f0, 0xa777e8],
   blossom:  [16, 32, 0xf6ccd4, 0xf6ccd4, 0xdca0b2],
   petal:    [32, 32, 0xfbecee, 0xfbecee, 0xecc9d2],
