@@ -11093,18 +11093,14 @@ def penguin_chute_build(apart):
             for j in range(len(PROF) - 1):
                 quads.setdefault(KIND[j], []).append([rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]])
         for kind, qs in quads.items():
-            o = colored_faces([('white' if kind == 'snow' else 'sky', q) for q in qs], 'trough')[0]
+            o = colored_faces([('white', q) for q in qs], 'trough')[0]
             for pl in o.data.polygons:                       # all of it faces up
                 if pl.normal.z < 0:
                     pl.flip()
-            if kind == 'wall':
-                rowed(o, 24)                                 # the ice's thickness, deep on the sky ramp
-            elif kind == 'worn':
-                rowed(o, 9)
-            elif kind == 'ice':
-                rowed(o, 4)
-            else:
+            if kind == 'snow':
                 snowy(o, 0.45)
+            else:                                            # the ice's thickness, the worn floor, the floor
+                iced(o, {'wall': 'slot', 'worn': 'shade', 'ice': 'lit'}[kind])
         # The hole the slide ends in: open water in a hole in the ice. Nothing
         # here can go under the ground, so the ICE stands over the water: a
         # shelf of ice round an uneven opening, its top a hand over the
@@ -11146,11 +11142,13 @@ def penguin_chute_build(apart):
                 if pl.normal.z < 0:
                     pl.flip()
             if kind == 'water':
-                rowed(o, 17)                                 # deep water: well down the blue ramp, short of its violet end
+                iced(o, 'water')                             # open water in the ice: its deepest turquoise
             elif kind == 'wall':
-                rowed(o, 27)                                 # the ice's thickness: the sky ramp's deep end
+                iced(o, 'slot')                              # the ice's thickness
+            elif kind == 'ice':
+                iced(o, 'lit')
             else:
-                snowy(o, 0.45 if kind == 'snow' else 0.3)
+                snowy(o, 0.45)
     draped('chute', static)
     # the watchers, every one alive (penguin_knot): two knots at the water's
     # edge facing the road, one lying on its belly to rest, two on the top,
@@ -11173,7 +11171,7 @@ def penguin_chute_build(apart):
     for n, (fx, fz, w, yw) in enumerate(((HOLE + 0.6, 0.7, 0.6, 0.4), (HOLE + 0.25, -0.95, 0.45, 1.3))):
         with animated('anim_drape+bob:h=0.025:p=%.1f+sway:a=y:d=7:p=%.1f#floe%d' % (2.6 + 0.7 * n, 7.0 + 2 * n, n),
                       (fx, 0.0, fz)):
-            snowy(cyl(w, 0.11, (fx, 0.02, fz), 0xd0e8ff, segs=5, yaw=yw, stem=True), 0.3)
+            iced(cyl(w, 0.11, (fx, 0.02, fz), 0xd0e8ff, segs=5, yaw=yw, stem=True), 'wall')
             snowy(cyl(w * 0.8, 0.04, (fx, 0.12, fz), 0xf3f7fb, segs=5, yaw=yw, stem=True), 0.45)
     RX = HOLE - 0.75
     with animated('anim_drape+bob:h=0.05:p=2.9#ripple', (RX, 0.0, 0.0)):
@@ -11490,12 +11488,17 @@ def glacier_airstrip(lite=False):
 # muted turquoise. In the sky and blue ramps a crevasse's slot and the
 # tongue's bands read as ultramarine painted on the snow (round 35).
 ICE = {'wall': ('ice', 6), 'slot': ('ice', 24), 'lit': ('ice', 6), 'shade': ('ice', 10),
-       'band_lit': ('ice', 16), 'band_shade': ('ice', 20)}
+       'band_lit': ('ice', 16), 'band_shade': ('ice', 20), 'turned': ('ice', 20), 'water': ('ice', 31)}
 
 def iced(o, part):
     """Paint `o` the ICE tone of `part` (its swatch, at its row)."""
     swatch, row = ICE[part]
     return rowed(paint(o, swatch), row)
+
+def iced_block(o):
+    """A block of ice built sky where it is lit and blue where it turns
+    from the sun (stone(rock=('sky', 'blue')), serac()): ICE's tones."""
+    return iced(o, 'lit' if o['swatch'] == 'sky' else 'turned')
 
 # The straight after the S-bend runs on a causeway a car's height and more over
 # the snow, flying over the run to the line, and nothing stood within six units
@@ -12799,7 +12802,7 @@ MORAINE = {
 
 def glacier_moraine(rows, seed):
     """A stretch of the terminal moraine: big slate erratics bedded in the
-    snow and blocks of blue ice among them, each at the ground sampled under
+    snow and blocks of ice among them, each at the ground sampled under
     it (a draped block on the near ramp's step stretches), a patch of snow
     draped so the piece levels nothing."""
     before = set(bpy.context.scene.objects)
@@ -12817,8 +12820,8 @@ def glacier_moraine(rows, seed):
         box((0.1, top + 0.3, 0.1), (x + lx * math.cos(yaw) + lz * math.sin(yaw), (top - 0.3) / 2,
                                       z - lx * math.sin(yaw) + lz * math.cos(yaw)), SNOW)['chamfer'] = 0
     for o in set(bpy.context.scene.objects) - before:
-        if o.get('swatch') in ('sky', 'blue'):     # the ice keeps its blue down the ramp
-            snowy(o, 0.35)
+        if o.get('swatch') in ('sky', 'blue'):     # the stranded ice
+            iced_block(o)
         elif o.get('swatch') == SHADE:             # the erratics' turned side, as the range's
             rowed(paint(o, ROCK), GLACIER_SHADE)
     join_still('moraine')
@@ -12857,11 +12860,11 @@ def glacier_nunatak():
         (2.5, -14.0, 4.6, 7.0, 1.4, 213.0, -0.2, (0.0, 0.05))), shade_row=GLACIER_SHADE)
 
 def serac(x, z, s, h, yaw, seed, lean=0.2):
-    """A serac: a tower of blue ice `h` tall on a foot `s` across, broken off
+    """A serac: a tower of ice `h` tall on a foot `s` across, broken off
     the glacier and left standing: five-sided, twisting and leaning a little
-    as it rises to a broken top, its foot sunk in the snow. Blue where a
-    facet catches the light, deep blue where it turns from it, snow on what
-    faces the sky."""
+    as it rises to a broken top, its foot sunk in the snow. Pale cyan where a
+    facet catches the light, turquoise where it turns from it (ICE), snow on
+    what faces the sky."""
     N = 5
     la = 2.1 * seed
     lx, lz = lean * s * math.cos(la), lean * s * math.sin(la)
@@ -12890,7 +12893,10 @@ def serac(x, z, s, h, yaw, seed, lean=0.2):
             col = 'sky' if n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2] > 0.2 else 'blue'
         polys.append((col, list(t)))
     for o in colored_faces(polys, 'serac'):
-        snowy(o, 0.45 if o['swatch'] == 'white' else 0.35)
+        if o['swatch'] == 'white':
+            snowy(o, 0.45)
+        else:
+            iced_block(o)
 
 def ice_crack(pts, w):
     """A short crevasse through the (x, z) points, `w` wide at its middle:
@@ -12949,7 +12955,7 @@ def glacier_seracs(key, lite=False):
             stone(x, z, s, 0.9 * i + seed, seed + 3.3 + 0.37 * i, squat=1.25, rock=('sky', 'blue'), y=-0.1 * s)
         for o in bpy.context.scene.objects:
             if o.name.startswith('stone') and o.get('swatch') in ('sky', 'blue'):
-                snowy(o, 0.35)
+                iced_block(o)
         for pts, w in (() if lite else cracks):
             ice_crack(pts, w)
     draped('seracs', build)
