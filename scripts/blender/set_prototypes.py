@@ -756,21 +756,27 @@ def bld_lamp(at, h=None, color='slate', glow=0xfde4c7, arm=0.0, row=0, globes=Fa
     with plain_parts():
         box((0.13 * k, 0.14 * k, 0.13 * k), (x, y + 0.07 * k, z), color)
         box((0.07 * k, h - 0.3 * k, 0.07 * k), (x, y + (h - 0.3 * k) / 2 + 0.1 * k, z), color)
-    rowed(box((0.17 * k, 0.17 * k, 0.17 * k), (x, y + h - 0.165 * k, z), glow), 0)
+    rowed(box((0.17 * k, 0.195 * k, 0.17 * k), (x, y + h - 0.1525 * k, z), glow), 0)   # up into its cap (round 34: a gap between)
     box((0.23 * k, 0.06 * k, 0.23 * k), (x, y + h - 0.03 * k, z), color)
 
 def bld_bench(at, yaw=0.0, color=0x9a7b55, seat=None, legs=0x4f5260):
     """THE bench, its seat `seat` up and three times that long, a back to
-    twice it over a gap; whoever sits on it faces +Z turned by `yaw`."""
+    twice it over a gap, held by an upright in the legs' colour rising
+    from the seat over each leg (round 34: the back floated over the seat,
+    joined to nothing); whoever sits on it faces +Z turned by `yaw`. The
+    box's (BOX_TIER) has no uprights: its back stands down on the seat."""
     seat = seat or BLD_SEAT * bld_u()
     k = seat / BLD_SEAT
     F = local(at[0], at[2], yaw)
     y = at[1]
+    gap = 0.0 if BOX_TIER else 0.025 * k
     with plain_parts():
         box((0.5 * k, 0.026 * k, 0.17 * k), F(0, y + seat - 0.013 * k, 0), color, yaw=yaw)
-        box((0.5 * k, 0.15 * k, 0.026 * k), F(0, y + seat + 0.1 * k, -0.07 * k), color, yaw=yaw)
+        box((0.5 * k, 0.175 * k - gap, 0.026 * k), F(0, y + seat + (0.175 * k + gap) / 2, -0.07 * k), color, yaw=yaw)
         for s in (-1, 1):
             box((0.026 * k, seat - 0.026 * k, 0.16 * k), F(s * 0.208 * k, y + (seat - 0.026 * k) / 2, 0), legs, yaw=yaw)
+            if not BOX_TIER:                              # (deeper than the back, through it: no face of the two in one plane)
+                box((0.022 * k, 0.18 * k, 0.05 * k), F(s * 0.208 * k, y + seat + 0.07 * k, -0.07 * k), legs, yaw=yaw)
 
 def bld_hedge(a, b, h=None, t=None, y0=0.0, color=0x4f9a48, sunk=0.0):
     """THE clipped hedge, `h` high and `t` thick, from (x, z) a to b."""
@@ -2245,17 +2251,18 @@ def lifeboat_station():
         DZ = BZ + 1.25
         bld_door((RX + 0.05, 0.0, DZ), 0.0, 0x339cf2, trim=white, w=0.6, h=1.06)      # (on the plinth's face)
         bld_window((RX, 1.0, BZ - 1.45), 0.0, w=0.58, h=0.44, trim=white)
-    # lifebuoys: over the great doors, and two on the road wall
+    # lifebuoys, against the wall over the great doors and two on the road
+    # wall: whole orange rings, round in section and shaded round (round 34:
+    # a square bar bent round, four white bands boxed over it, read as a
+    # cross holding it)
     for (at, axis) in (((BX, H + 0.55, GZ - 0.1), 'along'), ((RX + 0.1, 0.95, BZ - 0.35), 'across'),
                        ((RX + 0.1, 0.95, BZ + 0.4), 'across'))[:2 if LITE else 3]:
-        torus(0.3, 0.1, at, orange, segs=8 if LITE else 12, axis=axis)
-        with plain_parts():
-            for (u, v) in ((0.3, 0.0), (-0.3, 0.0), (0.0, 0.3), (0.0, -0.3)):             # its white bands
-                wu, wv = (0.32, 0.13) if u else (0.13, 0.32)
-                if axis == 'along':
-                    box((wu, wv, 0.3), (at[0] + u, at[1] + v, at[2]), white)
-                else:
-                    box((0.3, wv, wu), (at[0], at[1] + v, at[2] + u), white)
+        bpy.ops.mesh.primitive_torus_add(major_radius=0.3, minor_radius=0.1, major_segments=10 if LITE else 14,
+                                         minor_segments=6)
+        o = bpy.context.active_object
+        o.rotation_euler = (math.radians(90), 0, 0) if axis == 'along' else (0, math.radians(90), 0)
+        o.location = P(*at)
+        rprop_round(paint(o, orange))
     # the rescue boards in their rack by the doors' corner, their noses up
     with plain_parts():
         for z in (GZ + 0.25, GZ + 1.0):
@@ -7373,7 +7380,8 @@ def shellfish_shack():
     # under a striped awning, a red crab cut from board on the ridge, the
     # boiler's flue smoking thin behind; a heap of shells at one end, crates
     # at the other, a table under an umbrella before it and its flag. +X is
-    # the road; it runs along it (+Z).
+    # the road; it runs along it (+Z). It lies on its rise of sand (tracks.js),
+    # which climbs from the kerb.
     white, red, wood = 0xfff6eb, 0xff5040, 0x9a7b55
     HX, HW, HD, HH, RH = -1.3, 1.8, 2.6, 1.2, 0.6
     gabled_house(HX, 0.0, HW, HD, HH, RH, white, 0xcf534f)
@@ -7408,7 +7416,7 @@ def shellfish_shack():
         # the board with the day's catch chalked up
         box((0.06, 0.7, 0.5), (1.4, 0.36, 1.3), 0x38383d, roll=0.2)
         box((0.06, 0.7, 0.5), (1.15, 0.36, 1.3), wood, roll=-0.2)
-    marker('anim_smoke:s=0.4', (HX - 0.5, RY + 0.7, -0.7))
+    marker('anim_drape+smoke:s=0.4', (HX - 0.5, RY + 0.7, -0.7))                # (draped: it lies on its rise)
     umbrella((TX, 0.0, TZ), 0.8, 1.35, (red, white), gores=8)
     # the shells: the day's emptied by the door in a low heap, each shell a
     # fan a hand across in its own pale shade, tumbled every way, two fish
@@ -7433,7 +7441,7 @@ def shellfish_shack():
     join_still('shack')
     def walk():
         beach_walk([(3.3, 0.0), (0.0, 0.0)], w=0.9)
-        beach_walk([(1.5, -0.5), (1.5, -2.5)], w=1.7)
+        beach_walk([(0.65, -1.5), (2.35, -1.5)], w=2.0)    # the table's, its planks along the road: each lies along its rise
     draped('floor', walk)
     lie_on_land()
 
@@ -19524,22 +19532,25 @@ lite_too('hull-arch', 'dune-foot', 'tide-wrack', 'wreck-buoy', 'storm-adrift')
 
 # ---- round 24: Cove's own gun, its treasure, a gate, a prize, parrots ----
 
-def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
+def cove_cannon(at, yaw=0.0, k=1.0):
     """Cove's gun, the one model wherever the crew have one (round 24: the
-    kit's two cannon and a third of ours stood on one lap): a ship's gun on
-    its truck, the muzzle to local +Z turned by `yaw` (box()'s sense). An
+    kit's two cannon and a third of ours stood on one lap; round 34: the
+    scatter's by the road too, which stood without its trunnions, its
+    barrel hung over the truck touching nothing): a ship's gun on its
+    truck, the muzzle to local +Z turned by `yaw` (box()'s sense). An
     iron barrel tapering from the breech ring to the muzzle's swell, two
     bands round it and the cascabel behind; a timber truck of a bed and two
-    stepped cheeks the trunnions lie on, on four small wheels. A car and a
-    half long at k = 1, its wheels on the ground at `at`. `bare` leaves
-    out her axles, trunnions and cascabel (the scatter's prop). The iron and
-    the wheels are shaded round (round 28: the Kenney gun's), crisp at
-    their ends; round 28 fix: each wheel's faces rounded over into its
-    tread (fixprop_wheel), ten sides to the iron, the bore dark in the
-    muzzle (an eight-sided cap on each read as a flat facet)."""
+    stepped cheeks, the trunnions seated on their steps, on four small
+    wheels. A car and a half long at k = 1, its wheels on the ground at
+    `at`. The iron and the wheels are shaded round (round 28: the Kenney
+    gun's), crisp at their ends; round 28 fix: each wheel's faces rounded
+    over into its tread (fixprop_wheel), ten sides to the iron, the bore
+    dark in the muzzle (an eight-sided cap on each read as a flat facet).
+    The box's (LITE) leaves out the bands, the hubs, the cascabel and the
+    axles under the bed, and rounds the iron in eight sides."""
     x0, y0, z0 = at
     iron, band, wood = 0x38383d, 0x4f5260, 0xb06041
-    segs = 10                                             # (shaded round, ten sides cost what six flat ones did)
+    segs = 8 if LITE else 10                              # (shaded round, ten sides cost what six flat ones did)
     def W(lx, ly, lz):
         x, z = turned(x0, z0, yaw, lx * k, lz * k)
         return (x, y0 + ly * k, z)
@@ -19551,15 +19562,15 @@ def cove_cannon(at, yaw=0.0, k=1.0, bare=False):
         b((0.11, 0.14, 0.52), sx * 0.235, 0.47, 0.19, wood)
     with plain_parts():
         for lz in (-0.4, 0.3):
-            if not bare:
+            if not LITE:
                 b((0.7, 0.07, 0.07), 0.0, 0.18, lz, iron)                        # an axle
             for sx in (-1, 1):
                 own_shell('wheel', fixprop_wheel(W(sx * 0.375, 0.18, lz), 0.18 * k, 0.055 * k, 'bark', 'wheel', yaw, 8 if LITE else 10, (5, 7)), smooth=True)
                 if not LITE:
                     b((0.14, 0.08, 0.08), sx * 0.375, 0.18, lz, iron)
-        if not bare:
-            b((0.64, 0.09, 0.09), 0.0, 0.6, 0.1, iron)                           # the trunnions
-            b((0.12, 0.12, 0.12), 0.0, 0.62, -0.68, iron)                        # the cascabel
+        b((0.64, 0.09, 0.09), 0.0, 0.58, 0.1, iron)                              # the trunnions, seated on the steps (their tops 0.54)
+        if not LITE:
+            b((0.12, 0.12, 0.12), 0.0, 0.62, -0.61, iron)                        # the cascabel, against the breech
     Z0, Z1, Y0, Y1 = -0.56, 0.8, 0.62, 0.71
     def bore(lz):
         return Y0 + (Y1 - Y0) * (lz - Z0) / (Z1 - Z0)
@@ -19806,9 +19817,12 @@ def macaw_on_the_wing(at, k=1.0, tag='m', beat=0.0):
     at 1.3): red body and head,
     the white cheek, a hooked yellow bill, a long tail of red run out to
     blue, and a macaw's wings, red at the shoulder, a yellow band, blue
-    flight feathers. The wings beat about the body's own line (each a part
-    riding the bird, `beat` of a stroke out of step with the next bird's);
-    on the box (LITE) they are held spread, one part with the body."""
+    flight feathers. The wings beat as a macaw's do, all the way, quick
+    and shallow and mostly below the body's line: held a little down at
+    rest, they swing either side of that four times a second (each a part
+    riding the bird, `beat` of a stroke out of step with the next bird's;
+    round 34: a slow even sweep about the body's line read as a toy's). On
+    the box (LITE) they are held spread, one part with the body."""
     x, y, z = at
     red, gold, blue, white = 0xcf534f, 0xffc044, 0x339cf2, 0xf8f8fb
     Z, X = (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
@@ -19822,23 +19836,55 @@ def macaw_on_the_wing(at, k=1.0, tag='m', beat=0.0):
     loft([q(0.21, 0.022, -0.042), q(0.21, 0.022, 0.042)], r((0.016, 0.016), (0.016, 0.016)), white, X, 4)
     loft([q(-0.1, 0.0), q(-0.28, -0.005), q(-0.44, -0.02)], r((0.03, 0.016), (0.022, 0.012), (0.01, 0.006)), red, Z, 4)
     loft([q(-0.4, -0.016), q(-0.52, -0.03)], r((0.014, 0.008), (0.006, 0.005)), blue, Z, 4)
+    c, s = math.cos(math.radians(12)), math.sin(math.radians(12))
     def wing(sd):
-        root, mid, tip = q(0.04, 0.02, sd * 0.03), q(0.02, 0.05, sd * 0.15), q(-0.03, 0.03, sd * 0.3)
-        loft([root, q(0.03, 0.04, sd * 0.09)], r((0.07, 0.014), (0.075, 0.012)), red, X, 4)
-        loft([q(0.03, 0.04, sd * 0.09), mid], r((0.075, 0.012), (0.07, 0.011)), gold, X, 4)
+        def w(dx, dy, dz):                              # a point of the wing, held 12 degrees down about the shoulder
+            ey, ez = dy - 0.02, dz - sd * 0.03
+            return q(dx, 0.02 + ey * c - sd * ez * s, sd * 0.03 + sd * ey * s + ez * c)
+        root, mid, tip = w(0.04, 0.02, sd * 0.03), w(0.02, 0.05, sd * 0.15), w(-0.03, 0.03, sd * 0.3)
+        loft([root, w(0.03, 0.04, sd * 0.09)], r((0.07, 0.014), (0.075, 0.012)), red, X, 4)
+        loft([w(0.03, 0.04, sd * 0.09), mid], r((0.075, 0.012), (0.07, 0.011)), gold, X, 4)
         loft([mid, tip], r((0.07, 0.011), (0.03, 0.008)), blue, X, 4)
     for sd in (-1, 1):
         if LITE:
             wing(sd)
         else:
-            with animated('anim_sway:a=x:d=26:p=0.46:o=%g#%s%d' % ((beat + 0.25 * (1 - sd)) % 1.0, tag, sd + 1), q(0.04, 0.02, sd * 0.03)):
+            with animated('anim_sway:a=x:d=22:p=0.24:o=%g#%s%d' % ((beat + 0.25 * (1 - sd)) % 1.0, tag, sd + 1), q(0.04, 0.02, sd * 0.03)):
                 wing(sd)
+
+def smooth_loop(ctrl, step):
+    """A closed curve through the points `ctrl` [(x, y, z)], a point about
+    every `step` along it: a centripetal Catmull-Rom, which neither loops
+    nor overshoots where its points crowd. A path walked straight from
+    point to point turns its traveller round each in a blink."""
+    def mix(a, b, ta, tb, t):
+        return tuple(a[j] + (b[j] - a[j]) * (t - ta) / (tb - ta) for j in range(3))
+    n, dense = len(ctrl), []
+    for i in range(n):
+        p0, p1, p2, p3 = ctrl[i - 1], ctrl[i], ctrl[(i + 1) % n], ctrl[(i + 2) % n]
+        t1 = math.dist(p0, p1) ** 0.5
+        t2 = t1 + math.dist(p1, p2) ** 0.5
+        t3 = t2 + math.dist(p2, p3) ** 0.5
+        for k in range(32):
+            t = t1 + (t2 - t1) * k / 32
+            a1, a2, a3 = mix(p0, p1, 0.0, t1, t), mix(p1, p2, t1, t2, t), mix(p2, p3, t2, t3, t)
+            dense.append(mix(mix(a1, a2, 0.0, t2, t), mix(a2, a3, t1, t3, t), t1, t2, t))
+    run = [0.0]
+    for i in range(len(dense)):
+        run.append(run[-1] + math.dist(dense[i], dense[(i + 1) % len(dense)]))
+    out, j, m = [], 0, max(3, round(run[-1] / step))
+    for q in range(m):
+        d = run[-1] * q / m
+        while run[j + 1] < d:
+            j += 1
+        out.append(mix(dense[j], dense[(j + 1) % len(dense)], run[j], run[j + 1], d))
+    return out
 
 # The parrots' way in their piece's frame (tracks.js stands it astride the
 # road where two of the island's groves face each other over it): out of the
 # palms on the island's side, over the road well clear of a car and its
 # camera, into the palms on the beach's, and back a little further on.
-# (x, y over the plain, z), a closed loop.
+# (x, y over the plain, z), the points a closed curve runs through.
 # (Round 25: two units higher they were red specks from the seat. The road's
 # crossing clears the highest eye the chase rig takes, 2.1, by two units.)
 COVE_PARROTS = ((11.4, 6.6, -2.0), (7.5, 5.4, -1.0), (2.0, 4.3, 1.0), (-3.5, 4.0, 3.4), (-7.6, 4.1, 5.6), (-9.2, 4.5, 7.6),
@@ -19851,12 +19897,24 @@ def parrot_crossing():
     # the piece: nothing of it stands on the ground but a speck that tells
     # the renderer it levels nothing (tidepool_foot's). A flier is built on
     # the floor under its loop and drawn only on its way (hawk_circle()).
-    for i, p in enumerate(COVE_PARROTS):
+    # They fly as birds do: along a smooth curve, banked into its turns
+    # (f=3), the body lifting a little on each downstroke (the bob, a
+    # quarter of a beat on from its wings); a pair side by side, the second
+    # a little back and higher (round 34: on a line of straight legs they
+    # swung flat round each corner in a blink, the pair one behind the other
+    # in the same track).
+    loop = smooth_loop(COVE_PARROTS, 0.4)
+    for i, p in enumerate(loop):
         marker('path_parrots_%d' % i, p)
-    x0, _, z0 = COVE_PARROTS[0]
-    for n, o in enumerate((0.0, 0.5) if LITE else (0.0, 0.045, 0.5)):
-        with animated('anim_path:c=parrots:p=17:f=1:o=%.3f#p%d' % (o, n), (x0, 0.07, z0)):
-            macaw_on_the_wing((x0, 0.07, z0), k=1.8, tag='w%d' % n, beat=0.37 * n)
+    x0, _, z0 = loop[0]
+    # (how far on, how much higher, how far to the right; each bird is built
+    # on the floor, a higher one's pivot sunk under it)
+    birds = ((0.0, 0.0, 0.0), (0.012, 0.15, 1.2), (0.5, 0.0, 0.0))
+    for n, (o, up, side) in enumerate(birds[::2] if LITE else birds):
+        beat = 0.37 * n
+        with animated('anim_path:c=parrots:p=17:f=3:o=%.3f+bob:h=0.035:p=0.24:o=%.3f#p%d' % (o, (beat + 0.25) % 1.0, n),
+                      (x0, 0.07 - up, z0)):
+            macaw_on_the_wing((x0, 0.07, z0 + side), k=1.8, tag='w%d' % n, beat=beat)
     def foot():
         with plain_parts():
             box((0.3, 0.3, 0.3), (x0, -0.6, z0), 'slate')
@@ -28090,8 +28148,9 @@ def own_pirate_crate():
 
 @own_model('pirate-cannon')
 def own_pirate_cannon():
-    with lite_parts(True):                                # the box's gun: a prop's cost
-        cove_cannon((0.0, 0.0, 0.0), k=1.25, bare=True)
+    # the bay battery's gun, the one model (round 34: a barer one, its
+    # barrel hung over the truck, read as a lesser cannon)
+    cove_cannon((0.0, 0.0, 0.0), k=1.25)
     join_still('cannon')
 
 @own_model('pirate-chest')
