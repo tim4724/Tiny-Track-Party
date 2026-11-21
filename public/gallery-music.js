@@ -447,9 +447,25 @@ function paintSongs() {
   } else if (draft) {
     body.appendChild(para('mu-aside', 'The draft has no pick for this track.'));
   }
-  section(`Shipped today · ${pool.fallback ? 'fallback' : cup.name} pool`, pool.songs, [],
-          [para('mu-aside', pool.fallback ? 'This cup has no songs of its own: a race plays the fallback pool.'
-                                          : 'A race on this track plays one of these, at random.')]);
+  // Each shipped song's fate under one song per track: the track(s) it goes to
+  // (a saved pick, else the draft's), or REMOVED when no track keeps it.
+  const goesTo = new Map();
+  for (const t of TRACK_LIST) {
+    const k = (picks[t.id] && picks[t.id].song) || (draftFor.get(t.id) || {}).song;
+    if (k) goesTo.set(k, [...(goesTo.get(k) || []), t.name]);
+  }
+  const h = document.createElement('h3');
+  h.textContent = `Shipped today · ${pool.fallback ? 'fallback' : cup.name} pool`;
+  body.appendChild(h);
+  body.appendChild(para('mu-aside', pool.fallback ? 'This cup has no songs of its own: a race plays the fallback pool.'
+    : 'A race on this track plays one of these, at random. With one song per track, each goes where a pick (or the draft) puts it; "removed" means no track keeps it.'));
+  for (const k of pool.songs) {
+    const to = goesTo.get(k);
+    const row = songRow(k, to ? [['shipped', `→ ${to.join(', ')}`]] : [['missing', 'removed']]);
+    if (!to) row.classList.add('is-dropped');
+    body.appendChild(row);
+    shown.add(k);
+  }
 
   // Everything else, a click away.
   const more = document.createElement('details');
