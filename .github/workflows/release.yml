@@ -32,7 +32,8 @@ name: Release
 # once on main first. Caches written on the default branch are what tag runs
 # restore.
 #
-# Secrets (repo Settings > Secrets and variables > Actions):
+# Secrets (Settings > Environments > release, which admits only main and
+# release tags, so no other branch can read them):
 #   ANDROID_KEYSTORE_B64       base64 of the upload keystore .jks
 #   ANDROID_KEYSTORE_PASSWORD  keystore store password
 #   ANDROID_KEY_ALIAS          key alias (tinytrack-tv)
@@ -58,6 +59,7 @@ permissions:
 jobs:
   androidtv:
     runs-on: ubuntu-latest
+    environment: release
     # A cache miss means building Filament for two ABIs plus the host tools.
     # The cap is the job limit, not an estimate: a hit finishes in minutes.
     timeout-minutes: 360
@@ -378,7 +380,8 @@ jobs:
   # testing needs a beta review in the console. So there is nothing here that
   # corresponds to the tv:tv / alpha split above, and no status to choose.
   #
-  # Secrets (repo Settings > Secrets and variables > Actions):
+  # Secrets (Settings > Environments > release, which admits only main and
+  # release tags, so no other branch can read them):
   #   APPLE_DIST_CERT_P12_B64   base64 of an Apple Distribution certificate +
   #                             private key, exported from Keychain as .p12
   #   APPLE_DIST_CERT_PASSWORD  the password that .p12 was exported with
@@ -407,6 +410,7 @@ jobs:
   # which selects them by PROVISIONING_PROFILE_SPECIFIER.
   tvos:
     runs-on: macos-latest
+    environment: release
     # A cache miss means building Filament for two tvOS SDKs plus the partial
     # desktop build it needs for matc. The cap is the job limit, not an
     # estimate: a hit finishes in minutes.
