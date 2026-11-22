@@ -1944,9 +1944,11 @@ export function runDisplayScenario(opts, ctx) {
       // a new piece while free) where High's wide framing would stand (not
       // High's fitted lens: a step back in a 12-degree view loses the piece).
       // Either way at the free camera's own lens.
-      function openFree() {
+      // `fresh`: frame the focused piece from above it rather than carry on
+      // from the picture the view stood (a piece picked in the free view).
+      function openFree(fresh = false) {
         const p = pieceFor(0);
-        const pose = poses[0] || (p ? framedPose(p, highDir(p), HIGH_PITCH) : topPose(16 / 9));
+        const pose = (!fresh && poses[0]) || (p ? framedPose(p, highDir(p), HIGH_PITCH) : topPose(16 / 9));
         const d = { x: pose.target.x - pose.eye.x, y: pose.target.y - pose.eye.y,
                     z: pose.target.z - pose.eye.z };
         const start = { eye: pose.eye, yaw: Math.atan2(d.x, d.z),
@@ -2722,7 +2724,7 @@ export function runDisplayScenario(opts, ctx) {
           focusAt = (((i | 0) % n) + n) % n;
           placeAt = 0;
           unturn();
-          if (mode === 'free') openFree();
+          if (mode === 'free' || (mode === 'race' && race.cam === 'free')) openFree(true);   // the free camera stays, over the piece
           aim();
           return focusAt;
         },
@@ -2733,7 +2735,7 @@ export function runDisplayScenario(opts, ctx) {
           const n = marks.length ? marks[focusAt].indices.length : 1;
           placeAt = (((k | 0) % n) + n) % n;
           unturn();
-          if (mode === 'free') openFree();
+          if (mode === 'free' || (mode === 'race' && race.cam === 'free')) openFree(true);
           aim();
           return placeAt;
         },

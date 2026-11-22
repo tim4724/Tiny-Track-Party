@@ -1311,11 +1311,12 @@ function drawDiff() {
     + 'Hover a renderer line for where it is in the code.'));
   diffBox.replaceChildren(...out);
 }
-// A Differences row: its piece in the orbit view, in both stages; at the first
-// placement Lite leaves out, where it leaves one out.
+// A Differences row: its piece in both stages, at the first placement Lite
+// leaves out where it leaves one out; in the orbit view, or under the free
+// camera where that is on (it moves over the piece and stays free).
 async function frameDiff(p) {
   if (!lm) return;
-  await pickView('orbit');
+  if (state.view !== 'free' && !(inRace() && lm.race().cam === 'free')) await pickView('orbit');
   const i = lm.landmarks().findIndex((m) => m.model === p.model);
   if (i < 0) return;
   lm.focus(i);
