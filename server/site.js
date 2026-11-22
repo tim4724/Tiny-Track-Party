@@ -46,7 +46,7 @@ const JSON_ROUTES = {
 // controller. Route prefixes and the usual crawler/legal words are not codes,
 // so they 404 instead of opening a controller for a room that cannot exist.
 const RESERVED_SEGMENTS = [
-  'display', 'controller', 'shared', 'assets', 'partyplug', 'gallery',
+  'display', 'controller', 'shared', 'bundle', 'assets', 'partyplug', 'gallery',
   'trailer', 'kits',
   'api', 'health', 'privacy', 'about', 'terms', 'robots', 'sitemap', 'favicon',
   'licenses', 'licences', 'credits', 'imprint', 'legal'

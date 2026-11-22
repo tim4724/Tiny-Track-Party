@@ -22,7 +22,7 @@
 // storage-cleared origin), a quota refusal and a failed delete all mean the same
 // thing: compute it again. Every road out is a null or a no-op.
 
-import { assetUrl } from '../../shared/assetUrl.js';
+import { engineUrl } from '../nativeRuntime.js';
 
 // `-bake` is the name of the one store there is, kept so the databases already
 // on players' machines stay reachable rather than orphaned.
@@ -39,7 +39,7 @@ const DB_VERSION = 1;
  */
 let generationPromise = null;
 function generation() {
-  generationPromise ??= fetch(assetUrl('/display/engine/native/BUILD_STAMP.json'))
+  generationPromise ??= fetch(engineUrl('BUILD_STAMP.json'))
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => (typeof j?.sourceHash === 'string' && j.sourceHash) || null)
     .catch(() => null)

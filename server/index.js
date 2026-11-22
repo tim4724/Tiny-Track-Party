@@ -16,12 +16,16 @@ const zlib = require('zlib');
 const site = require('./site.js');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
-const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+// SERVE_SITE=1 serves site/ instead, the tree scripts/build-site.mjs made and
+// the deployed hosts serve: the E2E suite runs against that, so against the
+// bundles players get (playwright.config.js builds it first).
+const SERVE_SITE = !!process.env.SERVE_SITE;
+const PUBLIC_DIR = path.join(__dirname, '..', SERVE_SITE ? 'site' : 'public');
 const REVIEW_DIR = path.join(__dirname, '..', 'scratch', 'review');
 const REVIEW_NOTE_MAX = 48 * 1024 * 1024;
 // partyplug (the transport kit) lives OUTSIDE public/ as a clearly-separate
-// vendored dependency, served via the remap below. Restricted to .js so
-// package artifacts / binaries can't be walked.
+// vendored dependency, served via the remap below (site/ carries its own
+// copy). Restricted to .js so package artifacts / binaries can't be walked.
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
 
 // The working tree's HEAD, for the version label ('' without git).
@@ -270,7 +274,7 @@ const server = http.createServer((req, res) => {
 
   let baseDir = PUBLIC_DIR;
   let lookupPath = urlPath;
-  if (urlPath.startsWith('/partyplug/')) {
+  if (!SERVE_SITE && urlPath.startsWith('/partyplug/')) {
     if (!/^\/[\w.-]+\.js$/.test(urlPath.slice('/partyplug'.length))) { res.writeHead(404); res.end('Not Found'); return; }
     baseDir = PARTYPLUG_DIR;
     lookupPath = urlPath.slice('/partyplug'.length);

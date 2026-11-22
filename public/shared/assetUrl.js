@@ -1,7 +1,8 @@
 // assetUrl — resolve a root-absolute site path ('/assets/…', '/display/…')
 // against THIS MODULE's location instead of the document. On the web the two
 // are identical (this file serves from /shared/, one level below the site
-// root), so nothing about the served game changes.
+// root, and the apps' bundles from /bundle/, which is flat for that reason),
+// so nothing about the served game changes.
 //
 // The difference appears wherever the tree is hosted under a PREFIX: the
 // document root is then not the game root, and every document-absolute path

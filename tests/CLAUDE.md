@@ -186,9 +186,10 @@ anything when code moved — a mutation whose anchor is gone cannot fail.
 ## E2E
 
 `tests/e2e/` drives real display + controller pages against a local relay stub via
-the server's `RELAY_URL`, so it needs no production relay. Import `test`/`expect`
-from `tests/e2e/helpers.js` (it reaps leaked phone contexts), and run
-`npx playwright install chromium webkit` once.
+the server's `RELAY_URL`, so it needs no production relay. The pages are
+`site/`'s, built by the run itself, so a spec sees the bundles players get.
+Import `test`/`expect` from `tests/e2e/helpers.js` (it reaps leaked phone
+contexts), and run `npx playwright install chromium webkit` once.
 
 **The suite is Chromium, and the phone's audience is not.** No project is
 declared, so every spec runs on Chromium — while the controller's real users are

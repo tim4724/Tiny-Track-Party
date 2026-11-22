@@ -8,7 +8,7 @@ test('phone-sized visit gets the chooser and defers the engine boot', async ({ b
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
   const engineFetches = [];
-  page.on('request', (r) => { if (/\/engine\/native\/.*\.(wasm|filamat)$/.test(r.url())) engineFetches.push(r.url()); });
+  page.on('request', (r) => { if (/\/engine\/[^/]+\/.*\.(wasm|filamat)$/.test(r.url())) engineFetches.push(r.url()); });
   await page.goto('/');
 
   await page.waitForSelector('#device-choice', { state: 'visible' });

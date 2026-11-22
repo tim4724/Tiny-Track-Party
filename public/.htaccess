@@ -33,7 +33,7 @@ RewriteRule ^api/([\w-]+)$ api/$1.json [END]
 
 # Room join links (/<CODE>?pbp=web#<instance>) serve the controller, except
 # server/site.js's RESERVED_SEGMENTS, which 404 (tests/site.test.js).
-RewriteCond $1 !^(display|controller|shared|assets|partyplug|gallery|trailer|kits|api|health|privacy|about|terms|robots|sitemap|favicon|licenses|licences|credits|imprint|legal)$ [NC]
+RewriteCond $1 !^(display|controller|shared|bundle|assets|partyplug|gallery|trailer|kits|api|health|privacy|about|terms|robots|sitemap|favicon|licenses|licences|credits|imprint|legal)$ [NC]
 RewriteRule ^([A-Za-z0-9_-]{1,24})/?$ controller/index.html [END]
 
 # Types a stock mime.types may lack. The engine's correct type is what enables
@@ -77,12 +77,18 @@ Header always set Content-Security-Policy "default-src 'self'; script-src 'self'
   Header always edit Content-Security-Policy "frame-ancestors 'none'" "frame-ancestors 'self'"
 </If>
 
-# Caching. Code is never stored: a page restored by Back reuses cached
-# subresources WITHOUT revalidating, even under no-cache, and old scripts beside
-# a freshly fetched engine fail the boot's ABI checks. CSS too, as its ?v= is
-# the app version, which deploys do not bump. Everything else revalidates by
-# Last-Modified. No "always", so errors aren't cached.
+# Caching. Code under its own name is never stored: a page restored by Back
+# reuses cached subresources WITHOUT revalidating, even under no-cache, and old
+# scripts beside a freshly fetched engine fail the boot's ABI checks. CSS too,
+# as its ?v= is the app version, which deploys do not bump. Code named by its
+# content (scripts/build-site.mjs: the two apps' bundles, scripts and styles,
+# and the engine's folder) is kept for good, as a page can only ever name the
+# set it was built with. Everything else revalidates by Last-Modified. No
+# "always", so errors aren't cached.
 Header set Cache-Control "no-cache"
 <FilesMatch "\.(html|js|mjs|wasm|filamat|css)$">
   Header set Cache-Control "no-store"
 </FilesMatch>
+<If "%{REQUEST_URI} =~ m#(\.[0-9A-Z]{8}\.(js|css)(\.map)?|^/display/engine/[0-9A-Z]{8}/[^/]+)$#">
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</If>

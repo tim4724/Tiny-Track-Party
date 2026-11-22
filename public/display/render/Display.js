@@ -19,7 +19,7 @@
 // cellCards and dividers — and it is two latched setters, not a stream. No size
 // crosses: both size themselves off the cell, which C++ already owns.
 
-import { loadNativeRuntime, nativeError } from '../nativeRuntime.js';
+import { loadNativeRuntime, nativeError, engineUrl } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
 import { assetUrl } from '../../shared/assetUrl.js';
 import { ITEM_IDS } from '../engine/contract.js';
@@ -234,7 +234,7 @@ export class Display {
       throw new Error('ttp_display_create failed (no WebGL2 context?)');
     }
     await Promise.all(MATERIALS.map(async (name) => {
-      const res = await fetch(assetUrl(`/display/engine/native/${name}.filamat`));
+      const res = await fetch(engineUrl(`${name}.filamat`));
       if (res.ok) d.provide(`${name}.filamat`, new Uint8Array(await res.arrayBuffer()));
     }));
     // The disk tier. AUTOMATION GETS NONE,

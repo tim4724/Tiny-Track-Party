@@ -17,7 +17,8 @@
        (modulepreload doesn't follow a module's own imports). The .wasm itself is
        deliberately NOT preloaded: the glue fetches it with credentials
        'same-origin', which a `preload as=fetch crossorigin` request would not
-       match — the browser would download all 2.7 MB of it twice. -->
+       match — the browser would download all 2.7 MB of it twice.
+       scripts/build-site.mjs renames the folder in this path. -->
   <link rel="modulepreload" href="/display/engine/native/ttp_runtime.mjs" />
   <!-- The phone landing's picture (#device-choice) is its largest paint, and as
        a lazy image it would not be asked for until the stylesheets had loaded
@@ -31,6 +32,7 @@
         media="(max-width: 700px), (max-height: 500px)" />
   <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
   <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
+  <link rel="stylesheet" href="/shared/debugPanel.css?v=__APP_V__" />
 
   <!-- Transport + shared contract: classic scripts set window globals BEFORE
        the deferred module entry runs. `defer` keeps that order (deferred

@@ -24,7 +24,7 @@ npm run test:native               # Native conformance: builds, then runs ctest 
 npm run test:native -- -R raceflow    # One ctest by name
 npm run test:native -- -R "^record_"  # Re-record roundtrips (byte identity)
 node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
-npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
+npm run test:e2e                  # Playwright E2E (builds site/, real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
 npm run check:blob-cache          # Do blobs kept between RUNS survive the round
@@ -85,6 +85,13 @@ WebRTC fastlane. Every deployed host is static: Apache serving `site/`
 (`scripts/build-site.mjs`) under `public/.htaccess`. `server/index.js` is the
 local twin for dev and E2E, and what both must agree on lives in
 `server/site.js`. No game logic and no WebSocket on either.
+
+In `site/` the code the two apps load is **named by its content** and cached
+for good: one esbuild bundle per app, the scripts and stylesheets their pages
+name, and the engine's folder (`build-site.mjs`'s header has the layout). Dev
+serves the sources as they are; the E2E suite runs against `site/`
+(`SERVE_SITE=1`), where `tests/e2e/code-loading.spec.js` fails on code an app
+loads around the build and boots both apps from the sources. The galleries load the sources on every host.
 
 ## Architecture
 

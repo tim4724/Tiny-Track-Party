@@ -8,9 +8,11 @@ shell must re-derive from prose. If you find yourself writing one, it belongs
 in the wasm.
 
 `nativeRuntime.js` loads the wasm and the `Native*.js` files are thin adapters
-over one ABI each. `boot.js` stands the whole native stack up in a fixed order
-(configure before read, world before any render) and a load failure is **fatal**
-— there is no JS fallback.
+over one ABI each. A file of the engine's folder is named through its
+`engineUrl()`, never by path: the folder is `native` in the sources and a
+content hash in `site/` (`engine/dir.js`). `boot.js` stands the whole native
+stack up in a fixed order (configure before read, world before any render) and
+a load failure is **fatal** — there is no JS fallback.
 
 `main.js` is the RACE CORE and the wiring between layers: the session, the pause
 latches, the effect walk, the net callbacks. Anything with its own state and no

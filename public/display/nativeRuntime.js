@@ -1,5 +1,5 @@
 // nativeRuntime — the one memoized loader for the native wasm runtime
-// (engine/native/ttp_runtime.mjs: the sim ABI ttp_runtime.h + the party ABI
+// (ttp_runtime.mjs in the engine's folder: the sim ABI ttp_runtime.h + the party ABI
 // ttp_party.h in a single module).
 //
 // Every adapter (NativeRaceSession, NativeRoomFlow,
@@ -8,14 +8,24 @@
 // than one per layer. main.js awaits this at boot and a failure is FATAL: the
 // game has no JS engine to fall back to.
 
+import { assetUrl } from '../shared/assetUrl.js';
+import { ENGINE_DIR } from './engine/dir.js';
+
 let modulePromise = null;
 let lastError = null;
+
+// A file of the engine's folder: the glue, the build stamp, a material.
+export function engineUrl(file) {
+  return assetUrl(`/display/engine/${ENGINE_DIR}/${file}`);
+}
 
 // Instantiate (or join the in-flight instantiation of) the runtime module.
 export function loadNativeRuntime() {
   if (!modulePromise) {
     modulePromise = (async () => {
-      const { default: createModule } = await import('./engine/native/ttp_runtime.mjs');
+      // By URL, so the bundler leaves the glue a file of its own: it finds the
+      // wasm beside itself.
+      const { default: createModule } = await import(engineUrl('ttp_runtime.mjs'));
       const M = await createModule();
       lastError = M.cwrap('ttp_last_error', 'string', []);
       return M;

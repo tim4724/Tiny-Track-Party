@@ -72,3 +72,19 @@ jobs:
         run: |
           set -euo pipefail
           echo "sha_tag=$(printf '%s' "$TAGS" | tr ',' '\n' | grep ':sha-' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      # Apache's own answer, before preview.yml rolls the image out: the E2E
+      # suite reads the caching rules as text, and only Apache can say whether
+      # public/.htaccess means what it reads as.
+      - name: Check the image's cache headers
+        env:
+          IMAGE: ${{ steps.out.outputs.sha_tag }}
+        run: |
+          set -euo pipefail
+          docker run -d -p 4000:4000 "$IMAGE"
+          curl -fsS --retry 10 --retry-delay 1 --retry-all-errors -o /dev/null http://localhost:4000/health
+          PAGE=$(curl -fsS http://localhost:4000/)
+          # The bundle the page names is kept for good; its source never is.
+          BUNDLE=$(grep -o '/bundle/display\.[^"]*' <<< "$PAGE")
+          curl -fsSI "http://localhost:4000$BUNDLE" | grep -qi '^cache-control:.*immutable'
+          curl -fsSI http://localhost:4000/display/main.js | grep -qi '^cache-control:.*no-store'

@@ -22,11 +22,12 @@
 //           (e.g. ?solo ≡ ?solo=0) — without it a bare param would prefill as
 //           the blank "default" choice and Apply would silently drop it
 //
+// The page links debugPanel.css itself, so the build names it like the page's
+// other stylesheets.
+//
 // Mostly a dev aid over URL params (Apply reloads). The one exception is a
 // 'range' field's live(n) callback, which pushes its value straight into the page
 // at drag time — used for feel-tuning (e.g. the steering curve) without a reload.
-
-import { assetUrl } from './assetUrl.js';
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -38,17 +39,6 @@ function el(tag, className, text) {
 const FAB_IDLE_MS = 2500;
 
 export function initDebugPanel(schema, { title = 'Debug' } = {}) {
-  // Stylesheet, versioned like the page's own links (the __ guard covers a raw
-  // template token if the server ever serves the HTML unprocessed).
-  if (!document.getElementById('dbg-style')) {
-    const v = document.querySelector('meta[name="app-version"]')?.content || '';
-    const link = el('link');
-    link.id = 'dbg-style';
-    link.rel = 'stylesheet';
-    link.href = assetUrl('/shared/debugPanel.css') + (v && !v.startsWith('__') ? '?v=' + encodeURIComponent(v) : '');
-    document.head.appendChild(link);
-  }
-
   const current = new URLSearchParams(location.search);
   const fields = []; // { def, read(): string|null }
 

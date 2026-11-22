@@ -9,12 +9,15 @@ const { defineConfig } = require('@playwright/test');
 // shared hardcoded pair — the webServers use reuseExistingServer:false, so a
 // collision means one run's server tears down the port the other is mid-request
 // on (ERR_CONNECTION_REFUSED). PW_PORT/PW_RELAY_PORT still override explicitly.
-// 200 slots across 4200–4599: app = base, relay = base+1 (stepped by 2).
+// 200 slots across 4200–4799: app = base, relay = base+1, the app again on the
+// sources = base+2 (stepped by 3).
 let slot = 0;
 for (const ch of __dirname) slot = (slot * 31 + ch.charCodeAt(0)) >>> 0;
 slot %= 200;
-const PORT = Number(process.env.PW_PORT || 4200 + slot * 2);
+const PORT = Number(process.env.PW_PORT || 4200 + slot * 3);
 const RELAY_PORT = Number(process.env.PW_RELAY_PORT || PORT + 1);
+const SOURCE_PORT = PORT + 2;
+const RELAY_URL = `ws://127.0.0.1:${RELAY_PORT}`;
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
@@ -55,6 +58,8 @@ module.exports = defineConfig({
   // than a DOM-only app, so give each test ample room before it's called hung.
   timeout: 120000,
   reporter: 'list',
+  // Where the third server below answers, for the one spec that asks it.
+  metadata: { sourceURL: `http://127.0.0.1:${SOURCE_PORT}` },
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     viewport: { width: 1280, height: 720 },
@@ -74,11 +79,21 @@ module.exports = defineConfig({
   },
   webServer: [
     {
-      command: 'node server/index.js',
-      // RELAY_URL points every served page at the local stub (injected via the
+      // The suite runs against site/, the tree the deployed hosts serve, so
+      // against the bundles players get rather than the sources beside them.
+      command: 'node scripts/build-site.mjs && node server/index.js',
+      // RELAY_URL points every served page at the local stub (baked into the
       // relay-url <meta>; see shared/protocol.js) and scopes the CSP to it.
-      env: { ...process.env, PORT: String(PORT), RELAY_URL: `ws://127.0.0.1:${RELAY_PORT}` },
+      env: { ...process.env, PORT: String(PORT), RELAY_URL, SERVE_SITE: '1' },
       port: PORT,
+      reuseExistingServer: false,
+    },
+    {
+      // The same server on the sources, as `npm run dev` hands them out:
+      // code-loading.spec.js boots both apps there, which nothing else does.
+      command: 'node server/index.js',
+      env: { ...process.env, PORT: String(SOURCE_PORT), RELAY_URL },
+      port: SOURCE_PORT,
       reuseExistingServer: false,
     },
     {

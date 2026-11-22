@@ -46,7 +46,9 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # Node builtins only, so no npm ci.
+      # For build-site's esbuild.
+      - run: npm ci
+
       - name: Build site
         env:
           GIT_SHA: ${{ env.SHA }}
@@ -106,5 +108,8 @@ jobs:
             # The page names this commit, so this is the upload just made.
             PAGE=$(curl -fsS "https://$host/")
             grep -q "(#${SHA:0:7})" <<< "$PAGE"
+            # The bundle it names is there, under the keep-for-good rule.
+            BUNDLE=$(grep -o '/bundle/display\.[^"]*' <<< "$PAGE")
+            curl -fsSI "https://$host$BUNDLE" | grep -qi '^cache-control:.*immutable'
             echo "Deployed https://$host" >> "$GITHUB_STEP_SUMMARY"
           done

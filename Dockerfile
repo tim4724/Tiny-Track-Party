@@ -1,11 +1,12 @@
 # The branch previews' image (preview.yml): Apache serving site/, the same
 # static tree main serves from Hetzner (hetzner-deploy.yml).
 
-# Build stage: scripts/build-site.mjs, Node builtins only, so no npm install.
+# Build stage: scripts/build-site.mjs, which bundles with esbuild.
 # The Node major is .nvmrc's; a Dockerfile cannot read it.
 FROM node:26-alpine AS builder
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY server/site.js ./server/
 COPY scripts/build-site.mjs ./scripts/
 COPY scripts/trailer/shots.js ./scripts/trailer/
