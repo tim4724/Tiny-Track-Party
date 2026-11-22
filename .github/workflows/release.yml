@@ -332,7 +332,7 @@ jobs:
       # Recover by moving the tag, not by pressing re-run.
       - name: Publish TV bundle to Play (tv:tv)
         if: github.ref_type == 'tag'
-        uses: r0adkll/upload-google-play@v1.1.5
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: games.paperballoon.tinytrack
@@ -350,7 +350,7 @@ jobs:
       # track to put both on.
       - name: Publish phone bundle to Play (alpha)
         if: github.ref_type == 'tag'
-        uses: r0adkll/upload-google-play@v1.1.5
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: games.paperballoon.tinytrack

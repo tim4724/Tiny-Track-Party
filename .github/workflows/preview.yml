@@ -11,6 +11,10 @@ concurrency:
   group: preview-${{ github.ref }}
   cancel-in-progress: true
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   build:
     uses: ./.github/workflows/docker-publish.yml

@@ -85,6 +85,10 @@ concurrency:
   group: androidtv-${{ github.ref }}
   cancel-in-progress: true
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   apk:
     runs-on: ubuntu-latest

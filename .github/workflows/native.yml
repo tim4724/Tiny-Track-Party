@@ -28,6 +28,10 @@ on:
 # instead of on one ubuntu runner, and use the C++ recorder rather than the
 # retired JS one.
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   conformance:
     strategy:

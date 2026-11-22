@@ -6,6 +6,10 @@ on:
     # the marker-adopt logic below keeps it a single, updated-in-place comment.
     types: [opened, reopened, synchronize]
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   comment:
     # Renovate's branches get no preview (preview.yml).

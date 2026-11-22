@@ -14,6 +14,10 @@ concurrency:
   group: preview-refs/heads/${{ github.event.ref }}
   cancel-in-progress: true
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   cleanup:
     runs-on: [self-hosted, k8s]

@@ -23,6 +23,10 @@ concurrency:
   group: test-the-tests-${{ github.ref }}
   cancel-in-progress: true
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   mutation-check:
     runs-on: ubuntu-latest

@@ -13,6 +13,10 @@ on:
 env:
   REGISTRY: ghcr.io
 
+# Jobs that need more say so themselves.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
