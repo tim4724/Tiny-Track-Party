@@ -12,7 +12,7 @@ COPY scripts/build-site.mjs ./scripts/
 COPY scripts/trailer/shots.js ./scripts/trailer/
 COPY partyplug/ ./partyplug/
 COPY public/ ./public/
-# The commit the pages name (docker-publish.yml passes it).
+# The commit the pages name (preview.yml passes it).
 ARG GIT_SHA=
 # assets/ comes straight from the context below; build-site copies it verbatim.
 RUN node scripts/build-site.mjs && rm -rf site/assets

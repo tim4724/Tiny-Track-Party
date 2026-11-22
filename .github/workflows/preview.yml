@@ -16,13 +16,72 @@ permissions:
   contents: read
 
 jobs:
+  # Builds and pushes the preview's image (the Dockerfile).
   build:
-    uses: ./.github/workflows/docker-publish.yml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
     permissions:
       contents: read
       packages: write
-      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One tag, this commit's: what the deploy rolls out and rolls back to.
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=sha
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          # mode=min: the final image's layers only. mode=max also kept the
+          # build stage's copy of public/, assets and all, which changes on
+          # every push and which a hit saves seconds on. Those blobs kept the
+          # repository at its Actions cache limit, where GitHub evicts
+          # whatever was read longest ago: the Filament SDKs (native.yml,
+          # tvos.yml), read only when native/ changes and the slowest builds
+          # CI has.
+          cache-to: type=gha,mode=min
+          # The preview cluster is amd64.
+          platforms: linux/amd64
+          # The commit the pages name (see the Dockerfile).
+          build-args: GIT_SHA=${{ github.sha }}
+
+      # Apache's own answer, before the deploy rolls the image out: the E2E
+      # suite reads the caching rules as text, and only Apache can say whether
+      # public/.htaccess means what it reads as.
+      - name: Check the image's cache headers
+        env:
+          IMAGE: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          docker run -d -p 4000:4000 "$IMAGE"
+          curl -fsS --retry 10 --retry-delay 1 --retry-all-errors -o /dev/null http://localhost:4000/health
+          PAGE=$(curl -fsS http://localhost:4000/)
+          # The bundle the page names is kept for good; its source never is.
+          BUNDLE=$(grep -o '/bundle/display\.[^"]*' <<< "$PAGE")
+          curl -fsSI "http://localhost:4000$BUNDLE" | grep -qi '^cache-control:.*immutable'
+          curl -fsSI http://localhost:4000/display/main.js | grep -qi '^cache-control:.*no-store'
 
   deploy:
     runs-on: [self-hosted, k8s]
@@ -50,7 +109,7 @@ jobs:
       - name: Deploy preview to Kubernetes
         env:
           BRANCH_RAW: ${{ github.ref_name }}
-          IMAGE: ${{ needs.build.outputs.sha_tag }}
+          IMAGE: ${{ needs.build.outputs.image }}
         run: |
           set -euo pipefail
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
@@ -269,7 +328,7 @@ jobs:
         if: failure()
         env:
           BRANCH_RAW: ${{ github.ref_name }}
-          IMAGE: ${{ needs.build.outputs.sha_tag }}
+          IMAGE: ${{ needs.build.outputs.image }}
         run: |
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
           NS="tinytrack-${SAFE_BRANCH}"

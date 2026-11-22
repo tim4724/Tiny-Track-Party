@@ -31,7 +31,6 @@ jobs:
       github.ref_name == 'main'
       && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
-    environment: preview
     timeout-minutes: 15
     env:
       HOST: tinytrack-main.paperballoon.games
