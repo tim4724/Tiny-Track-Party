@@ -39,8 +39,12 @@ const fits = (engine) => { for (const vp of SHORT) {
     await page.locator('.fb-field[data-field="disliked"]').click();
     await expect(page.locator('#fb-input')).toBeFocused();
     await inView('#fb-input, #fb-done');
-    await page.locator('#fb-input').fill('The rocket');
-    await page.locator('#fb-done').click();
+    // A pasted line break becomes a space.
+    await page.locator('#fb-input').fill('The\nrocket');
+    await expect(page.locator('#fb-input')).toHaveValue('The rocket');
+    // Enter is the keyboard's Done (it wears a checkmark), never a new line.
+    await page.locator('#fb-input').press('Enter');
+    await expect(page.locator('#fb-form')).toBeVisible();
     await expect(page.locator('#fb-disliked')).toHaveText('The rocket');
 
     await page.locator('#fb-whats').click();

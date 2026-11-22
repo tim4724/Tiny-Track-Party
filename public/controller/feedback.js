@@ -97,7 +97,22 @@ export function initFeedback({ buzz, onToggle }) {
   onTap('fb-close', closeFeedback);
   onTap('fb-back', toForm);
   onTap('fb-done', toForm);
-  el('fb-input').addEventListener('input', (e) => {
+  // The keyboard's Enter wears a checkmark (enterkeyhint="done"), so it has to
+  // BE Done: in a textarea it would otherwise start a new line. `beforeinput`
+  // rather than keydown, because it names the line break itself: a phone
+  // keyboard's keydown is anonymous, and an IME confirming a word is an Enter
+  // too.
+  const input = el('fb-input');
+  input.addEventListener('beforeinput', (e) => {
+    if (e.inputType !== 'insertLineBreak' && e.inputType !== 'insertParagraph') return;
+    e.preventDefault();
+    _buzz('tap');
+    toForm();
+  });
+  input.addEventListener('input', (e) => {
+    // A pasted or dropped line break still arrives. Only then is the value
+    // rewritten, since assigning it throws the caret to the end.
+    if (/[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/[\r\n]+/g, ' ');
     answers[field] = e.target.value.slice(0, MAX_TEXT);
     el('fb-count').textContent = `${answers[field].length} / ${MAX_TEXT}`;
   });
