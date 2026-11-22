@@ -1775,7 +1775,7 @@ export const TRACKS = {
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
-    // stone fountain with a tall jet, swan pedalos going round, the
+    // stone fountain with a tall jet, swans swimming round, the
     // boathouse on the near shore, and across the water on the far one a
     // row of lamps and big cherries. The park's kiosk and its
     // terrace of parasols in the S between the two decks, a grove beside the

@@ -15997,7 +15997,7 @@ def brook_parapet():
 # ---- CLOVERLEAF: the boating lake ----------------------------------------------------
 # The park's boating lake in the finger lobe, the track's `pond` landform (its
 # water and shore drawn by the renderer, 14 round a spine 32 long here), and
-# its life: swan pedalos going slowly round and the fountain playing in the
+# its life: swans swimming slowly round and the fountain playing in the
 # middle, a fat white plume and its spray crown. The boathouse, its jetty and
 # the willows on the banks are pieces of their own, each standing clear of
 # the kerbs: a piece's box holds the verge band down under it (bandHold), and
@@ -16005,45 +16005,47 @@ def brook_parapet():
 # along the lake.
 LAKE_Y = 0.36
 
-def swan_pedalo(at, body):
-    """A swan pedalo facing +X: the hull a swan's body, low in the water
-    and drawn up to the tail, its wings raised either side of the blue
-    seat, the neck up in its S to the head: an orange bill under its black
-    knob, an eye each side."""
+def swan(at, k=0.9):
+    """A swan swimming toward +X, `k` sizing it (at 1 the pedalo it once was:
+    round 39 asked for real swans; at two thirds a swan was a speck from the
+    road): its body low in the water and drawn up to
+    the tail, the wings folded and a little raised over its back, the neck up
+    in its S to the head: an orange bill under its black knob, an eye each
+    side."""
     x, y, z = at
     Z = (0.0, 0.0, 1.0)
     def p(dx, dy, dz=0.0):
-        return (x + dx, y + dy, z + dz)
+        return (x + dx * k, y + dy * k, z + dz * k)
+    def r(*wh):
+        return [(w * k, h * k) for w, h in wh]
     loft([p(-1.5, 0.42), p(-1.0, 0.38), p(0.0, 0.36), p(0.9, 0.4), p(1.3, 0.48)],
-         [(0.3, 0.26), (0.75, 0.37), (0.82, 0.38), (0.62, 0.37), (0.26, 0.26)], body, Z, 6)
-    loft([p(-1.35, 0.6), p(-1.8, 1.05)], [(0.32, 0.13), (0.08, 0.04)], body, Z, 4)                     # the tail
-    for sd in (-1, 1):                                                                              # the wings
-        loft([p(0.55, 0.62, sd * 0.78), p(-0.5, 1.0, sd * 0.86), p(-1.45, 1.2, sd * 0.62)],
-             [(0.3, 0.09), (0.5, 0.09), (0.2, 0.06)], body, (0.0, 1.0, 0.0), 4)
-    box((1.0, 0.2, 1.4), p(-0.25, 0.74), 0x339cf2)                                                  # the seat
-    box((0.3, 0.6, 1.4), p(-0.8, 1.0), 0x339cf2)                                                    # and its back
-    loft([p(1.05, 0.6), p(1.5, 1.05), p(1.36, 1.65), p(1.5, 2.1)], [(0.21, 0.21), (0.16, 0.16), (0.135, 0.135), (0.14, 0.14)],
-         body, Z, 6)                                                                                # the neck
-    loft([p(1.38, 2.16), p(1.66, 2.22), p(1.92, 2.1)], [(0.16, 0.16), (0.175, 0.165), (0.1, 0.09)], body, Z, 6)
-    loft([p(1.86, 2.1), p(2.28, 1.97)], [(0.09, 0.065), (0.05, 0.03)], 0xff7e44, Z, 4)                 # the bill
+         r((0.3, 0.26), (0.75, 0.37), (0.82, 0.38), (0.62, 0.37), (0.26, 0.26)), 'white', Z, 6)
+    loft([p(-1.35, 0.6), p(-1.8, 1.05)], r((0.32, 0.13), (0.08, 0.04)), 'white', Z, 4)              # the tail
+    for sd in (-1, 1):                                                                              # the wings, folded
+        loft([p(0.45, 0.66, sd * 0.5), p(-0.5, 0.92, sd * 0.56), p(-1.35, 1.0, sd * 0.36)],
+             r((0.28, 0.1), (0.42, 0.12), (0.2, 0.07)), 'white', (0.0, 1.0, 0.0), 4)
+    loft([p(1.05, 0.6), p(1.5, 1.05), p(1.36, 1.65), p(1.5, 2.1)], r((0.21, 0.21), (0.16, 0.16), (0.135, 0.135), (0.14, 0.14)),
+         'white', Z, 6)                                                                             # the neck
+    loft([p(1.38, 2.16), p(1.66, 2.22), p(1.92, 2.1)], r((0.16, 0.16), (0.175, 0.165), (0.1, 0.09)), 'white', Z, 6)
+    loft([p(1.86, 2.1), p(2.28, 1.97)], r((0.09, 0.065), (0.05, 0.03)), 0xff7e44, Z, 4)              # the bill
     with plain_parts():
-        box((0.14, 0.12, 0.2), p(1.9, 2.2), 0x2a2735)                                               # its knob
-        box((0.07, 0.07, 0.345), p(1.7, 2.28), 0x2a2735)                                            # the eyes
+        box((0.14 * k, 0.12 * k, 0.2 * k), p(1.9, 2.2), 0x2a2735)                                   # its knob
+        box((0.07 * k, 0.07 * k, 0.345 * k), p(1.7, 2.28), 0x2a2735)                                # the eyes
 
 @piece(REAL)
 def boating_lake():
     # The lake beyond the finger lobe's end (the `pond`, 16 u across, 36 long
-    # here): three swan pedalos going slowly round and the fountain in the
+    # here): three swans swimming slowly round and the fountain in the
     # middle, the park's tallest thing, straight ahead down the lobe's run,
     # lamps and cherries along the far shore behind it.
     WY = LAKE_Y
     n = 16
     for k in range(n):
         a = -k * 2 * math.pi / n
-        marker('path_pedalo_%d' % k, (12.0 + 10.0 * math.cos(a), WY, 30.0 * math.sin(a)))
+        marker('path_swan_%d' % k, (12.0 + 10.0 * math.cos(a), WY, 30.0 * math.sin(a)))
     for j in range(3):
-        with animated('anim_path:c=pedalo:p=110:o=%.3f:f=1+bob:h=0.03:p=2.2#%d' % (j / 3, j), (22.0, WY, 0.0)):
-            swan_pedalo((22.0, WY, 0.0), 'white')
+        with animated('anim_path:c=swan:p=110:o=%.3f:f=1+bob:h=0.03:p=2.2#%d' % (j / 3, j), (22.0, WY, 0.0)):
+            swan((22.0, WY, 0.0))
     # the fountain on its stone basin: a fat plume, faintly blue, and its
     # spray falling outward round the top in a ring of drops, rising and
     # falling gently
@@ -16106,7 +16108,7 @@ def boathouse():
     # boat shed under a red tiled roof, white at its corners and eaves, the
     # hire hatch under a plain canopy toward the road (+X), the wide boat door
     # open on the lake side with a rowing boat on the slip in it, the jetty
-    # out over the water and two swan pedalos tied up there, a flag over the
+    # out over the water and two rowing boats alongside it, a flag over the
     # ridge. It stands
     # LEVEL on the bank (draped it leaned with the slope): the bank is the
     # pond's own flat floor here.
@@ -16137,13 +16139,11 @@ def boathouse():
     for sz in (-1, 1):
         for i in (0, 4, 9):
             box((0.24, 1.0, 0.24), (-D / 2 - 0.6 - i * 1.05, 0.25, sz * 1.2), 0x7a5a3a)
-    BX = -D / 2 - 5.0                                                        # a rowing boat alongside
-    box((3.4, 0.5, 1.3), (BX, LAKE_Y + 0.25, -2.4), 0x339cf2)
-    box((1.0, 0.5, 1.0), (BX - 1.8, LAKE_Y + 0.25, -2.4), 0x339cf2, yaw=math.pi / 4)
-    box((3.5, 0.1, 1.4), (BX, LAKE_Y + 0.52, -2.4), WHITE)
-    box((0.3, 0.12, 1.2), (BX + 0.3, LAKE_Y + 0.56, -2.4), BOARD)
-    for sz in (-1, 1):
-        swan_pedalo((-D / 2 - 9.5, LAKE_Y, sz * 2.8), 'white')
+    for BX, BZ in ((-D / 2 - 5.0, -2.4), (-D / 2 - 8.0, 2.4)):                 # two rowing boats alongside
+        box((3.4, 0.5, 1.3), (BX, LAKE_Y + 0.25, BZ), 0x339cf2)
+        box((1.0, 0.5, 1.0), (BX - 1.8, LAKE_Y + 0.25, BZ), 0x339cf2, yaw=math.pi / 4)
+        box((3.5, 0.1, 1.4), (BX, LAKE_Y + 0.52, BZ), WHITE)
+        box((0.3, 0.12, 1.2), (BX + 0.3, LAKE_Y + 0.56, BZ), BOARD)
     join_still('boathouse')
 
 @piece(REAL)
@@ -16247,8 +16247,10 @@ def bandstand():
     # the crown, and a floor laid flush in the turf lay under it with its
     # steps. The benches stand a little over the formula for the same
     # reason, their feet sunk. The steps down the road side lie on the
-    # ground as DRAWN (draped): built on the formula, the drawn crown ran on
-    # level over them and buried all but the top two.
+    # ground as DRAWN (draped): the drawn crown runs on level a good way past
+    # the base, so three steps reach the lawn (built on the formula, seven ran
+    # on down a slope that is not drawn there and were buried; laid on the
+    # drawn ground, the four below the third read as a slab sunk in the turf).
     RED, WHITE = 0xcf534f, 'white'
     H = set_ground('bandstand')
     s0 = H(0.0, 0.0)
@@ -16279,9 +16281,9 @@ def bandstand():
         for sx in (-0.7, 0.7):
             box((0.2, 0.6, 0.2), (6.0, H(6.0, z) + 0.1, z + sx), 0x7a5a3a)
     join_still('bandstand')
-    def steps():                                                   # stone steps down the road side, the top two up the
-        for i in range(7):                                         # base, over the ground under each (its drawn crown a
-            x, top = 4.2 + 1.1 * i, max(0.12, 0.72 - 0.3 * i)     # hand over the formula: the base's top stands 0.8 over it)
+    def steps():                                                   # three stone steps from the base down to the lawn, each
+        for i in range(3):                                         # over the ground under it (the base's top stands 0.8 over it)
+            x, top = 4.2 + 1.1 * i, 0.72 - 0.25 * i
             box((1.15, top + 0.6, 2.2), (x, (top - 0.6) / 2, 0.0), 'grey')
     draped('steps', steps)
 
@@ -18006,11 +18008,11 @@ def park_galloper(F, yaw, y, coat, saddle, lite, k=1.25):
     GOLD = PLAY_YELLOW
     def b(size, at, color, roll=0.0):
         return box(tuple(v * k for v in size), F(at[0] * k, y + at[1] * k, at[2] * k), color, yaw=yaw, roll=roll)
-    with rounded_over(not lite):
-        b((1.5, 0.62, 0.56), (0.0, 0.31, 0.0), coat)                          # the body
-    b((0.5, 0.55, 0.5), (0.62, 0.42, 0.0), coat, roll=0.3)                    # the chest
-    b((0.42, 0.95, 0.4), (0.87, 0.95, 0.0), coat, roll=0.55)                  # the neck, thrown up
-    b((0.78, 0.34, 0.34), (1.34, 1.16, 0.0), coat, roll=0.75)                 # the head, bowed
+    with rounded_over(not lite):                                              # round as a painted wooden horse
+        b((1.5, 0.62, 0.56), (0.0, 0.31, 0.0), coat)                          # the body          (square, it read as
+        b((0.5, 0.55, 0.5), (0.62, 0.42, 0.0), coat, roll=0.3)                # the chest          boxes: round 39)
+        b((0.42, 0.95, 0.4), (0.87, 0.95, 0.0), coat, roll=0.55)              # the neck, thrown up
+        b((0.78, 0.34, 0.34), (1.34, 1.16, 0.0), coat, roll=0.75)             # the head, bowed
     b((0.74, 0.08, 0.64), (-0.05, 0.62, 0.0), saddle)                         # the saddle's cloth
     b((0.44, 0.16, 0.48), (-0.05, 0.72, 0.0), PLAY_TIMBER)                    # the saddle
     with plain_parts():
