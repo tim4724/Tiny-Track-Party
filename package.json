@@ -7,6 +7,7 @@
     "bake:cues": "node scripts/bake-cues.mjs",
     "bake:shelf": "node scripts/bake-shelf.mjs",
     "build:androidtv": "shells/androidtv/scripts/build.sh",
+    "build:site": "node scripts/build-site.mjs",
     "build:tvos": "shells/tvos/scripts/build.sh",
     "check:androidtv-party": "node scripts/androidtv-party-check.mjs",
     "check:artifact": "node --test tests/native-artifact.test.js",

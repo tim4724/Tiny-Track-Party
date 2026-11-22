@@ -1,6 +1,8 @@
 node_modules/
 .playwright-mcp/
 test-results/
+# scripts/build-site.mjs output: the static tree the deployed hosts serve.
+/site/
 *.log
 .DS_Store
 # Audition candidate dumps — 760 MB of rejected sound candidates that were

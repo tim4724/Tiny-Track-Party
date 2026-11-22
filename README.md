@@ -48,13 +48,15 @@ Cars auto-accelerate — tilt, brake, and USE are the only inputs. Drive over an
 
 ## Configuration
 
-Set the relay URL in `public/shared/protocol.js` (and the CSP `connect-src` in `server/index.js` if you self-host one). Server env vars:
+Set the relay URL in `public/shared/protocol.js` (and the CSP `connect-src` in `public/.htaccess` if you self-host one). Dev server env vars:
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `4000` | HTTP server port |
 | `BASE_URL` | Auto-detected LAN IP | Base URL for join links / QR codes |
-| `APP_ENV` | `development` | Set to `production` for production mode |
+| `RELAY_URL` | — | Points every page at another relay (the E2E stub) |
+
+Deployed hosts are static: `npm run build:site` writes `site/`, which Apache serves with `public/.htaccess`.
 
 ## Project Structure
 
@@ -65,7 +67,7 @@ public/
   display/     # The browser shell: renders and performs
   controller/  # Phone tilt controller
   shared/      # protocol.js — wire contract, tilt/presence manifest, theme
-server/        # Static-file host (no game logic)
+server/        # Local dev host; deploys serve site/ via Apache
 partyplug/     # Reusable party-game transport kit
 tests/         # Unit, wire-compat and E2E suites; conformance fixtures
 ```

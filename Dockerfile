@@ -1,29 +1,30 @@
-# The server has NO runtime dependencies — only node builtins — so there is no
-# install step and no node_modules in the image. Keep it that way: a new prod
-# dependency means reinstating a builder stage here.
+# The branch previews' image (preview.yml): Apache serving site/, the same
+# static tree main serves from Hetzner (hetzner-deploy.yml).
+
+# Build stage: scripts/build-site.mjs, Node builtins only, so no npm install.
 # The Node major is .nvmrc's; a Dockerfile cannot read it.
-FROM node:26-alpine
-RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -s /bin/sh -D nodejs
+FROM node:26-alpine AS builder
 WORKDIR /app
-# Assets (~170 MB, nearly all race soundtrack) get their OWN layer, ABOVE the
-# code copies. Folded into COPY public/ they shared one layer, so a one-line .js
-# edit changed its digest and every preview deploy re-pulled the soundtrack.
-# Split out, the digest is stable and the node reuses it across commits and
-# namespaces. COPY public/ below re-copies these paths, but byte-identical files
-# diff to nothing, so that layer stays ~2.4 MB. Don't merge these two back.
-COPY public/assets/ ./public/assets/
 COPY package.json ./
-COPY server/ ./server/
-COPY public/ ./public/
-# partyplug (the transport kit) lives OUTSIDE public/ and is served via the
-# /partyplug/ route remap in server/index.js. It must be copied into the image
-# or that route 404s.
+COPY server/site.js ./server/
+COPY scripts/build-site.mjs ./scripts/
+COPY scripts/trailer/shots.js ./scripts/trailer/
 COPY partyplug/ ./partyplug/
-# The trailer's shot list, the one file of scripts/ the server reads (served at
-# /api/trailer-shots). Everything else under scripts/ stays out of the image.
-COPY scripts/trailer/shots.js ./scripts/trailer/shots.js
-USER nodejs
+COPY public/ ./public/
+# The commit the pages name (docker-publish.yml passes it).
+ARG GIT_SHA=
+# assets/ comes straight from the context below; build-site copies it verbatim.
+RUN node scripts/build-site.mjs && rm -rf site/assets
+
+# Runtime: Apache with public/.htaccess (httpd.conf sets up what Hetzner
+# Webhosting provides around it).
+FROM httpd:2.4-alpine
+COPY httpd.conf /usr/local/apache2/conf/httpd.conf
+# Assets (~110 MB, nearly all race soundtrack and trailer) get their OWN layer,
+# below the rest. Folded into one copy, a one-line .js edit changed its digest
+# and every preview deploy re-pulled the soundtrack. Split out, the digest is
+# stable and the node reuses it across commits and namespaces.
+COPY public/assets/ /usr/local/apache2/htdocs/assets/
+COPY --from=builder /app/site/ /usr/local/apache2/htdocs/
+USER 1001:1001
 EXPOSE 4000
-ENV NODE_ENV=production PORT=4000
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
-CMD ["node", "server/index.js"]

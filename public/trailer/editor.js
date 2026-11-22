@@ -16,8 +16,7 @@
 //
 // The shot list lives in localStorage and is exported by copy/paste; the committed
 // scripts/trailer/shots.js comes back in through a read-only JSON endpoint. Writing it
-// to disk would need a mutating endpoint, and server/index.js serves static files and
-// JSON reads only — see CLAUDE.md.
+// to disk would need a mutating endpoint, and every host is static — see CLAUDE.md.
 
 import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 

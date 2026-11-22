@@ -38,6 +38,7 @@ npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell
 npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
                                   # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)
+npm run build:site                # site/, the static tree every deployed host serves
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
 npm run build:tvos [device|simulator] # The Apple TV app: engine, bundle and project included
 npm run build:androidtv -- [release|debug] [install]   # The Android TV app, likewise
@@ -57,8 +58,10 @@ current inventory. Prefer it over rediscovering what is missing from a failure.
 A couch party game: 1–4 phones become tilt controllers for one shared screen.
 The display browser is **authoritative** — it runs the race simulation and
 broadcasts state to every phone over a WebSocket relay, with steering input on a
-WebRTC fastlane. `server/index.js` serves static files and JSON endpoints only:
-no game logic, no WebSocket.
+WebRTC fastlane. Every deployed host is static: Apache serving `site/`
+(`scripts/build-site.mjs`) under `public/.htaccess`. `server/index.js` is the
+local twin for dev and E2E, and what both must agree on lives in
+`server/site.js`. No game logic and no WebSocket on either.
 
 ## Architecture
 
@@ -89,9 +92,10 @@ bakes that follow).
 Browser code is ES modules. Modules Node imports directly via dynamic `import()`
 (`shared/tracks.js`, `shared/devTracks.js`, `shared/protocol.js`,
 `engine/contract.js`) must stay dependency-free so they load in both browser and
-Node. CSP headers live in `server/index.js` — update them when adding external
-resources. There is no nonce and no inline script: every script is a same-origin
-file, so `script-src` is `'self' 'wasm-unsafe-eval'`.
+Node. The CSP lives in `public/.htaccess` (the dev server reads it from there)
+— update it when adding external resources. There is no nonce and no inline
+script: every script is a same-origin file, so `script-src` is
+`'self' 'wasm-unsafe-eval'`.
 
 ## The rules that outrank local detail
 
@@ -197,8 +201,14 @@ same machine.
 
 ## Deploys
 
-Every push builds and deploys a preview to
-`https://tinytrack-<branch>.paperballoon.games` (`.github/workflows/preview.yml`).
+Every push to `main` uploads `site/` to Hetzner Webhosting
+(`.github/workflows/hetzner-deploy.yml`), served at
+`https://tinytrack-main.paperballoon.games` and, until there is a production
+deploy, at `https://tinytrack.paperballoon.games` too, the host the TV apps and
+the Paper Balloon launcher use. Every other branch builds the Dockerfile's
+Apache image and deploys a preview to `https://tinytrack-<branch>.paperballoon.games`
+(`.github/workflows/preview.yml`). All of them serve the same `site/` under the
+same `.htaccess`, so a route or header is changed there once.
 
 The engine wasm is a committed binary, so two branches that both touch `native/`
 will conflict on `ttp_runtime.wasm`. The artifact is wholly derived from
