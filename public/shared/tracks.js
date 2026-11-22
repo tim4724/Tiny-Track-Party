@@ -1766,7 +1766,12 @@ export const TRACKS = {
     // picnic lawn, flower beds, and the paths, one round the bend into the
     // cherry avenue's walk), its ball court across the front path
     // (set-playground-court) and the walk round its back under more cherries
-    // (set-playground-grove), four pieces on one anchor. The bandstand on its mound close under the
+    // (set-playground-grove), four pieces on one anchor. On the open lawns
+    // either side of it, on that anchor too, each with the walk that joins it
+    // to the park's paths: a carousel and its ice-cream cart past the court
+    // (set-park-carousel), a hedge maze up the lawn behind it
+    // (set-hedge-maze), and across the yard by the bend's path a crazy golf
+    // round a windmill (set-crazy-golf). The bandstand on its mound close under the
     // high road's outside, level with a racer up on the deck. The boating
     // lake beyond the finger lobe's end, straight ahead down the lobe's first
     // leg: a round pond under a stone lip, an islet with a cherry on it, a
@@ -1807,7 +1812,12 @@ export const TRACKS = {
       { model: 'set-blossom-grove-b', u: 0.38, lat: 6.4, yaw: 0 },
       { model: 'set-blossom-grove', u: 0.47, lat: -5.8, yaw: 180, scale: 1.1 },
       { model: 'set-blossom-grove-b', u: 0.6, lat: -6, yaw: 180 },
-      { model: 'set-blossom-grove', u: 0.845, lat: 8.5, yaw: 0 }
+      { model: 'set-blossom-grove', u: 0.845, lat: 8.5, yaw: 0 },
+      // the lawns either side of the playground, on its anchor (rows
+      // appended: a landform names its piece by row)
+      { model: 'set-park-carousel', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
+      { model: 'set-hedge-maze', u: 0.086, lat: -10, yaw: 150, scale: 1.5 },
+      { model: 'set-crazy-golf', u: 0.086, lat: -10, yaw: 150, scale: 1.5 }
     ],
     // the round hill beyond the south bend and a long ridge closing the west,
     // the playground's hill (its slide lies on it), the lake and the hill behind it, the bandstand's

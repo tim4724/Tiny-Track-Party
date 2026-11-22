@@ -2122,6 +2122,7 @@ private:
         // lite (the node's own), the inverse of `rest` in full (world).
         filament::math::mat4f toBake;
         filament::math::mat4f rest;         // the node's world transform at rest
+        float drape = 0;                    // how far the `drape` verb lifted `rest` (its riders' too)
         filament::math::mat3f restInv;      // its rotation's inverse, scale removed
         float scale = 1;                    // its uniform world scale
         float phase = 0;
