@@ -326,6 +326,15 @@ CSS length. Coming back resets the perf window, so the scale rule never climbs
 on undrawn ticks. `tests/e2e/welcome.spec.js` counts the renderer's frame calls
 to hold it.
 
+The same holds under a full-screen FROST board — the pause overlay and the
+display's own link — told to `Stage.setCovered` by whoever performs the effect
+that raises it, never read off the CSS. The frost shows the canvas's last drawn
+frame, which the compositor keeps while nothing is submitted, so that frame has
+to be the settled one: the board keeps drawing while a held field's chase rig
+closes on the parked car, then idles. The results board is deliberately not a
+cover: the field coasts its victory lap behind it, and between cup races the
+next track arrives there.
+
 Captures run headless — a headed run opens a window on the user's screen.
 `launchBrowser()` puts headless on ANGLE-Metal on a Mac; Chromium's own headless
 default is SwiftShader, where a full-resolution frame is slow enough that the

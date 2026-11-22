@@ -278,6 +278,22 @@ final class DisplayHost {
     /// clock is cosmetic and would otherwise run at a fraction of real speed.
     private var pendingDt: Double = 0
 
+    /// When a full-screen frost went up over the scene (see `setCovered`), or
+    /// nil while none is.
+    private var coveredSince: CFTimeInterval?
+    /// How long a covered scene keeps drawing: past the frost's fade-in, and
+    /// long enough for a held field's chase rig to close on the parked car,
+    /// whose settled frame is what the frost then shows.
+    private static let coverSettleSeconds = 0.5
+    /// Frames presented since the last build or resize. A covered scene stops
+    /// drawing only once the layer holds `freshFramesToIdle` of the CURRENT
+    /// scene, or the frost would blur the old one, or a cleared buffer.
+    private var freshFrames = 0
+    private static let freshFramesToIdle = 2
+    /// Whether the last tick stepped undrawn, so the first drawn one after it
+    /// can drop the perf window.
+    private var idling = false
+
     /// `Stage.js`'s clamp, for its reason: a dt of several seconds (the app
     /// resumed, the link stalled) runs the camera damping far past the car, and
     /// a negative one runs it backwards until the scene is off screen.
@@ -410,6 +426,7 @@ final class DisplayHost {
     private func applyResize(_ size: CGSize) {
         adoptSurface(size)
         ttp_display_resize(pixelCount(size.width), pixelCount(size.height))
+        freshFrames = 0
         // A new buffer size is a different thing to measure, and the readout
         // carries the size it was measured at — so the window goes with it
         // (ttp_perf.h). Without this an output-mode switch leaves 4K frames
@@ -501,6 +518,31 @@ final class DisplayHost {
         if !paused { lastTimestamp = 0 }
     }
 
+    /// A full-screen frost is over the scene (pause, the display's link, a
+    /// results board).
+    ///
+    /// **A SCENE UNDER THE FROST DOES NOT DRAW**, the web's hidden-scene idle
+    /// (`Stage._hiddenIdle`) for the boards this shell draws over a live
+    /// picture. Behind a blur and a 0.88 wash the ambient motion is not
+    /// readable, and a frame costs the GPU the same either way. The loop keeps
+    /// ticking UNDRAWN (`ttp_display_advance`), so the first frame drawn when
+    /// the frost lifts is the one drawing throughout would have shown. The frost
+    /// blurs whatever the layer last presented, which stays up while nothing
+    /// new is. The link keeps ticking: pausing it is `setPaused`'s, for an app
+    /// off screen.
+    func setCovered(_ on: Bool) {
+        coveredSince = on ? CACurrentMediaTime() : nil
+    }
+
+    /// Whether this tick may skip the draw. Three holds keep the frozen picture
+    /// honest: the cover has settled (`coverSettleSeconds`), the first paint
+    /// has happened (it lifts the boot cover), and the layer holds fresh frames
+    /// of the current scene.
+    private func undrawn(_ now: CFTimeInterval) -> Bool {
+        guard let since = coveredSince, hasScene, hasPainted else { return false }
+        return freshFrames >= Self.freshFramesToIdle && now - since >= Self.coverSettleSeconds
+    }
+
     fileprivate func step(_ link: CADisplayLink) {
         inFrame = true
         defer { inFrame = false }
@@ -542,6 +584,22 @@ final class DisplayHost {
             onSlowTick?()
         }
 
+        // Under the frost (see `setCovered`): the frame's CPU half and no draw,
+        // and nothing a drawn frame feeds — no present, no tags, no perf sample
+        // and no scale poll, so the rule never reads the gap as frames.
+        if undrawn(link.timestamp) {
+            idling = true
+            pendingDt = 0
+            _ = ttp_display_advance(dt)
+            writeReadyBlobs()
+            return
+        }
+        if idling {
+            // Back in view: the window holds the frames from before the frost.
+            idling = false
+            perf.reset()
+        }
+
         // 0 IS A LEGITIMATE FRAME SKIP, not an error. Off emscripten the
         // renderer keeps Filament's pacing verdict: `beginFrame` returning false
         // means the surface still holds a frame the compositor has not shown.
@@ -563,6 +621,7 @@ final class DisplayHost {
         if vsyncCount % presentDivisor == 0 {
             presented = ttp_display_frame(pendingDt) != 0
             pendingDt = 0
+            if presented { freshFrames += 1 }
 
             // Derived bytes this frame landed — normally the frame right after a
             // build. The beat is here rather than at the build's tail because a
@@ -751,6 +810,7 @@ final class DisplayHost {
     /// nowhere else.
     func sceneBuilt(rosterIds: [EngineIdentity], biome: String) {
         hasScene = true
+        freshFrames = 0
         roster = rosterIds
         // The tags name cars by SLOT, and a build is the one thing that can
         // change what a slot is (a re-roster refuses id changes).

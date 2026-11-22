@@ -108,6 +108,15 @@ struct RootView: View {
 
     private static let screenFade = 0.35
 
+    /// A full-screen frost hides the 3D (`DisplayHost.setCovered`): the
+    /// display's link anywhere, or the pause overlay or a results board over the
+    /// race. On this shell the results board lands after `endFlourish` has held
+    /// the picture, and the next cup race hides it before building its scene,
+    /// so it covers a still field just as the pause overlay does.
+    private var sceneCovered: Bool {
+        state.link != nil || (state.screen == .race && (state.paused || state.results != nil))
+    }
+
     init(game: GameCoordinator) {
         self.game = game
         _state = ObservedObject(wrappedValue: game.state)
@@ -195,6 +204,7 @@ struct RootView: View {
             lobbyHeld = false
         }
         .animation(.easeOut(duration: 0.2), value: state.link == nil)
+        .onChange(of: sceneCovered) { _, covered in game.display.setCovered(covered) }
         .task {
             await game.boot()
             // The frame loop, started once the engine is configured.

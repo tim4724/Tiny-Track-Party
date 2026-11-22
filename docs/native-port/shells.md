@@ -578,7 +578,7 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
 This list is an audit walked against the shells' code, not a wishlist: each row
 is a real item, not a simplification. A row leaves it two ways — a shell does
 the work, or the work is decided against and moves to **Decided, not owed**
-below. The first is owed by BOTH TV shells; the second is Android's.
+below. The first is owed by BOTH TV shells; the other two are Android's.
 
 - **Meshing the next circuit at the intermission** (item 13) — NEITHER TV shell
   does it: both build the next circuit at the launch's `reset-scene-cars`, so a
@@ -591,6 +591,12 @@ below. The first is owed by BOTH TV shells; the second is Android's.
   the tail it would move is the half the GPU readout cannot see, and it costs a
   macrobenchmark module plus a device run, which is why it is an investment and
   not a build-file flag.
+- **Not drawing under a full-screen frost** — the web (`Stage.setCovered`) and
+  tvOS (`DisplayHost.setCovered`) step undrawn (`ttp_display_advance`) once a
+  pause, link or (tvOS) results frost has settled over the held field;
+  Android's `DisplayHost` still calls `ttp_display_frame` every vsync under
+  them. The harness waits on presents (`Scenarios.presented`), so a covered
+  scenario has to keep presenting until its shot is ready.
 
 ### Decided, not owed
 

@@ -1358,6 +1358,7 @@ function freezeCars(held = true) {
 
 function setPauseOverlay(on) {
   el('pause-overlay').classList.toggle('hidden', !on);
+  scene.setCovered('pause', on);
 }
 
 // The display's OWN link, from the set-link effect. The overlay is the kit's
@@ -1368,6 +1369,7 @@ function setPauseOverlay(on) {
 function renderLink(link) {
   const on = link.state !== 'connected';
   el('link-overlay').classList.toggle('hidden', !on);
+  scene.setCovered('link', on);
   if (on) {
     el('link-heading').textContent = link.state === 'disconnected' ? 'Disconnected' : 'Reconnecting…';
     // Attempt 0 is the heartbeat's unnumbered immediate retry: heading only.

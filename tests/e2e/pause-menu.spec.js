@@ -7,6 +7,34 @@
 // host who leaves hands it on with the race still paused.
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
+test('the scene under the pause frost stops drawing once settled, and Continue draws again', async ({ page, browser }) => {
+  // Stage.setCovered: the frost shows the last drawn frame, so past the settle
+  // the loop steps undrawn, counted at the renderer's own frame call as
+  // welcome.spec counts the title board's.
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice');
+  await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await startRace(alice, []);
+  await waitForRacing(page);
+  await page.evaluate(() => {
+    const d = window.__scene.display;
+    const frame = d.frame.bind(d);
+    window.__drawn = 0;
+    d.frame = (dt) => { window.__drawn++; return frame(dt); };
+  });
+
+  await alice.click('#pause-btn');
+  await page.waitForSelector(visible('#pause-overlay'));
+  await page.waitForTimeout(1500);
+  const settled = await page.evaluate(() => window.__drawn);
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__drawn), 'a frosted scene must not draw').toBe(settled);
+
+  await alice.click('#pause-continue');
+  await expect(page.locator('#pause-overlay')).toBeHidden();
+  await page.waitForFunction((n) => window.__drawn > n + 10, settled, { timeout: 20000 });
+});
+
 test('pause arms the other phones, New game is the host\'s, and leaving keeps the race paused', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice'); // host
