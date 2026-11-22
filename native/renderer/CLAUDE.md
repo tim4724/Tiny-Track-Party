@@ -447,8 +447,8 @@ what was measured and not taken; the rules it left:
   driver CPU. Blended renderables keep their priorities.
 - **The engine is flushed around `beginFrame`**, so the backend starts the
   frame's uploads and instance writes before cell 1 is recorded.
-- **The terrain sheets tile twice as coarse** (`mSheetTile`, `mSheetMinTris`):
-  fewer draws for vertices the GPU is not bound on here.
+- **The set pieces bake in tiles twice as coarse** (`mPieceTile`): fewer
+  draws for vertices the GPU is not bound on here.
 - **Filament's automatic instancing is OFF** (`TtpRenderer::init`): the merged
   groups are explicit, so the instancer only ever batched the gltfio pools, and
   a pass that batches anything creates, writes and destroys a per-pass
@@ -1188,9 +1188,13 @@ its code:
   sprites are fill, and none has been priced on the box yet
   (`resolve_theme`).
 
-- **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
-  16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a
-  few percent more vertices (less of each sheet culled).
+- **Coarser piece tiles** (`buildStatic`): the Android GL fallback's 16 u
+  set-piece tiles. Nothing to see; a few draws a cell for a few thousand more
+  vertices. The sheets' 96 u tile is every tier's (`kSheetTile`): it takes a
+  fifth or more of full's 4P draws for more vertices (less of each sheet
+  culled; most on a sparse circuit like Riptide), with no pixel of the static
+  world changed (blended effects across a tile seam may stack in the other
+  order).
 - **A coarser sky dome** (16 rings, 24 spokes): never culled, so every cell
   paid all of the full one; the gradient between rings strays a few code values.
 - **Octagonal ground-shadow discs**: the rim fades to nothing.
@@ -1210,7 +1214,7 @@ frame-matched still shows; and no copse companions, or a thinner scatter or
 clutter, which change the verge in 1P too, where the box has the headroom.
 
 Priced at the box's 4P buffer on the heavy tracks, lite's worst frame has
-about 30% fewer draws and 6-13% fewer vertices than full's; most of the rest
+fewer draws and vertices than full's (the cuts above); most of the rest
 of the vertices are the road, the cars and the ground, which it does not touch. It
 changes no sim, so `film:laps -- --detail lite` films the same race frame for
 frame beside full, and `score:verge -- --detail lite` scores it. `perf:race --

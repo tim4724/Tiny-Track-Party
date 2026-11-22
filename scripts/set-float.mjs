@@ -6,7 +6,8 @@
 // no model-only check can see that.
 //
 // Each model is cut into islands (triangles joined by a shared corner). An
-// island whose lowest corners are at the model's floor is a standing part, and
+// island whose lowest corners are at the model's floor (a stand's tree: its
+// lowest island, set-check.mjs standTree) is a standing part, and
 // its gap is those corners' height over display.groundY. A part the renderer
 // drapes lies on the land by construction and is left out.
 //
@@ -23,6 +24,7 @@ import path from 'node:path';
 import { glbTriangles } from '../public/display/glbTriangles.js';
 import { CUPS, TRACKS } from '../public/shared/tracks.js';
 import { ROOT, args, displayURL, launchBrowser, serveApp } from './lib/capture.mjs';
+import { standTree } from './set-check.mjs';
 
 const DIR = path.join(ROOT, 'public/assets/toycar');
 const FLOOR = 0.12;   // an island this near the model's floor stands on the ground
@@ -47,12 +49,17 @@ function islandsOf(model) {
     by.get(r).pts.push(...t);
     if (t.drape) by.get(r).drape = true;
   });
+  const tree = standTree(model), lowest = new Map();
   const out = [];
   for (const o of by.values()) {
-    const lo = Math.min(...o.pts.map((p) => p[1]));
-    if (!o.drape && lo <= FLOOR) out.push(o.pts.filter((p) => p[1] <= lo + 0.05));
+    if (o.drape) continue;
+    const low = o.pts.reduce((a, p) => (p[1] < a[1] ? p : a));
+    const feet = o.pts.filter((p) => p[1] <= low[1] + 0.05);
+    if (!tree) { if (low[1] <= FLOOR) out.push(feet); continue; }
+    const t = tree(low[0], low[2]);
+    if (!lowest.has(t) || low[1] < lowest.get(t).lo) lowest.set(t, { lo: low[1], feet });
   }
-  return out;
+  return tree ? [...lowest.values()].map((s) => s.feet) : out;
 }
 
 const opt = args();

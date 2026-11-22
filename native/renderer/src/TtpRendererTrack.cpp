@@ -2811,16 +2811,12 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb) {
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
     PhaseLog phases{ mEngine };
-    // THE TILES (tileMajor, bakePlacements), twice as coarse where a draw costs
-    // more than the vertices a coarser tile submits: the Android GL fallback
-    // (a draw is driver CPU there; init) and the lite tier, whose box is as
-    // bound by draws as by vertices at four players. Lite's cut that a racer
-    // cannot see at all: measured on the heavy tracks, a quarter of the 4P
-    // frame's draws for 2-3% more of its vertices (less of each sheet culled).
-    const bool coarse = mAndroidGl || mLite;
-    mSheetTile = coarse ? 2.0f * kSheetTile : kSheetTile;
-    mSheetMinTris = coarse ? 4 * kSheetMinTris : kSheetMinTris;
-    mPieceTile = coarse ? 2.0f * kPieceTile : kPieceTile;
+    // A set piece's bake tile (bakePlacements), twice as coarse where a draw
+    // costs more than the vertices a coarser tile submits: the Android GL
+    // fallback (a draw is driver CPU there; init) and the lite tier, whose box
+    // is as bound by draws as by vertices at four players. The sheets' tile is
+    // one for every tier (kSheetTile).
+    mPieceTile = (mAndroidGl || mLite) ? 2.0f * kPieceTile : kPieceTile;
 
     TrackBin tb;
     applyTheme(tb, theme);
@@ -3023,7 +3019,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         mHills.bakeLight = true;
         // The ring stands all round the circuit, so one renderable is in every
         // cell's frustum; tiles let each cell draw only the hills it faces.
-        tileMajor(mHills, mSheetTile, mSheetMinTris);
+        tileMajor(mHills, kSheetTile, kSheetMinTris);
         if (!buildMesh(mHills)) return false;
     }
 
@@ -3322,7 +3318,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         }
         // The sheet is the size of the world; cut per tile so a cell submits
         // the tiles in its frustum rather than all of it, four times over.
-        tileMajor(mGround, mSheetTile, mSheetMinTris);
+        tileMajor(mGround, kSheetTile, kSheetMinTris);
         bakeVertexLight(mGround);
         if (mGroundMaterial) {
             mGroundTex = buildGroundTexture(tb.groundKind, tb.groundBase);
@@ -3637,7 +3633,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         // Cut per tile like the ground. Overlapping discs across a tile seam
         // may now blend in either order, which is the same picture: they are
         // one colour, and `over` with one colour commutes.
-        tileMajor(mGroundShadows, mSheetTile, mSheetMinTris);
+        tileMajor(mGroundShadows, kSheetTile, kSheetMinTris);
         buildMesh(mGroundShadows, true, mBlendMaterial->getDefaultInstance());
     }
 

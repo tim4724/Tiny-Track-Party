@@ -606,20 +606,17 @@ private:
     // than `minTris` triangles are merged into the next, so a sparse sheet
     // does not become hundreds of renderables.
     static void tileMajor(Mesh& m, float tile, uint32_t minTris);
-    // 48 u tiles: a 4P cell's frustum to the fog is a wedge a few tiles wide,
-    // and the world is ±400 u, so a sheet is at most a few hundred ranges;
-    // a range under 64 triangles is not worth a renderable of its own.
-    static constexpr float kSheetTile = 48.0f;
-    static constexpr uint32_t kSheetMinTris = 64;
-    // The live values: the constants above, or coarser where a draw costs
-    // more than the vertices it saves: the Android GL fallback, and the lite
-    // tier (buildStatic sets them per scene).
-    float mSheetTile = kSheetTile;
-    uint32_t mSheetMinTris = kSheetMinTris;
+    // 96 u tiles, and a range under 256 triangles is not worth a renderable of
+    // its own: a 4P cell's frustum to the fog is a wedge a few tiles wide, and
+    // the world is ±400 u. Every tier and backend: the 48 u / 64 tiles the
+    // full tier kept cost it a fifth to a quarter more draws a cell for a few
+    // percent fewer vertices, and no pixel of the static world differed.
+    static constexpr float kSheetTile = 96.0f;
+    static constexpr uint32_t kSheetMinTris = 256;
     // A set piece's bake tile (bakePlacements), split by whole part. Finer
     // than a sheet's because a piece is dense where a sheet is sparse, so a
     // tile drawn whole to a camera beside it costs vertices a sheet's would
-    // not; doubled with the sheet's.
+    // not; doubled where a draw costs more than those vertices (buildStatic).
     static constexpr float kPieceTile = 8.0f;
     float mPieceTile = kPieceTile;
     bool mLite = false;   // setLite

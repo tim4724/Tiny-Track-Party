@@ -268,7 +268,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (uint32_t i = 0; i < mBoulders.idx.size(); i++) mBoulders.idx[i] = i;
         accumulateNormals(mBoulders); // soup → flat faceted, the kit read
         mBoulders.bakeLight = true;
-        tileMajor(mBoulders, mSheetTile, mSheetMinTris);
+        tileMajor(mBoulders, kSheetTile, kSheetMinTris);
         buildMesh(mBoulders);
     }
     mScatterLayout = ttp::canonical_stringify(scatter);
@@ -945,7 +945,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         if (!mLandmarks.verts.empty()) {
             accumulateNormals(mLandmarks);
             mLandmarks.bakeLight = true;
-            tileMajor(mLandmarks, mSheetTile, mSheetMinTris);
+            tileMajor(mLandmarks, kSheetTile, kSheetMinTris);
             buildMesh(mLandmarks);
         }
         return;
@@ -1343,7 +1343,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         mLandmarks.bakeLight = true;
         mLandmarks.simplify = true;
-        tileMajor(mLandmarks, mSheetTile, mSheetMinTris);   // per vertex above: order-free
+        tileMajor(mLandmarks, kSheetTile, kSheetMinTris);   // per vertex above: order-free
         buildMesh(mLandmarks);
     }
 }
@@ -2696,7 +2696,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         accumulateNormals(m);
         bakeVertexLight(m);
         m.uvs.assign(m.verts.size(), float2{ 0, 0 });
-        tileMajor(m, mSheetTile, mSheetMinTris);
+        tileMajor(m, kSheetTile, kSheetMinTris);
         return buildMesh(m, true, staticInstance());
     };
     // mStructures itself is built after the set pieces, which may add their
@@ -2738,7 +2738,7 @@ void TtpRenderer::buildStructuresReceiver() {
     accumulateNormals(mStructures);
     bakeVertexLight(mStructures);
     mStructures.uvs.assign(mStructures.verts.size(), float2{ 0, 0 });
-    tileMajor(mStructures, mSheetTile, mSheetMinTris);
+    tileMajor(mStructures, kSheetTile, kSheetMinTris);
     buildMesh(mStructures, true, staticInstance());
 }
 
