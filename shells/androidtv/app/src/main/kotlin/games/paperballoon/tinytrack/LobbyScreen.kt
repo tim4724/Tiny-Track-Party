@@ -391,7 +391,7 @@ private fun TicketCard(state: GameState, open: Boolean) {
  * (`LobbyView.scanHint`) and the web (`.tagline`) — white type on the dark
  * tint, over the live preview it floats on.
  *
- * NO BLUR, which the web adds (`backdrop-filter: blur(12px)`): the picture behind
+ * NO BLUR: the picture behind
  * is the SurfaceView, which nothing in the view tree can sample, and the tint
  * alone reads the same at this size.
  *
@@ -724,11 +724,11 @@ private fun SeatCard(seat: GameState.Seat, model: String?) {
             Modifier
                 .fillMaxWidth()
                 // AN OPEN SEAT KEEPS THE FULL FOOTPRINT and changes only its skin:
-                // a GLASS placeholder (`.seat--open`, `rgba(24, 28, 44, 0.28)`, a
-                // literal there too) so the scene shows through. As white paper,
+                // a GLASS placeholder (`.seat--open`, OPEN_SEAT_GLASS) so the
+                // scene shows through. As white paper,
                 // four empty seats read as four cards with nobody on them.
                 //
-                // NO BLUR behind it, which the web adds: what is behind is the
+                // NO BLUR behind it: what is behind is the
                 // SurfaceView, out of reach of anything in this window, and the
                 // tint alone holds the shape.
                 .background(if (seat.open) OPEN_SEAT_GLASS else Tokens.surface, shape)
@@ -860,8 +860,8 @@ private val RACE_RAIL_TOP_CLEAR = INFO_BADGE_DIAMETER + 10.dp
 /** `.ticket`'s `padding: 0.85rem` — a thin paper margin, so the QR fills the card. */
 private val TICKET_PAD = 14.dp
 
-/** `.seat--open`'s glass, `rgba(24, 28, 44, 0.28)` — lighter than `--glass`, a
- *  literal in the CSS too. */
+/** The open seat's glass, lighter than `--glass`: a literal, as `.seat--open`'s
+ *  is in the CSS (which, with no blur either, lays it at 0.4). */
 private val OPEN_SEAT_GLASS = Color(24, 28, 44).copy(alpha = 0.28f)
 
 /** `.ticket__urlbox`'s type scale; the room code is 1.45em of it. */

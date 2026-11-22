@@ -50,6 +50,17 @@ html {
   --corner-btn: 3.4rem;
 }
 
+/* GLASS WITHOUT THE BLUR. Over the live canvas a backdrop-filter is re-run by
+   the compositor every frame, and even the four small LAP pills were a large
+   share of the browser's GPU-process CPU per frame. So the glass here is the
+   tint alone, as on both TV shells, laid thicker than --glass: the blur used to
+   smear what showed through, and at this strength the tint hides it instead
+   and reads as dark as the blurred glass did. The open seat thickens its own
+   lighter wash the same way. */
+html {
+  --glass-flat: rgba(24, 28, 44, 0.7);
+}
+
 /* ---- Lobby ---- */
 /* Sticker chrome FRAMING the board (paper stage OR live 3D preview behind —
    the layout is identical in both states): two rails that run the full height
@@ -305,8 +316,7 @@ html {
   text-align: center;
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(14px, 1.15vw, 22px); line-height: 1.15;
-  color: #fff; background: var(--glass);
-  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  color: #fff; background: var(--glass-flat);
   border-radius: var(--r);
   padding: 0.6em 1.1em;
   opacity: 0; transition: opacity 0.4s ease;
@@ -429,8 +439,7 @@ html {
    .seat__open square stands in for the kart render, "Open" sits where the
    name goes */
 .seat--open {
-  background: rgba(24, 28, 44, 0.28);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  background: rgba(24, 28, 44, 0.4);
   box-shadow: none;
 }
 .seat--open .seat__name { color: rgba(255, 255, 255, 0.85); }
@@ -633,7 +642,7 @@ html.cam-free #race { pointer-events: none; }
      under the safe edge (.cell-label margin, Stage.js _loop's placeEl) */
   position: absolute; left: 50%; top: calc(var(--safe-top) + 11px); translate: -50% 0;
   display: flex; gap: calc(var(--light) * 0.125); padding: calc(var(--light) * 0.156); border-radius: var(--r-pill);
-  background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  background: var(--glass-flat);
 }
 .cd-step {
   width: var(--light); height: var(--light); border-radius: 50%; display: grid; place-items: center;
@@ -657,7 +666,7 @@ html.cam-free #race { pointer-events: none; }
   font-family: var(--font-display); font-weight: 600; font-size: calc(var(--light) * 0.27);
   letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; color: #fff;
   padding: 0.3em 0.95em; border-radius: var(--r-pill);
-  background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  background: var(--glass-flat);
 }
 .cd-race.is-final { background: color-mix(in srgb, var(--red) 80%, transparent); }
 /* GO stays up the beat after the start (cars are already moving) and fades
@@ -750,8 +759,7 @@ html.cam-free #race { pointer-events: none; }
   display: table; margin-left: auto; margin-top: 0.45rem;
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(0.9rem, 1.25vw, 1.15rem); letter-spacing: 0.12em; text-transform: uppercase;
-  color: #fff; background: var(--glass); border-radius: var(--r-pill);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  color: #fff; background: var(--glass-flat); border-radius: var(--r-pill);
   padding: 0.32em 0.9em;
   white-space: nowrap;
 }

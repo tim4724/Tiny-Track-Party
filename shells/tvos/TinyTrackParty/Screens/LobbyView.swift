@@ -435,7 +435,7 @@ private struct JoinTicket: View {
     /// joining stays possible until the race starts. Held back until there is a
     /// code to scan, its box reserved from the start so the ticket never moves.
     ///
-    /// The glass tint without the web's backdrop blur: what is behind it is the
+    /// The glass tint alone, no backdrop blur: what is behind it is the
     /// live attract race, and a blur re-run over that every frame buys nothing
     /// the 55% tint does not already give the white type.
     private var scanHint: some View {
@@ -857,8 +857,8 @@ private struct SeatCard: View {
         let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
         if seat.open {
             // `.seat--open`: a GLASS placeholder of the same footprint, visibly
-            // a slot rather than a card. The web blurs behind it as well; this
-            // is the tint alone, over the live attract race.
+            // a slot rather than a card: the tint alone, no blur, over the
+            // live attract race.
             shape.fill(Tokens.glass(alpha: 0.28))
         } else {
             shape.fill(Tokens.surface)

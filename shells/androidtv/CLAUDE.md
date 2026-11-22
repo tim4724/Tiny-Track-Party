@@ -900,9 +900,8 @@ row a list would clip, the same blue as an inset edge) whenever it holds focus.
 
 **THIS SHELL IS DELIBERATELY SIMPLER THAN THE OTHER TWO** (the user's call, for
 the box above): no blur anywhere, no per-frame animation added for a look, and
-any translucent layer over the live race kept small. Where the web blurs (the
-frost, the scan hint, the open seats, the lap pill, the countdown strip) this
-draws the tint alone; the frost goes on a touch thicker to make up for it
+any translucent layer over the live race kept small. Where the web blurs (its
+frost) this draws the tint alone, a touch thicker to make up for it
 (`Sticker.frost`). The item slot shows a landed item without the web's 1.8x pop.
 
 `Tokens.kt` reads the staged `design-tokens.json` — the same file the web's CSS is

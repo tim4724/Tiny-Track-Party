@@ -176,7 +176,7 @@ private fun PlaceColumn(place: Int, lap: Int, totalLaps: Int, modifier: Modifier
 /**
  * `.cell-rank__lap` — GLASS: white caps on the dark tint, a readout over the live
  * view and nothing to press. Small, so it is the one translucent layer on the race
- * screen this box pays for; the web's blur behind it is out of reach here (the
+ * screen this box pays for; a blur behind it would be out of reach here (the
  * picture is the SurfaceView) and the tint alone reads the same at this size.
  */
 @Composable
