@@ -215,6 +215,17 @@ test('picking a car re-dresses its tile, and only the render it replaces fades',
         if (n.nodeType === 1 && n.classList.contains('car-opt')) window.__adds++;
       }
     }).observe(grid, { childList: true });
+    // Which tiles retired a render through the fade. Recorded HERE because the
+    // layer lives for the length of its fade: a runner that looks for it after
+    // the click is racing it, and loses whenever the machine is busy.
+    window.__outs = [];
+    new MutationObserver((ms) => {
+      for (const m of ms) {
+        if (m.target.classList.contains('carthumb--out')) {
+          window.__outs.push(m.target.closest('.car-opt').classList.contains('car-opt--mine') ? 'taken' : 'left');
+        }
+      }
+    }).observe(grid, { subtree: true, attributeFilter: ['class'] });
     window.__fades = [];
     document.addEventListener('animationstart', (e) => {
       if (e.target.closest('#carpick')) window.__fades.push(e.animationName);
@@ -230,20 +241,14 @@ test('picking a car re-dresses its tile, and only the render it replaces fades',
 
   await page.locator('#carpick .car-opt').nth(3).click();
   await expect(page.locator('#carpick .car-opt--mine')).not.toHaveAttribute('aria-label', before.mine);
-  // A pick changes the render mode of two tiles, and only ONE of them fades.
-  // The tile you LEFT gives up a turntable stopped at whatever angle it
-  // reached, so that swap is a real change of image and its outgoing render
-  // fades off the incoming still. The tile you TOOK cuts: a turntable opens on
-  // frame 0, which is the very still already under it, and fading identical
-  // layers would only composite the car's translucent ground shadow twice.
-  await expect(page.locator('#carpick .carthumb--out')).toHaveCount(1);
-  await expect(page.locator('#carpick .car-opt--mine .carthumb--out')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__fades.join(',')),
+    { message: 'the render you left fades off the still replacing it' }).toContain('swap-out');
 
   const after = await page.evaluate(() => {
     const grid = document.getElementById('carpick');
     return {
       adds: window.__adds,
-      fades: window.__fades.join(','),
+      outs: window.__outs.join(','),
       sameTiles: window.__tiles.every((t, k) => t === grid.querySelectorAll('.car-opt')[k]),
       samePips: window.__pips.every((i, k) => i === grid.querySelectorAll('.car-opt .stat__pips > i')[k]),
       // the pips carry a transition, which is what turns a re-rating into a fade
@@ -252,7 +257,13 @@ test('picking a car re-dresses its tile, and only the render it replaces fades',
   });
   expect(after.adds, 'the tiles are dressed, never rebuilt').toBe(0);
   expect(after.sameTiles, 'the tile you pressed must survive its own tap').toBe(true);
-  expect(after.fades, 'the render you left fades off the still replacing it').toContain('swap-out');
+  // A pick changes the render mode of two tiles, and only ONE of them fades.
+  // The tile you LEFT gives up a turntable stopped at whatever angle it
+  // reached, so that swap is a real change of image and its outgoing render
+  // fades off the incoming still. The tile you TOOK cuts: a turntable opens on
+  // frame 0, which is the very still already under it, and fading identical
+  // layers would only composite the car's translucent ground shadow twice.
+  expect(after.outs, 'one render fades, and it is the one you left').toBe('left');
   expect(after.samePips, 'the pips must survive the pick, or they cannot light').toBe(true);
   expect(after.moves, 'a re-rated pip has to fade rather than cut').toContain('background');
 
