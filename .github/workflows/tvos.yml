@@ -89,8 +89,12 @@ on:
 # cancelled, only queued behind: it is the one that writes the Filament cache
 # every branch and the release read, and a second push used to kill a cold
 # build most of the way through, to start it again from nothing.
+#
+# A pull request's group is its NUMBER, not its ref: an event for a pull request
+# that has just merged carries the base branch as its ref, and under the ref it
+# would share main's group and cancel main's run.
 concurrency:
-  group: tvos-${{ github.ref }}
+  group: tvos-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Jobs that need more say so themselves.
