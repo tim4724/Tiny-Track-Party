@@ -78,10 +78,20 @@ on:
       - 'public/assets/licenses/**'
       - 'shells/licenses/**'
       - 'scripts/shell-credits.mjs'
+  # THE CACHE WARMER, for this workflow and for release.yml's `tvos` job: GitHub
+  # drops a cache nothing has read for a week, and the path filters above let
+  # this sit idle for longer. See native.yml's schedule.
+  schedule:
+    - cron: '47 4 * * 1,4'
+  workflow_dispatch:
 
+# A pull request's newer push cancels its older run. A run on MAIN is never
+# cancelled, only queued behind: it is the one that writes the Filament cache
+# every branch and the release read, and a second push used to kill a cold
+# build most of the way through, to start it again from nothing.
 concurrency:
   group: tvos-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Jobs that need more say so themselves.
 permissions:

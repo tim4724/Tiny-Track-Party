@@ -21,11 +21,16 @@ RUN node scripts/build-site.mjs && rm -rf site/assets
 # Webhosting provides around it).
 FROM httpd:2.4-alpine
 COPY httpd.conf /usr/local/apache2/conf/httpd.conf
-# Assets (~110 MB, nearly all race soundtrack and trailer) get their OWN layer,
-# below the rest. Folded into one copy, a one-line .js edit changed its digest
-# and every preview deploy re-pulled the soundtrack. Split out, the digest is
-# stable and the node reuses it across commits and namespaces.
-COPY public/assets/ /usr/local/apache2/htdocs/assets/
+# Assets get their OWN layers, below the rest. Folded into one copy, a one-line
+# .js edit changed its digest and every preview deploy re-pulled the soundtrack.
+# Split out, the digest is stable and the node reuses it across commits and
+# namespaces. The soundtrack and the trailer are apart from the models: those
+# change on every push of a world branch, and the media never do. The copies
+# must not OVERLAP: a file copied twice lands in both layers whenever the two
+# were built from different checkouts, because its mtime differs.
+COPY public/assets/audio/ /usr/local/apache2/htdocs/assets/audio/
+COPY public/assets/trailer/ /usr/local/apache2/htdocs/assets/trailer/
+COPY --exclude=audio --exclude=trailer public/assets/ /usr/local/apache2/htdocs/assets/
 COPY --from=builder /app/site/ /usr/local/apache2/htdocs/
 USER 1001:1001
 EXPOSE 4000

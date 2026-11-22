@@ -232,6 +232,30 @@ expected durations: they rot, and a stale one sends someone chasing a phantom
 regression. Time the command yourself and compare against a second run on the
 same machine.
 
+## CI
+
+`.github/workflows/`; each file's header says what it is for and why it is shaped
+that way.
+
+| Workflow | Runs on | Gates |
+|---|---|---|
+| `test.yml` | every push | lint, `npm test`, the E2E suite across runners |
+| `native.yml` | changes under `native/` or `tests/fixtures/` | the ctest suite on every platform leg, plus the full Android link |
+| `tvos.yml`, `androidtv.yml` | changes to a shell or to what it stages | that the TV app still builds |
+| `preview.yml` / `hetzner-deploy.yml` | every branch push / a green `test.yml` on main | see [Deploys](#deploys) |
+| `release.yml` | a version tag | the store builds |
+| `test-the-tests.yml`, `partyplug-upstream.yml` | a schedule | nothing a push watches: read them when surveying CI health |
+
+A workflow is as slow as its slowest job, so **find that job before changing
+anything**: `gh run view <id> --json jobs` has every job's and step's start and
+end, and a job's log carries Playwright's and ctest's time per test. Two shapes
+to look for. One test or one shard much slower than its siblings sets the
+whole run's time and hides in a green suite. And the Filament SDK builds in
+`native.yml` and `tvos.yml` are the slowest thing CI has by far, are cached by
+the pin, and GitHub drops a cache nothing has read for a week or once the
+repository's caches pass their size limit: `gh cache list` shows what is there,
+and both workflows run on a schedule to keep theirs read.
+
 ## Deploys
 
 Every push to `main` uploads `site/` to Hetzner Webhosting

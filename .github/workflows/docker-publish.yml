@@ -57,7 +57,14 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # mode=min: the final image's layers only. mode=max also kept the
+          # build stage's copy of public/, assets and all, which changes on
+          # every push and which a hit saves seconds on. Those blobs kept the
+          # repository at its Actions cache limit, where GitHub evicts
+          # whatever was read longest ago: the Filament SDKs (native.yml,
+          # tvos.yml), read only when native/ changes and the slowest builds
+          # CI has.
+          cache-to: type=gha,mode=min
           # The preview cluster is amd64.
           platforms: linux/amd64
           # The commit the pages name (see the Dockerfile).
