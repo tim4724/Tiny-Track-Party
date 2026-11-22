@@ -20550,10 +20550,25 @@ def stamp_battery(x, y):
     return y + TOP + 0.5
 
 def ore_bucket(at):
+    """A tramway bucket as the real lines hung them, built at `at` on the
+    track rope (its centre) going +X: a carriage of two grooved wheels
+    riding on top of the rope, its side plate on the rope's outer side
+    (-Z: the side the tower's crossarm is not), the hanger down that side
+    and in under the rope and the haul rope to the bail, and the bucket
+    hanging in the bail, a tapered iron tub. Only what reads at its size:
+    eight of them ride the line, so an axle, a rim or the grip on the haul
+    rope costs eight times over for a hair of a pixel."""
     x, y, z = at
-    box((0.35, 2.2, 0.35), (x, y - 1.1, z), IRON)                                    # hanger
-    box((2.4, 1.8, 2.0), (x, y - 3.1, z), RUST)
-    box((1.6, 0.5, 1.3), (x, y - 2.0, z), 0xffc044)                                  # ore heaped in it
+    zo = z - 0.45                                                                    # the outer side
+    for dx in (-0.5, 0.5):
+        cyl(0.35, 0.45, (x + dx, y + 0.62, z - 0.45), IRON, segs=6, axis='along')   # a wheel on the rope, its hub to the plate
+    box((1.5, 0.95, 0.12), (x, y + 0.42, zo), IRON)                                  # the side plate
+    box((0.2, 2.45, 0.2), (x, y - 0.83, zo), IRON)                                   # the hanger, outside the rope
+    box((0.2, 0.2, 0.55), (x, y - 2.05, z - 0.25), IRON)                             # and in under it
+    box((2.5, 0.15, 0.15), (x, y - 2.12, z), IRON)                                   # the bail's bar
+    verts = [(x + sx * hx, y + hy, z + sz * hz) for hx, hz, hy in ((0.8, 0.6, -4.1), (1.1, 0.9, -2.6))
+             for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    solid(verts, [(3, 2, 1, 0), (4, 5, 6, 7)] + [(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i) for i in range(4)], RUST)
 
 def mill_bank_y(x, z):
     """The mill's hill at (x, z) (tailings_dump laps its -Z flank): a round
@@ -20692,9 +20707,10 @@ def water_works():
 @piece(REAL)
 @plain
 def stamp_mill():
-    ROPE_Y, SAG, GAP = 27.0, 4.0, 3.0              # the ropes at their towers, their sag, each one's offset across
+    ROPE_Y, GAP = 27.0, 3.0                        # the ropes at their towers, each one's offset across
     T0 = -16.0                                     # the terminal's bull wheel, along +X
     OUT = 27.0 / REAL                              # the tower beside the adit
+    TW, SAG_A, SAG_B = 70.0, 3.0, 1.0              # the line's tower past the road, each span's sag
     W = MILL_W
     # the bank: the stepped profile, rough on its slopes, its pads level
     xs = (-63.0, -56.0, -49.0, -42.0, -36.0, -31.0, -26.0, -18.0, -10.9, -10.1, -6.4, -5.6, -1.0, 4.6, 5.4, 9.5, 13.5, 17.5, 22.5)
@@ -20855,27 +20871,79 @@ def stamp_mill():
         mx, my, mz = (ga[i] + (gb[i] - ga[i]) * f for i in range(3))
         for s in (-1, 1):
             strut((mx + s * 2.2, -1.0, mz + s * 0.8), (mx + s * 0.6, my - 0.8, mz + s * 0.2), 0.55, TIMBER)
-    # the two ropes sagging over the road, fat enough to read in a split cell
-    ropes = [sag((T0, ROPE_Y, s * GAP), (OUT - 0.6, ROPE_Y, s * GAP), SAG, n=7) for s in (-1, 1)]
-    for pts in ropes:
-        drawn = pts[::2] if LITE else pts                     # (the buckets ride all seven points either way)
+    # THE LINE, as the real ones were built: a track rope each side for the
+    # buckets' wheels, sagging over the road, fat enough to read in a split
+    # cell, a thinner haul rope under each (under the tower's crossarm), the
+    # buckets' grips on it, and between the stations the line's tower in the
+    # yard past the road, the track ropes over its crossarm's saddles
+    def rope(z, na=7, nb=4):
+        return sag((T0, ROPE_Y, z), (TW, ROPE_Y, z), SAG_A, n=na) + sag((TW, ROPE_Y, z), (OUT - 0.6, ROPE_Y, z), SAG_B, n=nb)[1:]
+    ropes = [rope(s * GAP) for s in (-1, 1)]
+    for s in (-1, 1):
+        coarse = rope(s * GAP, 4, 2)                              # (the buckets ride every point either way)
+        drawn = coarse if LITE else rope(s * GAP)
         for a_, b_ in zip(drawn, drawn[1:]):
             strut(a_, b_, 0.6, 'dark')
-    # a bucket's foot clears every roof it passes over
+        for a_, b_ in zip(coarse, coarse[1:]):                    # the haul rope, thin: a coarse sag reads
+            strut((a_[0], a_[1] - 1.6, a_[2]), (b_[0], b_[1] - 1.6, b_[2]), 0.35, 'dark')
+    def rope_y(x):
+        x0, x1, d = (T0, TW, SAG_A) if x <= TW else (TW, OUT - 0.6, SAG_B)
+        t = (x - x0) / (x1 - x0)
+        return ROPE_Y - d * 4 * t * (1 - t)
+    # a bucket's foot (4.1 under its rope) clears every roof it passes over
     for x, top in ((-8.6, MILL_CRUSHER + 5.5), (xm, HR + 0.5), (HX1 + 0.6, HE)):
-        t = (x - T0) / (OUT - 0.6 - T0)
-        assert ROPE_Y - SAG * 4 * t * (1 - t) - 4.0 > top + 0.5, 'a bucket through a roof at x %.1f' % x
+        assert rope_y(x) - 4.1 > top + 0.5, 'a bucket through a roof at x %.1f' % x
+    # the line's tower: four legs splayed from the yard to under the
+    # crossarm, girted, braced across its faces along the line, the arm
+    # out to the ropes over the buckets' way (the body keeps inside them,
+    # the arm's braces over their rims), a saddle under each track rope at
+    # its tip
+    TY = ROPE_Y - 1.3                                                                # the arm's underside
+    def leg(sx, sz, y):
+        f = (y + 2.0) / (TY + 2.0)
+        return (TW + sx * (3.0 - 2.2 * f), y, sz * (2.6 - 1.6 * f))
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            strut(leg(sx, sz, -2.0), leg(sx, sz, TY), 0.7, TIMBER)
+    girts = (7.0, 16.0) if LITE else (6.0, 13.0, 20.0)
+    for y in girts:
+        (ax, _, az) = leg(1, 1, y)
+        for sz in (-1, 1):
+            box((2 * (ax - TW) + 0.5, 0.4, 0.4), (TW, y, sz * az), TIMBER)
+        for sx in (-1, 1):
+            box((0.4, 0.4, 2 * az + 0.5), (TW + sx * (ax - TW), y, 0.0), TIMBER)
+    if not LITE:
+        for y0, y1 in zip((-0.5,) + girts, girts + (TY,)):                           # an X up each face along the line
+            for sz in (-1, 1):
+                strut(leg(-1, sz, y0), leg(1, sz, y1), 0.3, TIMBER)
+                strut(leg(1, sz, y0), leg(-1, sz, y1), 0.3, TIMBER)
+    box((1.0, 0.6, 2 * GAP + 0.6), (TW, TY + 0.3, 0.0), TIMBER)                     # the crossarm
+    for s in (-1, 1):
+        strut((TW, ROPE_Y - 4.6, s * 1.0), (TW, TY, s * 2.0), 0.35, TIMBER)          # its brace from the body
+        box((2.4, 0.4, 0.6), (TW, TY + 0.8, s * GAP), IRON)                          # the saddle the rope lies in
     join_still('mill')
-    # the buckets: out on one rope, round the tower's sheave, home on the
-    # other, round the bull wheel
+    # the buckets: out empty on one rope, round the tower beside the adit,
+    # where the ore house fills them, home loaded on the other, round the
+    # bull wheel, where they tip. The ore rides each in step with its path
+    # (the same period, the bucket's own offset), down inside the tub's
+    # body while it rides empty, up in a heap once it rounds the ore house.
     loop = ropes[0] + [(OUT + 0.6, ROPE_Y, 0.0)] + ropes[1][::-1] + [(T0 - GAP, ROPE_Y, 0.0)]
     for i, p in enumerate(loop):
         marker('path_tram_%d' % i, p)
-    span = sum(math.dist(a_, b_) for a_, b_ in zip(loop, loop[1:] + loop[:1])) * REAL
-    N = 8
+    seg = [math.dist(a_, b_) for a_, b_ in zip(loop, loop[1:] + loop[:1])]
+    total = sum(seg)
+    fill = sum(seg[:len(ropes[0])]) / total                                          # where it rounds the ore house
+    tip = sum(seg[:len(loop) - 1]) / total                                           # and the bull wheel
+    P, N, WAY = total * REAL / 1.2, 8, 0.008
+    hold = tip - fill - WAY
+    x0, y0, z0 = loop[0]
     for k in range(N):
-        with animated('anim_path:c=tram:p=%.1f:o=%.4f:f=1#%d' % (span / 1.2, k / N, k), loop[0]):
+        with animated('anim_path:c=tram:p=%.1f:o=%.4f:f=1#%d' % (P, k / N, k), loop[0]):
             ore_bucket(loop[0])
+            with animated('anim_bob:h=%.3f:p=%.1f:r=%.4f:t=%.4f:o=%.4f#ore%d' % (0.7 * REAL, P, 1 - hold - 2 * WAY, hold,
+                                                                              (k / N - (fill - WAY / 2)) % 1.0, k),
+                          (x0, y0 - 3.2, z0)):
+                rock_lump(0.7, (x0, y0 - 3.2, z0), 'yellow', (1.3, 0.4, 1.0), 0.0, seed=float(k))
 
 # The mill's tailings: what is left of the ore once the stamps have crushed it
 # and the plates and tables have taken the gold. It leaves the tables' house
