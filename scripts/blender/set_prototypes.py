@@ -23639,12 +23639,12 @@ def headframe():
     # headframe: a timber portal astride it (placed on the road, +X its
     # left, the bend's inside), its legs on both verges leaning in to a deck
     # of two girders over the road six units up, braced in X's down each
-    # side; the red sheave wheel on the deck over the right-hand kerb, the
-    # rope down from it winding a cage up out of the collar house over the
-    # shaft between the right-hand legs with a cart of ore that rolls out
-    # onto the landing and tips into the ore bin (THE HOIST, below), and
-    # over it and away across the road to the hoist house on the inside
-    # verge. The
+    # side; two red sheave wheels on the deck over the right-hand kerb, a
+    # rope down from each into the open shaft between the right-hand legs,
+    # one winding a cage up with a cart of ore that rolls out onto the
+    # landing and tips into the ore bin while the other lowers its own
+    # (THE HOIST, below), and over them and away across the road to the
+    # hoist house on the inside verge. The
     # backstays lean from the deck's far end down to the inside verge, so
     # the racers pass under the wheel, the girders, the backstays and the
     # cable in turn. The carts tip into the ore bin standing on
@@ -23672,45 +23672,51 @@ def headframe():
     for x in (-2.6, 0.0, 2.6):                                                   # their ties
         box((0.22, 0.2, 2.0), (x, H + 0.35, ZC), TIMBER)
     box((2.2, 0.16, 2.1), (-3.0, H + 0.33, ZC), TIMBER)                          # the sheave deck
-    WX, cy = -3.55, H + 1.35
-    for sz in (-0.6, 0.6):                                                       # the wheel's posts and axle
+    WX, cy = -3.75, H + 1.35
+    ZA, ZB = ZC - 0.48, ZC + 0.48                                                # the shaft's two compartments, A the landing's side
+    for sz in (-0.85, 0.0, 0.85):                                                # the wheels' posts and axle
         box((0.22, 1.2, 0.22), (WX, H + 0.95, ZC + sz), TIMBER)
-    box((0.2, 0.2, 1.4), (WX, cy, ZC), 'slate')
-    # THE HOIST, the old Western way. A cage (an open timber frame with a
-    # little roof bonnet, running between two guides) winds a loaded ore
-    # cart, the ore line's own, up out of the shaft through the collar
-    # house's roof and stops with its floor level with the landing, a short
-    # track on the tipple deck out over the ore bin. The cart rolls out to
-    # the stop block, tips sideways over the bin, its ore pouring out of it,
+    box((0.2, 0.2, 1.9), (WX, cy, ZC), 'slate')
+    # THE HOIST, the old Western way: a shaft of two compartments, a cage in
+    # each (an open timber frame with a little roof bonnet, running between
+    # two guides), hung in balance, so one rises while the other sinks.
+    # Cage A winds a loaded ore cart, the ore line's own, up out of the open
+    # shaft and stops with its floor level with the landing, a short track
+    # on the tipple deck out over the ore bin. The cart rolls out to the
+    # stop block, tips sideways over the bin, its ore pouring out of it,
     # rights itself, rolls back into the cage and the cage lowers it into
-    # the shaft, where it is loaded again while it stands. One clock runs
-    # it all: in-step sways and bobs (`o`) with a rest r and a hold t, each
-    # part's move set inside the hold of the one it rides (the cart's roll
-    # inside the cage's stop at the top, the tip inside the cart's stop at
-    # the stop block, the ore's way out and home inside the tip). The
-    # rope comes off the wheel's outer side (RX) straight down to the cage's
-    # shackle in three lengths sliding one into the next, each moving its
-    # share of the cage's climb (the top one fixed, the middle half, the
-    # bottom with the cage), each a hair thinner than the one it slides
-    # into: it reaches from the wheel to the cage at every moment, no end of
-    # it ever shows and it never stretches. The wheel turns as far as the
-    # rope runs (its rim's speed the rope's) and stands when the cage
-    # stands. The wheel stands out over the deck's end so the cage climbs
-    # clear of the frame's side (its girts and braces).
-    PERIOD, FLOOR = 20.0, 0.1                                                    # a cycle; the cage's floor in the shaft
+    # the shaft, out of sight below the collar, where it is loaded again
+    # while it stands. Cage B, an empty cart in it, goes down as A comes up
+    # and up as A goes down. One clock runs it all: in-step sways and bobs
+    # (`o`) with a rest r and a hold t, each part's move set inside the
+    # hold of the one it rides (the cart's roll inside the cage's stop at
+    # the top, the tip inside the cart's stop at the stop block, the ore's
+    # way out and home inside the tip). Each rope comes off its wheel's
+    # outer side (RX) straight down to its cage's shackle in three lengths
+    # sliding one into the next, each moving its share of the cage's climb
+    # (the top one fixed, the middle half, the bottom with the cage), each
+    # a hair thinner than the one it slides into: each overlaps the next at
+    # both ends of the climb, none reaches over the wheel's axle or under
+    # the shackle, so the rope reaches from the wheel to the cage at every
+    # moment and never stretches. Each wheel turns as far as its rope runs
+    # (its rim's speed the rope's), the two against each other, and stands
+    # when the cages stand. The wheels stand out past the deck's end so the
+    # cages climb clear of the frame's side (its girts and braces).
+    PERIOD, FLOOR = 20.0, -1.3                                                   # a cycle; cage A's floor in the shaft, all of it underground
     RAIL0 = FLOOR + 0.08                                                         # its rails' top: where the cart stands
     LAND = 3.36                                                                  # the landing's rails' top
     RX, CLIMB = WX - 0.86, LAND - RAIL0
-    REST, HOLD = 0.15, 0.55                                                      # the cage: 3 s in the shaft, 11 s at the top
-    ROLL, OUT = 1.48, (0.175, 0.35, 0.075)                                       # the cart: how far, and (start, its stop, each way) in cycles
+    REST, HOLD = 0.15, 0.55                                                      # cage A: 3 s in the shaft, 11 s at the top
+    ROLL, OUT = 1.0, (0.175, 0.35, 0.075)                                        # the cart: how far, and (start, its stop, each way) in cycles
     TIP = (0.27, 0.17, 0.07)                                                     # the tub's tip: start, held, each way
     # The ore pours from 20 degrees of the tip (0.30): out over the lip and
     # down into the bin before the tub is full over (0.34). It goes home
     # unseen: it stays in the bin while the tub rights and the cart rolls
     # back (KEEP_TIP and KEEP_ROLL, each the very move it undoes, reversed),
     # rides the cage down through the bin's floor and the boarded chute
-    # under it into the ground, and once the cage is down crosses under the
-    # collar house and comes up inside it into the tub, each undone in turn.
+    # under it into the ground, and once the cage is down comes back to the
+    # tub underground (cage A down, it never rises past FLOOR + 0.85), each
+    # move undone in turn.
     SLIDE, SLID = (0.30, 0.66, 0.02), (-0.385, 0.25)                             # out over the lip (the tub's frame:
                                                                                  # level in the world's, tipped)
     DROP, DROPD = (0.32, 0.554, 0.018), 1.5                                      # and down into the bin
@@ -23734,53 +23740,68 @@ def headframe():
         for o in bpy.context.scene.objects:
             if o not in block.before and o.parent is None:
                 o.matrix_world = back @ o.matrix_world
-    with animated(hoist('sway', 'a=z:d=%.1f' % -math.degrees(CLIMB / 0.86), 'wheel'), (WX, cy, ZC)):
-        torus(0.88, 0.09, (WX, cy, ZC), 'red', segs=12, axis='along')           # (the rope at 0.86 runs in its rim)
-        for k in range(4):
-            box((0.12, 1.7, 0.12), (WX, cy, ZC), 'red', roll=k * math.pi / 4)
-        box((0.34, 0.34, 0.3), (WX, cy, ZC), 'slate')
+    for z, d, tag in ((ZA, -1, 'wheel'), (ZB, 1, 'wheelb')):
+        with animated(hoist('sway', 'a=z:d=%.1f' % (d * math.degrees(CLIMB / 0.86)), tag), (WX, cy, z)):
+            torus(0.88, 0.09, (WX, cy, z), 'red', segs=12, axis='along')        # (the rope at 0.86 runs in its rim)
+            for k in range(4):
+                box((0.12, 1.7, 0.12), (WX, cy, z), 'red', roll=k * math.pi / 4)
+            box((0.34, 0.34, 0.3), (WX, cy, z), 'slate')
     # (0.11, 0.09 and 0.07 across read as an aerial pulled out)
-    SHACKLE = FLOOR + 0.885                                                     # where the rope takes the cage, in the shaft
-    rowed(strut((RX, 5.0, ZC), (RX, cy, ZC), 0.09, ROPE), 6)                     # the rope's fixed length off the wheel
-    with animated(hoist('bob', 'h=%.3f' % (CLIMB / 2), 'rope'), (RX, 3.0, ZC)):
-        rowed(strut((RX, 3.0, ZC), (RX, 5.6, ZC), 0.085, ROPE), 6)               # the middle length, half the climb
-    CX, CZ = 0.33, 0.43                                                          # the cage's half width and depth
-    with animated(hoist('bob', 'h=%.2f' % CLIMB, 'cage'), (RX, FLOOR, ZC)):
-        rowed(strut((RX, SHACKLE, ZC), (RX, 3.5, ZC), 0.08, ROPE), 6)            # the bottom length, on its shackle
-        box((2 * CX, 0.05, 2 * CZ), (RX, FLOOR + 0.025, ZC), TIMBER)            # its floor
+    SHACKLE = FLOOR + 0.885                                                     # where the rope takes cage A, in the shaft
+    TOP0, MID, LOW = 4.9, (1.9, 5.03), 2.6                                       # the fixed length's foot, the middle's
+                                                                                 # ends with cage A down, the bottom's length
+    for z, lift, k, tag in ((ZA, 0.0, 1, 'rope'), (ZB, CLIMB, -1, 'ropeb')):     # (cage B starts at the top)
+        rowed(strut((RX, TOP0, z), (RX, cy, z), 0.09, ROPE), 6)                  # the rope's fixed length off the wheel
+        m0, m1 = MID[0] + lift / 2, MID[1] + lift / 2
+        with animated(hoist('bob', 'h=%.3f' % (k * CLIMB / 2), tag), (RX, m0, z)):
+            rowed(strut((RX, m0, z), (RX, m1, z), 0.085, ROPE), 6)               # the middle length, half the climb
+    CX, CZ = 0.33, 0.43                                                          # a cage's half width and depth
+    def cage(floor, z, ends):
+        """A cage at z, its floor at `floor`: rails along Z, corner posts and
+        side bars, a bar across each end in `ends` (the cart goes out of A
+        at -Z), the bonnet, the shackle and the rope's bottom length on it."""
+        rowed(strut((RX, floor + 0.885, z), (RX, floor + 0.885 + LOW, z), 0.08, ROPE), 6)
+        box((2 * CX, 0.05, 2 * CZ), (RX, floor + 0.025, z), TIMBER)             # its floor
         for sx in (-1, 1):
-            box((0.04, 0.03, 2 * CZ), (RX + sx * 0.157, FLOOR + 0.065, ZC), 'slate')   # its rails
+            box((0.04, 0.03, 2 * CZ - 0.02), (RX + sx * 0.157, floor + 0.065, z), 'slate')   # its rails, short of
+                                                                                 # its floor's ends (not in their planes)
             for sz in (-1, 1):                                                   # its corner posts
-                box((0.05, 0.75, 0.05), (RX + sx * (CX - 0.025), FLOOR + 0.425, ZC + sz * (CZ - 0.025)), TIMBER)
-            box((0.04, 0.04, 2 * CZ), (RX + sx * (CX - 0.025), FLOOR + 0.45, ZC), TIMBER)   # a side bar
-        box((2 * CX, 0.04, 0.04), (RX, FLOOR + 0.45, ZC + CZ - 0.025), TIMBER)   # the back bar (the cart goes out at -Z)
-        box((2 * CX, 0.05, 2 * CZ), (RX, FLOOR + 0.825, ZC), RUST)              # the bonnet
-        box((0.1, 0.07, 0.1), (RX, FLOOR + 0.885, ZC), 'slate')                 # the shackle
+                box((0.05, 0.75, 0.05), (RX + sx * (CX - 0.025), floor + 0.425, z + sz * (CZ - 0.025)), TIMBER)
+            box((0.04, 0.04, 2 * CZ), (RX + sx * (CX - 0.025), floor + 0.45, z), TIMBER)   # a side bar
+        for sz in ends:
+            box((2 * CX, 0.04, 0.04), (RX, floor + 0.45, z + sz * (CZ - 0.025)), TIMBER)
+        box((2 * CX, 0.05, 2 * CZ), (RX, floor + 0.825, z), RUST)               # the bonnet
+        box((0.1, 0.07, 0.1), (RX, floor + 0.885, z), 'slate')                  # the shackle
+    with animated(hoist('bob', 'h=%.2f' % -CLIMB, 'cageb'), (RX, LAND - 0.08, ZB)):
+        cage(LAND - 0.08, ZB, (-1, 1))
+        ore_cart((RX, LAND, ZB), ore=False, k=0.35)
+    with animated(hoist('bob', 'h=%.2f' % CLIMB, 'cage'), (RX, FLOOR, ZA)):
+        cage(FLOOR, ZA, (1,))
         # the cart on the cage's rails, along Z: a side-tipping cart, its tub
         # pivoted on the outer edge of its chassis. The chassis rolls out down
         # the landing (-Z, its node's up aimed there) on its wheels, the tub
         # tips over the bin (-X) and rights itself; its ore pours out of it
         # (SLIDE above), each step of its way a part riding the one before
-        TP = (RX - 0.15, RAIL0 + 0.18, ZC)                                       # the tub's pivot
-        ORE = (RX, RAIL0 + 0.455, ZC)
+        TP = (RX - 0.15, RAIL0 + 0.18, ZA)                                       # the tub's pivot
+        ORE = (RX, RAIL0 + 0.455, ZA)
         def speck(at):
             # A step of the ore's way with nothing of its own to draw makes no
             # part (TtpRendererMotion: its riders ride on past it), so each
             # carries a speck too small to see, in the tub's wall at rest.
             fig_block((0.004, 0.004, 0.004), at, 'slate')
-        with animated(inside('bob', 'h=%.2f' % ROLL, OUT, 'cart'), (RX, RAIL0, ZC), tilt=-math.pi / 2) as cart:
-            ore_cart((RX, RAIL0, ZC), ore=False, k=0.35, parts='chassis')
+        with animated(inside('bob', 'h=%.2f' % ROLL, OUT, 'cart'), (RX, RAIL0, ZA), tilt=-math.pi / 2) as cart:
+            ore_cart((RX, RAIL0, ZA), ore=False, k=0.35, parts='chassis')
             with animated(inside('sway', 'a=z:d=55', TIP, 'tip'), TP):
-                ore_cart((RX, RAIL0, ZC), ore=False, k=0.35, parts='tub')
+                ore_cart((RX, RAIL0, ZA), ore=False, k=0.35, parts='tub')
                 with animated(inside('sway', 'a=z:d=55', KEEP_TIP, 'keeptip'), TP):
-                    speck((RX - 0.12, RAIL0 + 0.2, ZC))
+                    speck((RX - 0.12, RAIL0 + 0.2, ZA))
                     with animated(inside('bob', 'h=%.2f' % ROLL, KEEP_ROLL, 'keeproll'), ORE, tilt=-math.pi / 2) as keep:
-                        speck((RX, RAIL0 + 0.4, ZC))
+                        speck((RX, RAIL0 + 0.4, ZA))
                         # the slide and the drop, each a bob along its node's up,
                         # turned in the tub's plane (yaw a quarter, then tilted)
                         with animated(inside('bob', 'h=%.3f' % math.hypot(*SLID), SLIDE, 'slide'), ORE, yaw=math.pi / 2,
                                       tilt=math.atan2(*SLID)) as slide:
-                            speck((RX, RAIL0 + 0.4, ZC))
+                            speck((RX, RAIL0 + 0.4, ZA))
                             # the drop's up is the world's once the tub is over
                             with animated(inside('bob', 'h=%.2f' % -DROPD, DROP, 'drop'), ORE, yaw=math.pi / 2,
                                           tilt=math.radians(55)) as drop:
@@ -23789,25 +23810,35 @@ def headframe():
                             unlean(slide)
                         unlean(keep)
             unlean(cart)
-    # its guides: two timbers either side of it from the collar house's roof
-    # to over its stop, tied across the top (either side of the rope) and
-    # off to the frame's upper girt; the near one meets the lower girt
-    GX, GTOP = CX + 0.06, LAND + 1.1
+    # the shaft's open collar between the right-hand legs: a frame of
+    # squared timbers round its two compartments, a divider between them,
+    # and the shaft's dark inside, where the cages sink out of sight
     for sx in (-1, 1):
-        box((0.06, GTOP - 1.16, 0.14), (RX + sx * GX, (GTOP + 1.16) / 2, ZC), TIMBER)
+        box((0.15, 0.45, 2.26), (RX + sx * 0.525, 0.125, ZC), TIMBER)
     for sz in (-1, 1):
-        box((2 * GX + 0.06, 0.1, 0.08), (RX, GTOP - 0.1, ZC + sz * 0.1), TIMBER)
+        box((0.92, 0.44, 0.15), (RX, 0.12, ZC + sz * 1.045), TIMBER)
+    box((0.92, 0.1, 0.08), (RX, 0.28, ZC), TIMBER)
+    box((0.88, 0.02, 1.92), (RX, 0.06, ZC), 'dark')
+    # each cage's guides: two timbers either side of it from down in the
+    # shaft to over its stop, tied across the top (either side of the rope)
+    # and off to the frame's upper girt
+    GX, GTOP = CX + 0.06, LAND + 1.1
     gx = XR + (XR * 0.82 - XR) * (4.2 + 0.3) / (H + 0.3)                         # the upper girt's middle
-    box((gx - (RX + GX), 0.08, 0.08), ((gx + RX + GX) / 2, 4.2, ZC), TIMBER)
-    # the landing: a short track on the tipple deck from the cage's mouth
+    for z in (ZA, ZB):
+        for sx in (-1, 1):
+            box((0.06, GTOP + 0.3, 0.14), (RX + sx * GX, (GTOP - 0.3) / 2, z), TIMBER)
+        for sz in (-1, 1):
+            box((2 * GX + 0.06, 0.1, 0.08), (RX, GTOP - 0.1, z + sz * 0.1), TIMBER)
+        box((gx - (RX + GX), 0.08, 0.08), ((gx + RX + GX) / 2, 4.2, z), TIMBER)
+    # the landing: a short track on the tipple deck from cage A's mouth
     # (-Z) out over the ore bin's side to a stop block, on two stringers
-    # borne by posts on the collar house's roof, a bearer off the near
-    # right-hand leg and a post to the ground at its far end
-    LZ0, LZ1 = ZC - CZ - 0.015, 0.1
+    # borne by a bearer off the near right-hand leg, on two posts standing
+    # on the collar, and a post to the ground at its far end
+    LZ0, LZ1 = ZA - CZ - 0.015, 0.1
     for sx in (-1, 1):
         box((0.04, 0.03, LZ0 - LZ1), (RX + sx * 0.157, LAND - 0.015, (LZ0 + LZ1) / 2), 'slate')   # its rails
         box((0.06, 0.08, LZ0 - LZ1 + 0.02), (RX + sx * 0.2, LAND - 0.1, (LZ0 + LZ1) / 2 - 0.01), TIMBER)   # stringers
-        box((0.08, LAND - 0.14 - 1.16, 0.08), (RX + sx * 0.2, (LAND - 0.14 + 1.16) / 2, 1.45), TIMBER)    # posts on the roof
+        box((0.08, LAND - 0.24 - 0.35, 0.08), (RX + sx * 0.2, (LAND - 0.24 + 0.35) / 2, ZC - 1.045), TIMBER)   # posts on the collar
     for k in range(6):
         box((0.5, 0.03, 0.07), (RX, LAND - 0.045, LZ1 + 0.1 + k * 0.25), TIMBER)  # sleepers
     box((0.5, 0.12, 0.08), (RX, LAND + 0.03, LZ1 + 0.01), TIMBER)                # the stop block
@@ -23815,15 +23846,11 @@ def headframe():
     bx = XR + (XR * 0.82 - XR) * (LAND - 0.19 + 0.3) / (H + 0.3)                 # the near leg, where the bearer meets it
     box((bx + 0.08 - (RX - 0.25), 0.1, 0.14), ((bx + 0.08 + RX - 0.25) / 2, LAND - 0.19, ZC - 1.3 + 0.45 * (LAND - 0.19 + 0.3) / (H + 0.3)), TIMBER)
     HX = 10.6                                                                    # the hoist house, its drum's window
-    strut((WX + 0.1, cy + 0.88, ZC), (HX - 1.3, 1.2, ZC), 0.09, ROPE)            # and the rope away over the road to the drum
+    for z, y, zw in ((ZA, 1.32, ZC - 0.1), (ZB, 1.08, ZC + 0.1)):                # and the ropes away over the road to the drum,
+        strut((WX + 0.1, cy + 0.88, z), (HX - 1.3, y, zw), 0.09, ROPE)          # one off its top, one off its foot
     for sz in (-1, 1):                                                           # the backstays, to the inside verge
         strut((XL * 0.82, H + 0.1, ZC + sz * 0.85), (7.3, -0.3, ZC + sz * 1.1), 0.24, TIMBER)
     strut((7.3, 0.05, ZC - 1.1), (7.3, 0.05, ZC + 1.1), 0.2, TIMBER)            # their sill
-    # the collar house over the shaft, between the right-hand legs
-    box((1.7, 1.3, 1.5), (-4.45, 0.45, ZC), BOARD)                                # (out to under the bin's side: the
-    box((1.82, 0.12, 1.62), (-4.45, 1.15, ZC), RUST)                              # ore comes home through it)
-    box((0.06, 0.9, 0.6), (-3.58, 0.35, ZC), 'dark')                             # its gate, toward the road
-    box((2 * CX + 0.08, 0.03, 2 * CZ + 0.1), (RX, 1.215, ZC), 'dark')            # the shaft's mouth in its roof, the cage's way
     # the ore bin over the loading shed behind the right-hand legs, where
     # the ore line ends, open along the line (-Z) for the train
     SX, SZ = -5.5, -0.2
@@ -23833,7 +23860,7 @@ def headframe():
     for sx in (-0.7, 0.7):
         box((0.1, 1.15, 1.9), (SX + sx, 0.48, SZ + 0.1), BOARD)                   # the shed's walls
     box((1.5, 1.15, 0.1), (SX, 0.48, SZ + 1.0), BOARD)                           # and its back
-    box((0.34, 1.92, 0.48), (-5.12, 0.94, 0.54), BOARD)                          # the bin's chute down its back corner
+    box((0.34, 1.92, 0.48), (RX - 0.71, 0.94, 0.54), BOARD)                      # the bin's chute, under where the ore drops
     box((1.75, 0.16, 2.0), (SX, 1.95, SZ), TIMBER)                               # the bin's floor
     solid([(SX - 0.8, 2.0, SZ - 0.95), (SX + 0.8, 2.0, SZ - 0.95), (SX + 0.8, 2.0, SZ + 0.95), (SX - 0.8, 2.0, SZ + 0.95),
            (SX - 0.95, 3.1, SZ - 1.1), (SX + 0.95, 3.1, SZ - 1.1), (SX + 0.95, 3.1, SZ + 1.1), (SX - 0.95, 3.1, SZ + 1.1)],
