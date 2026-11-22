@@ -910,6 +910,11 @@ jbyteArray n_ttp_net_state_change_apply_json(JNIEnv* env, jclass, jint a0, jbyte
     return toBytes(env, ttp_net_state_change_apply_json((int) a0, s1.get(), (double) a2));
 }
 
+jint n_ttp_party_max_inbound_bytes(JNIEnv* env, jclass) {
+    (void) env;
+    return (jint) ttp_party_max_inbound_bytes();
+}
+
 jbyteArray n_ttp_party_version(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_party_version());
@@ -1612,6 +1617,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_net_restore_room", "(I[B[B)V", (void*) n_ttp_net_restore_room },
     { "ttp_net_set_track_json", "(I[B)[B", (void*) n_ttp_net_set_track_json },
     { "ttp_net_state_change_apply_json", "(I[BD)[B", (void*) n_ttp_net_state_change_apply_json },
+    { "ttp_party_max_inbound_bytes", "()I", (void*) n_ttp_party_max_inbound_bytes },
     { "ttp_party_version", "()[B", (void*) n_ttp_party_version },
     { "ttp_pause", "(I)V", (void*) n_ttp_pause },
     { "ttp_paused", "(I)I", (void*) n_ttp_paused },

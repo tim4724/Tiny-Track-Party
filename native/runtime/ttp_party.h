@@ -90,8 +90,17 @@ TTP_ABI const char* ttp_framing_encode_close_room(void);
 
 // Inbound routing. Takes the RAW socket text (the host need not parse it) and
 // returns {"route":"message"|"state"|"protocol", plus "from"/"data"/"type"/"msg"}.
-// route "none" means the text was not a JSON object (the host drops it).
+// route "none" means the text was not a JSON object (the host drops it), which
+// includes text longer than ttp_party_max_inbound_bytes() or nested deeper than
+// the parser allows.
 TTP_ABI const char* ttp_framing_classify(const char* frameText);
+
+// The most bytes of raw text ttp_framing_classify and ttp_link_inbound read;
+// longer text is dropped unparsed. A shell whose string marshalling copies onto
+// a fixed-size stack must drop longer text BEFORE the call, or the copy
+// overflows before C++ can refuse it. Emscripten's cwrap is one (it copies every
+// string argument onto the wasm stack), so the web adapters check this first.
+TTP_ABI int ttp_party_max_inbound_bytes(void);
 
 // Close-code decision -> {"stopReconnect":bool,"closeAttempt":N,"closeMax":N,
 // "meta":{...}|null,"willReconnect":bool}. hasCode=0 models a close event with
@@ -133,7 +142,8 @@ TTP_ABI void ttp_link_set_channel_open(int h, int open);
 TTP_ABI const char* ttp_link_enqueue(int h, const char* evJson, double nowMs);
 TTP_ABI const char* ttp_link_send_tick(int h, double nowMs);
 TTP_ABI const char* ttp_link_idle(int h, double nowMs);
-// packetText is the RAW channel text; non-object input is ignored.
+// packetText is the RAW channel text; non-object input is ignored, and so is
+// text past ttp_party_max_inbound_bytes() or nested deeper than the parser allows.
 TTP_ABI const char* ttp_link_inbound(int h, const char* packetText, double nowMs);
 
 // {"out":N,"received":N,"lastPsSeen":N} — the per-link packet counters.

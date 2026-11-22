@@ -1506,6 +1506,71 @@ void fastlaneThroughAbi() {
         "ttp_link_stats_json on handle 0 returns JSON rather than garbage");
 }
 
+// HOSTILE inbound text: what anyone holding the room code can put on the relay
+// or a DataChannel, before any seat check. Both raw-text entry points must drop
+// it like any non-object and stay usable. The deep cases are well-formed JSON
+// that fits the length cap, so only the depth limit can refuse them: without
+// it they parse (and route, and count) or overflow the stack.
+void hostileInboundThroughAbi() {
+  const size_t cap = static_cast<size_t>(ttp_party_max_inbound_bytes());
+  const std::string head = "{\"type\":\"message\",\"from\":1,\"data\":";
+  auto route = [](const std::string& text) {
+    const Value r = parseOrNull(ttp_framing_classify(text.c_str()), "classify");
+    const Value* v = r.find("route");
+    return v ? v->str : std::string("(no route)");
+  };
+  // A message frame of exactly n bytes: its string payload padded to fit.
+  auto frameOf = [&](size_t n) {
+    return head + "\"" + std::string(n - head.size() - 3, 'x') + "\"}";
+  };
+  check(frameOf(cap).size() == cap, "frameOf builds the size it is asked for");
+  auto deep = [](const std::string& before, size_t room) {
+    const size_t k = (room - before.size() - 1) / 2;
+    return before + std::string(k, '[') + std::string(k, ']') + "}";
+  };
+  check(deep(head, cap).size() <= cap, "the deep frame fits the cap");
+  check(route(deep(head, cap)) == "none", "classify drops a frame nested past the parser's limit");
+  check(route(frameOf(cap + 1)) == "none", "classify drops a frame one byte past the cap");
+  check(route(frameOf(cap)) == "message", "classify reads a frame of exactly the cap");
+  check(route(head + "{\"type\":\"ping\"}}") == "message",
+        "classify still routes a legitimate frame afterwards");
+
+  // The fastlane: a real data packet from a second Link, padded with a key the
+  // receiver ignores. The hostile ones go FIRST, so a legitimate apply cannot
+  // be mistaken for a dedup of something the Link had already read.
+  const int tx = ttp_link_create(), rx = ttp_link_create();
+  ttp_link_set_channel_open(tx, 1);
+  ttp_link_set_channel_open(rx, 1);
+  const Value sent = parseOrNull(ttp_link_enqueue(tx, "{\"a\":1}", 0.0), "link_enqueue");
+  const Value* pkt = sent.find("packet");
+  check(pkt && pkt->type == Value::OBJ, "the sender produced a packet to pad");
+  auto packetOf = [&](size_t n) {
+    Value p = pkt ? *pkt : Value::Obj();
+    p.set("pad", Value::Str(""));
+    const size_t base = canonical_stringify(p).size();
+    p.set("pad", Value::Str(std::string(n - base, 'x')));
+    return canonical_stringify(p);
+  };
+  auto applied = [&](const std::string& text, double nowMs) {
+    const Value o = parseOrNull(ttp_link_inbound(rx, text.c_str(), nowMs), "link_inbound");
+    const Value* a = o.find("applied");
+    return a ? a->arr.size() : static_cast<size_t>(-1);
+  };
+  auto received = [&] {
+    const Value st = parseOrNull(ttp_link_stats_json(rx), "link_stats");
+    const Value* r = st.find("received");
+    return r ? r->num : -1.0;
+  };
+  check(packetOf(cap).size() == cap, "packetOf builds the size it is asked for");
+  check(applied(deep("{\"h\":", cap), 1.0) == 0,
+        "the Link ignores a packet nested past the parser's limit");
+  check(applied(packetOf(cap + 1), 2.0) == 0, "the Link ignores a packet one byte past the cap");
+  check(received() == 0, "...and counts neither");
+  check(applied(packetOf(cap), 3.0) == 1, "the Link applies the same packet at exactly the cap");
+  ttp_link_dispose(tx);
+  ttp_link_dispose(rx);
+}
+
 // ---------------------------------------------------------------------------
 // The BIOME ABI (ttp_theme.h).
 // ---------------------------------------------------------------------------
@@ -5992,6 +6057,7 @@ int main(int argc, char** argv) {
   seatTakeover();
   framingCorpusThroughAbi(argv[2]);
   fastlaneThroughAbi();
+  hostileInboundThroughAbi();
   themeThroughAbi();
   audioThroughAbi();
   weatherThroughAbi();

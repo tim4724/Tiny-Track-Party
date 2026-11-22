@@ -25,6 +25,8 @@ import { loadNativeRuntime } from './nativeRuntime.js';
 
 let M = null;
 let fn = null;
+// ttp_party_max_inbound_bytes, read once: see channel.onmessage.
+let maxInbound = 0;
 
 export async function init() {
   if (M) return;
@@ -40,6 +42,7 @@ export async function init() {
     inbound: c('ttp_link_inbound', 'string', ['number', 'string', 'number']),
     stats: c('ttp_link_stats_json', 'string', ['number'])
   };
+  maxInbound = M.ccall('ttp_party_max_inbound_bytes', 'number', [], []);
 }
 
 // Build the subclass lazily: the base class arrives as a classic-script global
@@ -140,8 +143,12 @@ export function makeNativePartyFastlane(Base) {
         if (peer.channel !== channel) return;   // orphan from a rolled-back offer
         this._resetWatchdog(peer, peerIdx);     // transport concern, stays JS
         if (!peer._link) return;
+        const text = String(e.data);
+        // Longer than the Link reads: dropped before cwrap copies it onto the
+        // wasm stack (NativePartyConnection's onmessage says why).
+        if (text.length > maxInbound) return;
         this._syncOpen(peer);
-        const oc = JSON.parse(fn.inbound(peer._link, String(e.data), Date.now()));
+        const oc = JSON.parse(fn.inbound(peer._link, text, Date.now()));
         this._applyOutcome(peer, peerIdx, oc);
       };
     }

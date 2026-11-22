@@ -348,6 +348,39 @@ test('wire: non-object and malformed frames are dropped by both sides', async ()
   }
 });
 
+test('wire: hostile frames are dropped unread, and the display keeps routing', async () => {
+  // Anyone holding the room code can put text on the relay, before any seat
+  // check, and two shapes used to take the display down. Deep nesting: the
+  // parser recursed once per bracket, and a 9 KB frame hung a Chromium tab for
+  // good. Sheer length: cwrap copies a string argument onto the 1 MB wasm
+  // stack, so a frame past that overflowed it before C++ ever saw it, and
+  // every later call into the module failed. The abi ctest gates both limits in
+  // C++; this is the shipped wasm behind the real adapter.
+  const abi = await H.loadAbi();
+  const route = (t) => JSON.parse(abi.framing.classify(t)).route;
+  const deep = '{"type":"message","from":1,"data":' + '['.repeat(4500) + ']'.repeat(4500) + '}';
+  assert.equal(route(deep), 'none', 'a frame nested past the parser\'s limit is dropped');
+
+  // Headroom, not a bound on what the display acts on (that is a few KB): the
+  // largest frame the relay sends a display at all is the replay of its own
+  // snapshot, which the relay caps, and one at that cap must still classify.
+  const state = '{"type":"state","data":"' + 'x'.repeat(MAX_STATE_BYTES - 2) + '"}';
+  assert.equal(route(state), 'state', 'a snapshot at the relay\'s own cap still classifies');
+
+  H.setRelay(new Relay());
+  const { NativePartyConnection } = await H.displayAdapters();
+  const c = new NativePartyConnection('ws://relay/', { clientId: 'hostile-1' });
+  const seen = [];
+  c.onMessage = (from, data) => seen.push(data.type);
+  c.onProtocol = (t) => seen.push(t);
+  c.connect();
+  await H.flush();
+  const huge = '{"type":"message","from":1,"data":{"type":"hello","name":"' + 'x'.repeat(2 << 20) + '"}}';
+  for (const text of [huge, deep, '{"type":"peer_joined","index":3}']) c.ws.onmessage({ data: text });
+  assert.deepEqual(seen, ['peer_joined'], 'both hostile frames dropped, the next frame routed');
+  c.close();
+});
+
 // ---------------------------------------------------------------------------
 // 3. The full loop: C++ host <-> prod-shaped relay <-> the real JS phone.
 // ---------------------------------------------------------------------------
