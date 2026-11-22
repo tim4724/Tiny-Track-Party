@@ -16263,8 +16263,10 @@ def bandstand():
     # low stone base a step and a half high, as a bandstand has: the knoll
     # as DRAWN is the ground's 9 u chords, up to a hand over the formula at
     # the crown, and a floor laid flush in the turf lay under it with its
-    # steps. The benches and the steps down the road side stand a little
-    # over the formula for the same reason, their feet sunk.
+    # steps. The benches stand a little over the formula for the same
+    # reason, their feet sunk. The steps down the road side lie on the
+    # ground as DRAWN (draped): built on the formula, the drawn crown ran on
+    # level over them and buried all but the top two.
     RED, WHITE = 0xcf534f, 'white'
     H = set_ground('bandstand')
     s0 = H(0.0, 0.0)
@@ -16294,11 +16296,12 @@ def bandstand():
         bench((6.0, H(6.0, z) + 0.4, z), yaw=math.pi / 2)
         for sx in (-0.7, 0.7):
             box((0.2, 0.6, 0.2), (6.0, H(6.0, z) + 0.1, z + sx), 0x7a5a3a)
-    for i in range(7):                                             # stone steps down the road side, the top two up the base
-        x = 4.2 + 1.1 * i
-        top = max(H(x + 0.5, 0.0) + 0.45, s0 + BASE - 0.4 * (i + 1))
-        box((1.15, 1.0, 2.2), (x, top - 0.5, 0.0), 'grey')
     join_still('bandstand')
+    def steps():                                                   # stone steps down the road side, the top two up the
+        for i in range(7):                                         # base, over the ground under each (its drawn crown a
+            x, top = 4.2 + 1.1 * i, max(0.12, 0.72 - 0.3 * i)     # hand over the formula: the base's top stands 0.8 over it)
+            box((1.15, top + 0.6, 2.2), (x, (top - 0.6) / 2, 0.0), 'grey')
+    draped('steps', steps)
 
 # ---- PRETZEL: the picnic under the great oak -----------------------------------------
 # High summer on Pretzel's downs: the biggest of the garden's broadleaf oaks
