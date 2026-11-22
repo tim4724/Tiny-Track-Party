@@ -20,7 +20,6 @@
 // nearest, the arithmetic the table this replaced was generated with.
 #pragma once
 
-#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -46,9 +45,11 @@ struct Model {
 
 // The atlas (`w` x `h` RGB bytes, top row first) at (u, v), into rgb[3].
 inline void sample_atlas(const uint8_t* atlas, int w, int h, float u, float v, uint8_t* rgb) {
-    const auto wrap = [](double t) { return t - std::floor(t); };
-    const double fx = wrap(u) * w - 0.5, fy = wrap(v) * h - 0.5;
-    const double x0f = std::floor(fx), y0f = std::floor(fy);
+    // floor by hand: the engine builds with -fno-builtin, where std::floor is a
+    // call per use, and a uv is nowhere near the range a cast cannot hold.
+    const auto fl = [](double t) { const double i = (double) (long long) t; return i > t ? i - 1 : i; };
+    const double fx = (u - fl(u)) * w - 0.5, fy = (v - fl(v)) * h - 0.5;
+    const double x0f = fl(fx), y0f = fl(fy);
     const double tx = fx - x0f, ty = fy - y0f;
     const int x0 = (int) x0f, y0 = (int) y0f;
     const auto at = [&](int x, int y) {
@@ -58,7 +59,7 @@ inline void sample_atlas(const uint8_t* atlas, int w, int h, float u, float v, u
     for (int k = 0; k < 3; k++) {
         const double c = (p00[k] * (1 - tx) + p10[k] * tx) * (1 - ty)
                 + (p01[k] * (1 - tx) + p11[k] * tx) * ty;
-        rgb[k] = (uint8_t) std::floor(std::fmin(255.0, std::fmax(0.0, c)) + 0.5);
+        rgb[k] = (uint8_t) (c + 0.5);   // a blend of bytes is within 0..255: round to nearest
     }
 }
 
@@ -68,6 +69,8 @@ inline void model_colors(const std::vector<rt::GlbMeshNode>& nodes,
     for (const rt::GlbMeshNode& n : nodes) count = n.mesh + 1 > count ? n.mesh + 1 : count;
     out.meshStore.assign((size_t) count, Mesh{ 0, nullptr });
     out.primStore.resize((size_t) count);
+    struct Kept { float u, v; uint8_t rgb[3]; bool set; };
+    Kept kept[256] = {};
     for (const rt::GlbMeshNode& n : nodes) {
         if (n.mesh < 0 || out.meshStore[(size_t) n.mesh].prims) continue;   // decoded already
         std::vector<Prim>& prims = out.primStore[(size_t) n.mesh];
@@ -76,8 +79,21 @@ inline void model_colors(const std::vector<rt::GlbMeshNode>& nodes,
             out.rgbStore.emplace_back(verts * 3, (uint8_t) 255);
             uint8_t* rgb = out.rgbStore.back().data();
             if (p.textured && p.uv.size() == verts * 2) {
+                // A model's vertices share a handful of uvs (a swatch's flat
+                // half is one point), so the last sample of each is kept (the
+                // sample is most of what a first bake costs on the TV box).
                 for (size_t i = 0; i < verts; i++) {
-                    sample_atlas(atlas, w, h, p.uv[i * 2], p.uv[i * 2 + 1], rgb + i * 3);
+                    const float u = p.uv[i * 2], v = p.uv[i * 2 + 1];
+                    Kept& k = kept[((unsigned) (int) (u * 4096.0f) * 31u + (unsigned) (int) (v * 4096.0f)) & 255u];
+                    if (!k.set || k.u != u || k.v != v) {
+                        sample_atlas(atlas, w, h, u, v, k.rgb);
+                        k.u = u;
+                        k.v = v;
+                        k.set = true;
+                    }
+                    rgb[i * 3] = k.rgb[0];
+                    rgb[i * 3 + 1] = k.rgb[1];
+                    rgb[i * 3 + 2] = k.rgb[2];
                 }
             }
             prims.push_back({ (uint32_t) verts, rgb });
