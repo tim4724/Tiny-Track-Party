@@ -8,6 +8,7 @@
 import * as Gallery from './gallery-common.js';
 import { MAX_BUFFER_H } from './display/Stage.js';
 import { storedVolume } from './display/audio/bus.js';
+import { glbTriangles } from './display/glbTriangles.js';
 
 // This page's own memory. gallery-common's state is shared by every gallery
 // page, and a track or view picked here means nothing on the others.
@@ -88,6 +89,56 @@ function costOf(file) {
     }).catch(() => null));
   }
   return costs.get(file);
+}
+// WHAT A MODEL IS MADE OF, for the Differences' kind of cut: its separate
+// parts (islands of triangles joined at a corner: a box, a leg, a sheep's
+// head) and its moving parts (the nodes the renderer moves).
+const makeups = new Map();
+function makeupOf(file) {
+  if (!makeups.has(file)) {
+    makeups.set(file, fetch(`/assets/toycar/${file}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => {
+      if (!buf) return null;
+      const bytes = new Uint8Array(buf);
+      const parent = [], ids = new Map();
+      const find = (i) => { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+      const id = (p) => {
+        const k = `${Math.round(p[0] * 1e4)},${Math.round(p[1] * 1e4)},${Math.round(p[2] * 1e4)}`;
+        if (!ids.has(k)) { ids.set(k, parent.length); parent.push(parent.length); }
+        return ids.get(k);
+      };
+      for (const t of glbTriangles(bytes)) {
+        const a = find(id(t[0]));
+        parent[find(id(t[1]))] = a;
+        parent[find(id(t[2]))] = a;
+      }
+      let parts = 0;
+      for (let i = 0; i < parent.length; i++) if (find(i) === i) parts++;
+      const dv = new DataView(buf);
+      const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, dv.getUint32(12, true))));
+      return { parts, moving: (json.nodes || []).filter((n) => /^(spin|path_|anim_)/.test(n.name || '')).length };
+    }).catch(() => null));
+  }
+  return makeups.get(file);
+}
+// WHICH KIND OF CUT Lite mainly makes in a model stood `n` times, `out` of
+// them left out: FEWER things (the placements it leaves out, and the share of
+// a lite build's triangle saving that comes from fewer separate parts) or
+// LESS DETAIL (the share from fewer triangles a part), the two shares split
+// on the log of each ratio; and less MOVEMENT besides, where its lite build
+// moves fewer parts.
+async function cutKinds(fullFile, liteFile, n, out) {
+  const [f, l, mf, ml] = await Promise.all([costOf(fullFile), liteFile ? costOf(liteFile) : null,
+                                            makeupOf(fullFile), liteFile ? makeupOf(liteFile) : null]);
+  if (!f) return [];
+  const simplify = l ? (n - out) * Math.max(0, f.tris - l.tris) : 0;
+  let byParts = 0;
+  if (simplify > 0 && mf && ml) {
+    byParts = Math.max(0, Math.min(1, Math.log(mf.parts / Math.max(1, ml.parts)) / Math.log(f.tris / l.tris)));
+  }
+  const fewer = out * f.tris + simplify * byParts, detail = simplify * (1 - byParts);
+  const kinds = fewer || detail ? [fewer >= detail ? 'fewer' : 'detail'] : [];
+  if (mf && ml && ml.moving < mf.moving) kinds.push('still');
+  return kinds;
 }
 const sources = fetch('/assets/toycar/SOURCES.json').then((r) => r.json()).then((j) => j.models || {}).catch(() => ({}));
 const tracksJs = import('/shared/tracks.js');
@@ -1242,15 +1293,17 @@ async function paintDiff() {
     lite += l ? l.tris * (r.n - r.out.length) : 0;
     out += r.out.length;
     if (saved > 0 || r.out.length) {
+      const liteFile = r.as && r.as !== r.model ? `${r.as}.glb` : null;
       pieces.push({ model: r.model, label: labels.get(r.model) || r.model, n: r.n, out: r.out, saved,
-                    full: f.tris, lite: r.as && r.as !== r.model && l ? l.tris : null });
+                    full: f.tris, lite: liteFile && l ? l.tris : null,
+                    kinds: await cutKinds(`${r.model}.glb`, liteFile, r.n, r.out.length) });
     }
   }
   pieces.sort((x, y) => y.saved - x.saved);
   const stamps = [];
   for (const m of swaps) {
     const f = await costOf(`${base(m)}.glb`), l = await costOf(`${m}.glb`);
-    if (f && l) stamps.push({ model: base(m), full: f.tris, lite: l.tris });
+    if (f && l) stamps.push({ model: base(m), full: f.tris, lite: l.tris, kinds: await cutKinds(`${base(m)}.glb`, `${m}.glb`, 1, 0) });
   }
   stamps.sort((x, y) => (y.full - y.lite) - (x.full - x.lite));
   const land = ((TRACKS[track] && TRACKS[track].land) || []).filter((l) => l.lite === false);
@@ -1266,16 +1319,20 @@ function drawDiff() {
   }
   const d = diff;
   const minus = (n) => '−' + kilo(n);
-  const row = (tag, name, what, saved) => {
+  const KIND = { fewer: 'fewer', detail: 'detail', still: 'still' };
+  const row = (tag, name, what, saved, kinds = []) => {
     const r = el(tag, 'kit-row lm-diff__row');
-    r.append(el('span', 'kit-row__name', name), el('span', 'kit-row__tris', what),
-             el('span', 'kit-row__tris lm-diff__saved', saved));
+    const n = el('span', 'kit-row__name', name);
+    for (const k of kinds) n.append(el('span', `lm-diff__kind lm-diff__kind--${k}`, KIND[k]));
+    r.append(n, el('span', 'kit-row__tris', what), el('span', 'kit-row__tris lm-diff__saved', saved));
     return r;
   };
   const share = d.full ? Math.round(100 * (d.full - d.lite) / d.full) : 0;
   const out = [el('h2', '', 'What Lite changes here'),
                el('p', 'legend__note', `Set pieces: ${kilo(d.full)} tris in Full, ${kilo(d.lite)} in Lite (−${share}%) · `
                  + `${d.out} of ${d.placed} placed left out`),
+               el('p', 'legend__note', 'Mainly: fewer = fewer things (parts or placements), detail = the same things '
+                 + 'simpler; still = fewer moving parts.'),
                el('h3', '', 'Set pieces')];
   if (!d.pieces.length) out.push(el('p', 'legend__note', 'Lite draws every piece as Full does.'));
   const m = lm.landmarks()[lm.focused()];
@@ -1283,7 +1340,7 @@ function drawDiff() {
     const what = p.out.length === p.n ? `left out ×${p.n}`
       : [p.lite != null ? `${kilo(p.full)} → ${kilo(p.lite)} ×${p.n}` : '',
          p.out.length ? `${p.out.length} of ${p.n} left out` : ''].filter(Boolean).join(', ');
-    const r = row('button', p.label, what, minus(p.saved));
+    const r = row('button', p.label, what, minus(p.saved), p.kinds);
     if (m && m.model === p.model) r.classList.add('kit-row--at');
     r.title = `${p.model}: frame it in both stages (orbit)`;
     r.addEventListener('click', () => { frameDiff(p); frame.focus(); });
@@ -1291,7 +1348,7 @@ function drawDiff() {
   }
   if (d.stamps.length) {
     out.push(el('h3', '', 'Scenery and props, a stamp each'));
-    for (const s of d.stamps) out.push(row('div', s.model, `${kilo(s.full)} → ${kilo(s.lite)}`, minus(s.full - s.lite)));
+    for (const s of d.stamps) out.push(row('div', s.model, `${kilo(s.full)} → ${kilo(s.lite)}`, minus(s.full - s.lite), s.kinds));
   }
   if (d.land.length) {
     const kinds = new Map();

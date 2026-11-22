@@ -368,6 +368,12 @@ section.stage iframe {
               color: #9aa3c7; margin: 12px 0 4px; }
 .lm-diff .lm-diff__saved { color: #78dc96; font-variant-numeric: tabular-nums; }
 div.lm-diff__row { cursor: default; }
+/* Which kind of cut a row mainly is: labels, tinted pills in the chrome colours. */
+.lm-diff__kind { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+                 font-size: 10px; line-height: 15px; vertical-align: 1px; }
+.lm-diff__kind--fewer { color: #a9bcff; background: rgba(90, 120, 255, 0.2); }
+.lm-diff__kind--detail { color: #d4adff; background: rgba(160, 90, 255, 0.2); }
+.lm-diff__kind--still { color: #8fe3a8; background: rgba(60, 200, 110, 0.16); }
 div.lm-diff__row:hover { background: none; }
 .lm-diff__all { list-style: none; color: #b8bedc; }
 .lm-diff__all li { margin-bottom: 4px; cursor: help; }
