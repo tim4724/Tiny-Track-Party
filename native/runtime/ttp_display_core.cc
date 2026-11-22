@@ -33,6 +33,7 @@
 #include "TtpRenderer.h"
 #include "ttp/blobstore.h"
 #include "ttp/canonical.h"
+#include "ttp/detail.h"
 #include "ttp/frame_builder.h"
 #include "ttp/json_read.h"
 #include "ttp/framing.h"
@@ -174,14 +175,26 @@ void ttp_display_bench(const char* model) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setModelBench(model);
 }
 
-void ttp_display_kit_field(int count) {
-    if (g_disp && g_disp->renderer) g_disp->renderer->setKitField(count);
+const char* ttp_display_set_layout(void) {
+    // The renderer owns the string (it is written when the static scene
+    // builds), so this hands back its buffer rather than copying into a static
+    // of its own.
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->setLayout()
+                                        : TtpRenderer::kNoSetLayout;
 }
 
-const char* ttp_display_kit_field_layout(void) {
-    // The renderer owns the string (it is written once per build), so this
-    // hands back its buffer rather than copying into a static of its own.
-    return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
+const char* ttp_display_scatter_layout(void) {
+    // The renderer owns the string, as with the set layout above.
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->scatterLayout() : "[]";
+}
+
+double ttp_display_ground_y(double x, double z) {
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->groundY((float) x, (float) z) : 0.0;
+}
+
+const char* ttp_display_spot_issue(double x, double z, double lo, double hi, int skip) {
+    return (g_disp && g_disp->renderer)
+            ? g_disp->renderer->spotIssue((float) x, (float) z, (float) lo, (float) hi, skip) : "";
 }
 
 // What a STATIC scene is OF — the one rule, read by the build below (a
@@ -194,12 +207,14 @@ const char* ttp_display_kit_field_layout(void) {
 // (stageBlob's flip note): without it a device the boot canary flips between
 // Vulkan and GL would find the other backend's blob under its own name —
 // refused on import, and blocking the store dedupe from ever writing a good
-// one over it.
+// one over it. The DETAIL TIER is present because it is a different world:
+// coarser ground, other models, fewer pieces.
 static std::string bakeKeyFor(const char* trackId, const char* biome) {
     return (trackId ? std::string(trackId) : std::string())
             + "|" + (biome ? biome : "")
             + "|" + (g_disp && g_disp->showcase ? "1" : "0")
-            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0);
+            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0)
+            + "|" + ttp::rt::detail_name(ttp::rt::detail_in_force());
 }
 
 // Defined with the rest of the blob walk below; called from the end of a build,
@@ -271,7 +286,12 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
         g_disp->tagDeck.kerbH = theme.road.kerbH;
         g_disp->ground = r.groundGrid();
-        g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground);
+        // What the lobby's lens keeps out of (LensPlan). Here, in the build
+        // the shell already waits on, and not on a frame: on a TV box the fill
+        // would be a visible hitch.
+        r.fillObstacles(g_disp->obstacles);
+        g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground,
+                                           g_disp->obstacles);
         g_disp->sceneT = 0;
         solveFraming(*g_disp);
         // Start the turntable on the still view's own bearing, so a preview's
@@ -674,6 +694,25 @@ void ttp_display_look_fov(double deg) {
     if (g_disp) g_disp->freeFov = (float) deg;
 }
 
+void ttp_display_cell_look(int cell, double ex, double ey, double ez,
+                           double tx, double ty, double tz, double fov) {
+    if (!g_disp) return;
+    ttp::rt::setCellLook(*g_disp, cell, { (float) ex, (float) ey, (float) ez },
+                         { (float) tx, (float) ty, (float) tz }, (float) fov);
+}
+
+void ttp_display_cell_look_clear(void) {
+    if (g_disp) g_disp->cellLooks.clear();
+}
+
+void ttp_display_car_pose(int cell, double s, double lat) {
+    if (g_disp) ttp::rt::setCarPose(*g_disp, cell, s, lat);
+}
+
+void ttp_display_car_pose_clear(void) {
+    if (g_disp) g_disp->carPoses.clear();
+}
+
 const char* ttp_display_chase_rig_json(double x, double y, double z, double fx, double fz,
                                        double spd) {
     static char buf[160];
@@ -825,6 +864,15 @@ const double* ttp_display_profile(void) {
 
 void ttp_display_antialias(int on) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setAntialias(on != 0);
+}
+
+const char* ttp_display_detail(const char* platform, const char* ask) {
+    const ttp::rt::Detail d = ttp::rt::detail_for(platform, ask);
+    if (g_disp && g_disp->renderer) {
+        g_disp->renderer->setLite(d == ttp::rt::Detail::Lite);
+        ttp::rt::detail_in_force() = d;
+    }
+    return ttp::rt::detail_name(d);
 }
 
 void ttp_display_dress_keep(float frac) {

@@ -1033,19 +1033,15 @@ target_link_libraries(showcase_check PRIVATE libttp_runtime ttp_strict_fp ttp_wa
 ttp_emscripten_cli(showcase_check)
 add_test(NAME showcase COMMAND showcase_check)
 
-# ---- Behavioural: the gallery's kit field -----------------------------------
-# Same standing as showcase_check — no corpus, no oracle. It holds the four
-# properties the field is useless without (nothing overlaps, nothing reorders,
-# rows stay inside their width, a footprint-less model still gets ground), each
-# of which would otherwise only be found by flying out there and squinting.
-#
-# kitfield.h is HEADER-ONLY (the renderer needs it and may not link this
-# library), so there is no source file to add above — this target is the only
-# place the packing is compiled outside the renderer, and the only place it runs.
-add_executable(kitfield_check runtimetest/kitfield_check.cc)
-target_link_libraries(kitfield_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
-ttp_emscripten_cli(kitfield_check)
-add_test(NAME kitfield COMMAND kitfield_check)
+# The set pieces' moving parts (ttp/set_motion.h). HEADER-ONLY (the renderer
+# needs it and may not link this library), so there is no source file to add
+# above — this target is the only place the motion is compiled outside the
+# renderer, and the only place it runs.
+add_executable(setmotion_check runtimetest/setmotion_check.cc)
+target_link_libraries(setmotion_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(setmotion_check)
+add_test(NAME setmotion
+  COMMAND setmotion_check ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar)
 
 # ---- libttp-renderer --------------------------------------------------------
 # The Filament renderer, platform-free (no emscripten includes): the same code
@@ -1065,6 +1061,7 @@ if(DEFINED FILAMENT_SDK)
     renderer/src/TtpRendererDecals.cpp
     renderer/src/TtpRendererDressing.cpp
     renderer/src/TtpRendererFrame.cpp
+    renderer/src/TtpRendererMotion.cpp
     renderer/src/TtpRendererTrack.cpp)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
@@ -1104,7 +1101,7 @@ endif()
 # ANativeWindow) sits behind the SDK gate.
 set(TTP_APP_SOURCES
   runtime/ttp_runtime.cc runtime/ttp_party.cc
-  # The biome ABI: naming a biome (for the music pool, for the ?biome= list) is
+  # The biome ABI: naming a biome (for the ?biome= list, the HUD accent) is
   # not rendering, and CI's Filament-less wasm leg is where the browser's link
   # to it gets checked.
   runtime/ttp_theme.cc

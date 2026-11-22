@@ -52,6 +52,8 @@ const TAG = 'TtpPerf';
  *                              the shared GRID_MS settle is on top of it)
  *   dpr                        ignored — this surface is its own pixels, and
  *                              what pins the buffer here is `--pin`
+ *   detail                     `debug.ttp.detail`; null clears it, so the box
+ *                              draws its own lite tier
  *
  * Android-only flags, read off argv:
  *   --pin 0.667      hold the render scale (0 leaves the adaptive rule alone)
@@ -125,6 +127,7 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.biome', '""');   // quoted: launch() says why
       setprop('debug.ttp.perf', 0);
       setprop('debug.ttp.vk', 0);         // a leftover 1 flips the ENGINE's backend
+      setprop('debug.ttp.detail', '""');  // a leftover full un-lites a shipping box
     } catch { /* the box went away; nothing to restore it on */ }
   };
 
@@ -189,7 +192,7 @@ export function makeAndroidBackend() {
 
 
   return {
-    async launch({ players, track, seconds }) {
+    async launch({ players, track, seconds, detail }) {
       serial = findTvDevice(arg('serial', null));
 
       // AN adb INSTALL RUNS UNCOMPILED (dexopt `verify`): Compose recomposes in
@@ -208,6 +211,9 @@ export function makeAndroidBackend() {
       // An empty value does not survive adb's shell join, so the clear is a
       // quoted empty string, which the device's shell unwraps.
       setprop('debug.ttp.biome', arg('biome', '') || '""');   // unset = the cup decides
+      // The detail tier, read when the surface is created (DisplayHost), so
+      // before the launch. Unset = the platform's, lite on this box.
+      setprop('debug.ttp.detail', detail || '""');
       // The READOUT stays down whatever a previous session left behind. The
       // scenario benches it (`PerfMonitor.bench`), which logs the line this
       // parser reads without drawing anything — and drawing it is four Compose

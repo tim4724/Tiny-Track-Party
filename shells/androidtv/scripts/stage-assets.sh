@@ -79,9 +79,17 @@ mkdir -p "$OUT/toycar/Textures" "$OUT/toycar/thumbs" "$OUT/audio/cues" \
 # The model kit. Textures/ keeps its subdirectory because the name IS the lookup
 # key: gltfio resolves an external texture by the exact URI authored in the GLB
 # ("Textures/colormap.png"), and the shell provides bytes under that same string.
-cp "$ROOT/public/assets/toycar"/*.glb "$OUT/toycar/"
+#
+# ONLY THE LITE TIER'S MODELS: this box draws lite (ttp/detail.h), where a
+# model with a <model>-lite.glb beside it is drawn from that file and its full
+# build is never asked for (ttp/theme.h lite_models). TTP_STAGE_TIERS=all
+# stages both, for a bench that prices the other tier here
+# (`npm run perf:race -- --platform androidtv --detail full`).
+for glb in "$ROOT/public/assets/toycar"/*.glb; do
+  if [ "${TTP_STAGE_TIERS:-}" != all ] && [ -f "${glb%.glb}-lite.glb" ]; then continue; fi
+  cp "$glb" "$OUT/toycar/"
+done
 cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
-cp "$ROOT/public/assets/toycar/KENNEY-License.txt" "$OUT/toycar/"
 
 # Each car's front-3/4 HERO STILL — what makes a lobby seat show the car the
 # player actually picked rather than a shape standing in for one. The 24-frame

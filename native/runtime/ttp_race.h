@@ -200,9 +200,9 @@ TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
  * exactly when a finish asks for it. At the race's end the executor banks the
  * cup points against the room's series and retained field, and then COMPOSES
  * AND RETAINS the standings board behind the room — before the board effects,
- * the order the corpus pins.
+ * the order the corpus pins. The GO beat's start-music names the session's own
+ * track, read off the handle: the shell hands it to ttp_audio_music as is.
  *
- *   biome             the built scene's biome (the GO beat's music pick)
  *   audioReady        the device can play (a locked AudioContext picks no song)
  *   fastForwarding    inside the AI-only fast-forward burst: visuals silenced
  *   intermissionMs    ttp_race_intermission_ms(), or the E2E override — also
@@ -217,7 +217,6 @@ TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
  * (ttp_ui_results_view_live_json, ttp_net_lobby_frame), so the rows never leave
  * C++ and no shell holds an untyped perform-context to route them through. */
 TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
-                                              const char* biome,
                                               int audioReady, int fastForwarding,
                                               double intermissionMs, double nowMs);
 

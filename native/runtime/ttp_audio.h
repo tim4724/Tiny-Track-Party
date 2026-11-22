@@ -5,7 +5,7 @@
  *
  * WHAT CROSSES, AND WHAT DOES NOT. The rules behind every cue — the audibility
  * curve, the shared curb-scrub throttle, the per-human voice levels, the rocket
- * jet lifecycle, the music pool and its no-repeat shuffle — are
+ * jet lifecycle, each track's song and the fallback's no-repeat shuffle — are
  * libttp-runtime/ttp/audio.{h,cc}, replayed on every leg against
  * tests/fixtures/audio-corpus.jsonl. This header is how a SHELL gets at them:
  * it calls the entry points below, then drains a block of commands and performs
@@ -16,7 +16,7 @@
  *
  * SINGLETON, deliberately, like the display: there is one audio device per
  * process on every platform we ship, and the decisions carry state that
- * OUTLIVES a race (the last song, so a Grand Prix rotates its pool; the roster
+ * OUTLIVES a race (the last song, so the fallback never repeats it; the roster
  * count behind the join plink, which is a lobby event with no session at all).
  * A handle here would always be 1.
  *
@@ -88,6 +88,7 @@ extern "C" {
 #define TTP_CUE_DRIFT           17
 #define TTP_CUE_LAND            18
 #define TTP_CUE_SAND            19
+#define TTP_CUE_RAIN            20 /* the weather's bed: its subject is no car     */
 
 /* TtpAudioCmd.flags */
 #define TTP_AUD_F_GO  1u /* COUNTDOWN: the GO beat rather than a tick           */
@@ -102,14 +103,15 @@ typedef struct TtpAudioCmd {
      *
      * A voice is keyed by (cue, subject) and a subject is an opaque token this
      * runtime mints for each distinct sound source it has voiced — a car, an
-     * in-flight rocket — valid until the next TTP_AUD_STOP_ALL, which is when
-     * every voice dies anyway. The shell needs an identity to key its live-voice
-     * map by and to match TTP_AUD_STOP_CAR against; it does not need to know
-     * WHICH car, and handing back the sim's own ids would (a) put car identity
-     * on a per-frame path for no reason and (b) inherit the id-collision the
-     * shared car/rocket id space has: a rocket whose sequence number happened to
-     * equal a peer index would have its jet killed by that seat's forfeit.
-     * Distinct sources get distinct subjects here, so that cannot happen.
+     * in-flight rocket, the weather — valid until the next TTP_AUD_STOP_ALL,
+     * which is when every voice dies anyway. The shell needs an identity to key
+     * its live-voice map by and to match TTP_AUD_STOP_CAR against; it does not
+     * need to know WHICH car, and handing back the sim's own ids would (a) put
+     * car identity on a per-frame path for no reason and (b) inherit the
+     * id-collision the shared car/rocket id space has: a rocket whose sequence
+     * number happened to equal a peer index would have its jet killed by that
+     * seat's forfeit. Distinct sources get distinct subjects here, so that
+     * cannot happen.
      *
      * Also the song INDEX for TTP_AUD_MUSIC_START (ttp_audio_song_json). 0 when
      * the arm has no subject. */
@@ -142,8 +144,9 @@ static inline const TtpAudioCmd* ttp_audio_cmds(const TtpAudioBlock* b) {
 
 /* ---- driving the decisions ---------------------------------------------- */
 
-/* The session the audio listens to (0 = none). Two things follow from it: the
- * cars ttp_audio_frame voices, and the RACE EVENTS that make a sound — a
+/* The session the audio listens to (0 = none). Three things follow from it: the
+ * cars ttp_audio_frame voices, the sky over them (a track whose theme rains
+ * has the rain bed under its race), and the RACE EVENTS that make a sound — a
  * pickup, a banana, a spin, a lap chime, a countdown beat — which are decided
  * HERE as the sim fires them, not shipped out and handed back.
  *
@@ -153,12 +156,17 @@ static inline const TtpAudioCmd* ttp_audio_cmds(const TtpAudioBlock* b) {
  * which is what makes the attract demo silent for free.
  *
  * Binding drops any events the previous session had queued: they belong to a
- * race that is over. */
+ * race that is over. It also DECIDES: the rain bed starts (or stops) here
+ * rather than on the first frame, so a device that makes the bed before it can
+ * play it does that work in the launch, not on the countdown's first frame.
+ * A shell that does not drain here hears it on its next frame. */
 TTP_ABI void ttp_audio_bind(int session);
 
 /* One frame of the continuous mix: the shared curb-scrub throttle and every
  * sustained voice (boost wind, tire squeal, brake skid, engine, a jet per
- * in-flight rocket), read off the bound session's live Game.
+ * in-flight rocket, the rain bed), read off the bound session's live Game.
+ * A PAUSED race decides nothing, so the freeze's TTP_AUD_STOP_ALL is its last
+ * word even on a shell whose frame keeps calling this through the pause.
  *
  * nowMs is the shell's monotonic clock and is the ONLY thing this layer is told
  * about time — the one-shot spacing gates (a curb scrub cannot machine-gun, lap
@@ -183,12 +191,12 @@ TTP_ABI void ttp_audio_stop_voices(void);
  * car's id as a JSON scalar, the same identity ttp_process_input takes. */
 TTP_ABI void ttp_audio_stop_car(const char* idJson);
 
-/* The background song. op is a TTP_AUD_MUSIC_* value; biomeOrNull is read only
- * by TTP_AUD_MUSIC_START, which picks from that biome's pool — at random, but
- * never the song that just played when the pool has an alternative, so a cup
- * spent in one biome rotates it. An unknown or null biome takes the fallback
- * pool rather than silence. */
-TTP_ABI void ttp_audio_music(int op, const char* biomeOrNull);
+/* The background song. op is a TTP_AUD_MUSIC_* value; trackIdOrNull is read
+ * only by TTP_AUD_MUSIC_START, which plays that track's own song — the id the
+ * race walk's start-music effect carries. Any other id (a dev track, unknown,
+ * null) takes a fallback song rather than silence: at random, but never the
+ * song that just played. */
+TTP_ABI void ttp_audio_music(int op, const char* trackIdOrNull);
 
 /* ---- the drain ----------------------------------------------------------- */
 
@@ -222,7 +230,7 @@ TTP_ABI const char* ttp_audio_cue_id(int code);
  *
  * JSON, and a separate call, because this is the one thing in the audio path
  * that IS text and it happens once per race — off the frame path entirely.
- * Indices are stable for a build: pools in table order, songs in pool order. */
+ * Indices are stable for a build: one per track, in catalogue order. */
 TTP_ABI const char* ttp_audio_song_json(int index);
 
 #ifdef __cplusplus

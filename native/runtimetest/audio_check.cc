@@ -2,10 +2,10 @@
 // (tests/fixtures/audio-corpus.jsonl, recorded by scripts/gen-audio-corpus.mjs
 // off public/display/audio/decide.js).
 //
-// WHAT THIS IS. JS-RECORDED cross-implementation evidence — class 1 in
-// tests/fixtures/traces/README.md, the only class that can settle a parity
-// question. Every command in it is one the shipping browser game played a sound
-// from. Nothing here may be "fixed" by re-recording: a disagreement is a bug in
+// WHAT THIS IS. Recorded off the JS oracle, and since re-emitted from C++ for
+// deliberate changes (the music moving to one song per track among them), so
+// regression evidence: class 2 in tests/CLAUDE.md. Nothing here may be "fixed"
+// by re-recording: an unexplained disagreement is a bug in
 // libttp-runtime/ttp/audio.cc, never in the corpus.
 //
 // TWO KINDS OF CASE, and they need different machinery.
@@ -14,7 +14,8 @@
 //    carries its own input — so they replay straight out of the corpus with no
 //    sim at all. They are what reaches the knees of the distance curve, the whole
 //    event table, the scrub arbitration under contention, the voice start/stop
-//    edges, the rocket jet lifecycle and the seeded music shuffle.
+//    edges, the rocket jet lifecycle and the music: each track's own song and
+//    the seeded fallback shuffle.
 //
 // 2. TRACE frames (5900 over 5 golden traces) record ONLY the commands. The
 //    world they were decided from is not in the corpus, so this check REBUILDS
@@ -53,6 +54,7 @@
 #include "ttp/json_read.h"
 #include "ttp/race_session.h"
 #include "ttp/race_track.h"
+#include "ttp/theme.h"
 #include "ttp/util.h"
 
 using namespace ttp;
@@ -265,10 +267,10 @@ void applyStep(ScenarioState& st, const std::string& kind, const Value* in,
     const Value* op = i.find("op");
     const std::string o = (op && op->type == Value::STR) ? op->str : "";
     if (o == "start") {
-      const Value* b = i.find("biome");
-      // A null / absent biome is not a pool name, and takes the fallback — the
-      // corpus records both spellings.
-      st.dec->startMusic((b && b->type == Value::STR) ? b->str : std::string(), out);
+      const Value* t = i.find("track");
+      // A null / absent track has no song of its own and takes the fallback —
+      // the corpus records both spellings.
+      st.dec->startMusic((t && t->type == Value::STR) ? t->str : std::string(), out);
     } else if (o == "stop") st.dec->stopMusic(out);
     else if (o == "pause") st.dec->pauseMusic(out);
     else if (o == "resume") st.dec->resumeMusic(out);
@@ -684,8 +686,8 @@ int runCorpus(const std::string& corpusPath, const std::string& traceDir,
       for (const CapBeat& b : f.beats) {
         if (b.beat) {
           // The countdown chimes; the GO beat starts the race song, which is not
-          // recorded here (a trace header carries no biome — the shuffle is swept
-          // in the scripted cases instead); the end beat is where endRace kills
+          // recorded here (the song is swept in the scripted cases instead); the
+          // end beat is where endRace kills
           // the voices and the music.
           if (b.type == "_countdown") traceDec->countdown(b.n, out);
           else if (b.type == "_raceEnd") {
@@ -826,6 +828,44 @@ bool checkAirVoices() {
   return ok;
 }
 
+// The weather, which no corpus world reaches either (no trace races under a
+// sky that rains): a raining sky lays the bed under every frame, as no car's
+// voice, a sky never named is dry, and a dry sky after a wet one is the bed's
+// falling edge.
+bool checkRainBed() {
+  bool ok = true;
+  auto expect = [&](bool cond, const char* what) {
+    if (!cond) { std::fprintf(stderr, "FAIL rain bed: %s\n", what); ok = false; }
+  };
+  const auto rain = [](const std::vector<au::Command>& out, au::Command::Kind kind) {
+    int n = 0;
+    for (const au::Command& c : out) if (c.kind == kind && std::strcmp(c.name, "rain") == 0) n++;
+    return n;
+  };
+  au::Decider dec;
+  std::vector<au::Command> out;
+  dec.frame({}, {}, au::AiIds(), 0, out);
+  expect(out.empty(), "a sky never named is dry");
+  dec.weather(ttp::rt::AMB_RAIN, out);
+  expect(rain(out, au::Command::VOICE) == 1, "naming a raining sky starts the bed at once");
+  for (int f = 0; f < 2; f++) {
+    out.clear();
+    dec.frame({}, {}, au::AiIds(), 0, out);
+    expect(rain(out, au::Command::VOICE) == 1, "a raining sky lays the bed on every frame");
+    expect(out.size() == 1 && out[0].level == au::RAIN_LEVEL && out[0].id.isNull(),
+           "at its one level, as no car's voice");
+  }
+  out.clear();
+  dec.weather(ttp::rt::AMB_FLAKE, out);
+  expect(rain(out, au::Command::VOICE_STOP) == 1 && out.size() == 1,
+         "a dry sky after a wet one stops the bed");
+  out.clear();
+  dec.frame({}, {}, au::AiIds(), 0, out);
+  dec.weather(ttp::rt::AMB_NONE, out);
+  expect(out.empty(), "and says nothing after, nor does a dry sky after a dry one");
+  return ok;
+}
+
 // Landings are decided off car height, which no recorded snapshot carries, so
 // the corpus can never reach them. Stated here instead: a car coming down hard
 // thumps once on the frame it lands, a skim off a crest makes no sound, and a
@@ -876,7 +916,7 @@ int landingChecks() {
 }
 
 int main(int argc, char** argv) {
-  if (!checkDriftVoice() || !checkAirVoices()) return 1;
+  if (!checkDriftVoice() || !checkAirVoices() || !checkRainBed()) return 1;
   std::string fixture, outPath;
   if (corpus::wants_record(argc, argv, &fixture, &outPath)) {
     // The traces directory is still needed: the trace cases record only the

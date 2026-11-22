@@ -145,7 +145,8 @@ test('the bake directory holds exactly the manifest and nothing stale', () => {
     'a WAV on disk is not in the manifest (or vice versa) — a renamed cue left an orphan');
 });
 
-test('every cue is audible, unclipped, and the sustained voices loop cleanly', () => {
+test('every cue is audible, unclipped, and the sustained voices loop cleanly', async () => {
+  const { resolveVariant } = await import(pathToFileURL(CUES_JS).href);
   for (const f of allFiles()) {
     // Silence here would mean a cue rendered into a disconnected graph — the
     // exact failure the baker's noise priming risks if it ever stops priming.
@@ -158,10 +159,24 @@ test('every cue is audible, unclipped, and the sustained voices loop cleanly', (
   // ctx.sampleRate frames therefore closes on both the buffer period AND LFO
   // phase 0 — which is the whole reason these bake to seamless loops at all. Any
   // other length would click on every repeat.
+  //
+  // A voice that brings its OWN loop (the rain bed) generates one that closes
+  // on itself, so it is held to that instead: the length, rate and channels its
+  // variant in cues.js makes, which is what the baker kept.
   for (const [id, cue] of Object.entries(manifest.cues)) {
     if (cue.kind !== 'sustained') continue;
     assert.equal(cue.loop, true, `${id}: sustained voices loop`);
+    const own = resolveVariant(id);
+    assert.equal(cue.loopSeconds, own.loopSeconds,
+      `${id}: cues.js ${own.loopSeconds ? 'makes its own loop' : 'runs off the noise buffer'}, `
+      + 'and the manifest says otherwise — re-bake');
     for (const s of cue.stops) {
+      if (own.loopSeconds) {
+        assert.equal(s.sampleRate, own.rate, `${id}/${s.file}: baked at the rate the loop is made at`);
+        assert.equal(s.channels, own.channels, `${id}/${s.file}: as many channels as the loop has`);
+        assert.equal(s.frames, own.rate * own.loopSeconds, `${id}/${s.file}: the whole loop, no more`);
+        continue;
+      }
       assert.equal(s.frames, s.sampleRate * manifest.loopSeconds,
         `${id}/${s.file}: a loop must be a whole number of seconds or its LFO phase jumps at the seam`);
       assert.equal(s.channels, 1, `${id}/${s.file}: the noise beds are mono`);

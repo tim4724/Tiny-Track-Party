@@ -12,12 +12,12 @@
 // NOTHING HERE IS TYPED. The credits are `public/shared/credits.js` plus the
 // live music catalogue — the same two modules /licenses.html renders — and the
 // privacy/imprint URLs are read out of the display's own legal footer. A song
-// added to a biome pool appears on every shell's board with nothing edited.
+// given to a track appears on every shell's board with nothing edited.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { RACE_MUSIC } from '../public/display/audio/musicCatalogue.js';
+import { TRACK_MUSIC } from '../public/display/audio/musicCatalogue.js';
 import { creditsFor, licenseInfo } from '../public/shared/credits.js';
 
 /// The repo root. Exported because the generators copy files out of the tree
@@ -88,7 +88,7 @@ export function legalLinks() {
 /// grouped as the web page groups them. Each entry keeps its section's position
 /// in the shared order, and within a section the shared data's own order.
 export function entries(platformOnly) {
-  const groups = creditsFor(RACE_MUSIC);
+  const groups = creditsFor(TRACK_MUSIC);
   for (const prefix of WEB_ONLY) {
     if (!groups.some((g) => g.entries.some((e) => e.title.startsWith(prefix)))) {
       throw new Error(`WEB_ONLY names '${prefix}', which no shared credit matches any more`);
@@ -96,7 +96,9 @@ export function entries(platformOnly) {
   }
   const out = [];
   for (const group of groups) {
-    const kept = group.entries.filter((e) => !WEB_ONLY.some((p) => e.title.startsWith(p)));
+    // A credit with no license covers no shipped file (credits.js): a board's
+    // row opens a text, and that one has none to open.
+    const kept = group.entries.filter((e) => e.license && !WEB_ONLY.some((p) => e.title.startsWith(p)));
     const mine = platformOnly.filter((e) => e.section === group.section);
     for (const e of [...kept, ...mine]) {
       out.push({

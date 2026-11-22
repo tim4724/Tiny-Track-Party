@@ -67,8 +67,8 @@ TTP_ABI void ttp_perf_sample(double tMs, double intervalMs, int presented,
  * what a bench parses, deliberately the same bytes so a screenshot and a
  * logged number cannot disagree.
  *
- *   {"budgetMs","cells","cpu","dpr","drops","fps","fpsReady","frame","gpu",
- *    "height","hz","present","skips","track","verdict","warming","width"}
+ *   {"budgetMs","cells","cpu","detail","dpr","drops","fps","fpsReady","frame",
+ *    "gpu","height","hz","present","skips","track","verdict","warming","width"}
  *
  * THE SCALE RULE READS THIS, and there is ONE window rather than four: the
  * render-scale controller folds its percentiles off this same monitor, so a
@@ -90,7 +90,9 @@ TTP_ABI void ttp_perf_sample(double tMs, double intervalMs, int presented,
  * GPU cost scales with cells and pixels TOGETHER: a logged number carrying
  * neither is not comparable to any other logged number.
  *
- * `trackOrNull` is what is being driven, for a sweep that spans a catalogue. */
+ * `trackOrNull` is what is being driven, for a sweep that spans a catalogue.
+ * `detail` is the tier the display draws, "full" or "lite" (ttp_display_detail),
+ * read in C++ so a bench states the world it priced, not the flag it passed. */
 TTP_ABI const char* ttp_perf_readout_json(int cells, int width, int height,
                                           double dpr, const char* trackOrNull);
 

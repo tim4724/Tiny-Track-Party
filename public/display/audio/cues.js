@@ -230,6 +230,7 @@ export const DEFAULT_PICKS = {
   brake: 'rubber',
   drift: 'grain',           // Tim's pick from the drift sound lineup (2026-10-13)
   sand: 'grit',
+  rain: 'storm',            // the weather's bed, under a race whose sky rains
   banana_drop: 'plop',
   banana_slip: 'dizzy',
   monster_inflate: 'turbo', // Tim's gallery pick (2026-06-21)
@@ -559,6 +560,180 @@ export const CUES = [
               const at = ctx.currentTime;
               out.gain.setTargetAtTime(0.0001, at, 0.06);
               try { src.stop(at + 0.4); flutterA.stop(at + 0.4); flutterB.stop(at + 0.4); } catch (_) {}
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'rain',
+    label: 'Rain',
+    desc: 'STATE-DRIVEN, but the weather\'s rather than a car\'s: a steady bed under the whole race on a track whose sky rains (Driftwood\'s storm). Rain on sand and water, a soft wind, the surf far off. Slider = level; a race plays it at full.',
+    continuous: true,
+    variants: [
+      {
+        id: 'storm', label: 'storm beach',
+        // Its OWN loop, not the 1 s noise buffer the other beds run off: one
+        // second of rain repeats audibly, ten do not. Seeded and made at its
+        // own rate, so every context plays the same storm and the bake is that
+        // storm sample for sample. Made once per context, tens of milliseconds
+        // of work, which is why the bed starts when a wet race is BOUND: that
+        // lands it in the launch rather than on the countdown.
+        rate: 32000, loopSeconds: 10, channels: 2,
+        loops: new WeakMap(),
+        loop(ctx) {
+          let buf = this.loops.get(ctx);
+          if (buf) return buf;
+          const sr = this.rate, n = sr * this.loopSeconds, TAU = 2 * Math.PI;
+          let seed = 0x5241494e;                               // 'RAIN', a xorshift32
+          const next = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return seed; };
+          const rnd = () => (next() >>> 0) / 4294967296;
+          const white = () => {
+            const x = new Float32Array(n);
+            for (let i = 0; i < n; i++) x[i] = next() / 2147483648;
+            return x;
+          };
+          const coef = (hz) => 1 - Math.exp(-TAU * hz / sr);
+          const unit = (x) => {
+            let q = 0;
+            for (let i = 0; i < n; i++) q += x[i] * x[i];
+            const r = Math.sqrt(n / q);
+            for (let i = 0; i < n; i++) x[i] *= r;
+            return x;
+          };
+          // Two one-pole high-passes then two low-passes (0 Hz skips a
+          // high-pass, Infinity a low-pass), in place, to unit rms. The chain
+          // runs over the loop's last quarter second first, so it enters
+          // sample 0 in the state it leaves the last one in: the output closes
+          // on itself, and so does every layer below.
+          const shape = (x, h1, h2, l1, l2) => {
+            const a1 = coef(h1), a2 = coef(h2), b1 = coef(l1), b2 = coef(l2);
+            let s1 = 0, s2 = 0, t1 = 0, t2 = 0;
+            for (let i = n - (sr >> 2), j = i; i < 2 * n; i++, j = i < n ? i : i - n) {
+              const v = x[j]; s1 += a1 * (v - s1); const u = v - s1; s2 += a2 * (u - s2);
+              t1 += b1 * (u - s2 - t1); t2 += b2 * (t1 - t2);
+              if (i >= n) x[j] = t2;
+            }
+            return unit(x);
+          };
+          // A slow movement in whole cycles of the loop: `fn` of the phase
+          // 0..1, sampled every 64 frames and read back linearly.
+          const slow = (fn) => {
+            const m = new Float32Array((n >> 6) + 2), x = new Float32Array(n);
+            for (let c = 0; c < m.length; c++) m[c] = fn(c * 64 / n);
+            for (let i = 0; i < n; i++) { const c = i >> 6; x[i] = m[c] + (m[c + 1] - m[c]) * (i & 63) / 64; }
+            return x;
+          };
+          // Drops, each a point across the stereo field, most of them faint.
+          const drops = (perSecond, sound) => {
+            const a = new Float32Array(n), b = new Float32Array(n);
+            for (let k = perSecond * this.loopSeconds; k > 0; k--) {
+              const at = Math.floor(rnd() * n), amp = Math.pow(10, -1.2 * rnd()), pan = rnd() * TAU / 4;
+              sound(a, b, at, amp * Math.cos(pan), amp * Math.sin(pan));
+            }
+            return [a, b];
+          };
+          // A stereo pair into the bed at `gain`, under an optional envelope,
+          // `spread` radians toward each other: 0 keeps the sides unrelated
+          // (wide), more draws them toward the middle.
+          const L = new Float32Array(n), R = new Float32Array(n);
+          const add = (a, b, gain, spread = 0, env = null) => {
+            const c = gain * Math.cos(spread), s = gain * Math.sin(spread);
+            for (let i = 0; i < n; i++) {
+              const k = env ? env[i] : 1;
+              L[i] += k * (c * a[i] + s * b[i]); R[i] += k * (s * a[i] + c * b[i]);
+            }
+          };
+          const gp = [rnd() * TAU, rnd() * TAU, rnd() * TAU];
+          const gust = slow((t) => 0.22 * Math.sin(TAU * t + gp[0]) + 0.14 * Math.sin(2 * TAU * t + gp[1])
+            + 0.07 * Math.sin(5 * TAU * t + gp[2]));
+
+          // The sheet: the hiss of drops too many and too small to hear one
+          // by one, coming in harder on the gusts.
+          add(shape(white(), 450, 450, 5500, 12000), shape(white(), 450, 450, 5500, 12000),
+            1, 0.1, gust.map((g) => 1 + 0.5 * g));
+          // On the sand, a short dull tick.
+          {
+            const [a, b] = drops(200, (a, b, i, gl, gr) => {
+              const tau = (0.4 + 1.6 * rnd()) * 1e-3 * sr, d = Math.exp(-1 / tau), c = coef(1200 + 3800 * rnd());
+              let e = 1, y = 0;
+              for (let j = Math.ceil(5 * tau); j > 0; j--, e *= d) {
+                y += c * ((next() / 2147483648) * e - y);
+                a[i] += gl * y; b[i] += gr * y;
+                if (++i === n) i = 0;
+              }
+            });
+            add(shape(a, 120, 0, Infinity, Infinity), shape(b, 120, 0, Infinity, Infinity), 0.4);
+          }
+          // On the water, a fainter plic: a few cycles of a pitch that rises
+          // as the bubble the drop trapped comes up.
+          {
+            const [a, b] = drops(24, (a, b, i, gl, gr) => {
+              const w = TAU * 1100 * Math.pow(3, rnd()) / sr, rise = 0.2 + 0.6 * rnd();
+              const tau = (1.5 + 2.5 * rnd()) * 1e-3 * sr, d = Math.exp(-1 / tau), dq = Math.exp(-1 / (0.006 * sr));
+              let e = 1, q = 1, ph = 0;
+              for (let j = Math.ceil(5 * tau); j > 0; j--, e *= d, q *= dq) {
+                ph += w * (1 + rise * (1 - q));
+                const v = e * Math.sin(ph);
+                a[i] += gl * v; b[i] += gr * v;
+                if (++i === n) i = 0;
+              }
+            });
+            add(unit(a), unit(b), 0.12);
+          }
+          // A soft wind on the same gusts: low rushing air, brighter as it blows.
+          {
+            const a = white(), b = white();
+            const ra = shape(a.slice(), 350, 0, 1300, 1300), rb = shape(b.slice(), 350, 0, 1300, 1300);
+            shape(a, 80, 0, 260, 260); shape(b, 80, 0, 260, 260);
+            for (let i = 0; i < n; i++) {
+              const g = 0.8 + gust[i];
+              a[i] = g * a[i] + 0.3 * g * g * ra[i]; b[i] = g * b[i] + 0.3 * g * g * rb[i];
+            }
+            add(a, b, 0.5);
+          }
+          // The surf, far off: a low roar toward the middle, swelling twice a
+          // loop, the second wave smaller and later than half way.
+          {
+            const wave = (x) => { const s = 0.5 - 0.5 * Math.cos(TAU * (x + 0.08 * Math.sin(TAU * x))); return s * s; };
+            add(shape(white(), 70, 0, 150, 150), shape(white(), 70, 0, 150, 150), 0.45, 0.26,
+              slow((t) => 0.35 + 0.45 * wave(t) + 0.25 * wave((t + 0.43) % 1)));
+          }
+
+          // No DC, and one fixed peak: the voice's gain sets the loudness.
+          let peak = 0;
+          for (const x of [L, R]) {
+            let m = 0;
+            for (let i = 0; i < n; i++) m += x[i];
+            m /= n;
+            for (let i = 0; i < n; i++) { x[i] -= m; peak = Math.max(peak, Math.abs(x[i])); }
+          }
+          for (let i = 0, k = 0.9 / peak; i < n; i++) { L[i] *= k; R[i] *= k; }
+          buf = ctx.createBuffer(2, n, sr);
+          buf.getChannelData(0).set(L);
+          buf.getChannelData(1).set(R);
+          this.loops.set(ctx, buf);
+          return buf;
+        },
+        start(ctx, dest) {
+          const src = ctx.createBufferSource();
+          src.buffer = this.loop(ctx);
+          src.loop = true;
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(out); out.connect(dest);
+          src.start(ctx.currentTime);
+          return {
+            set(level) {
+              // Under the engines and the song, at the level of the tyre beds.
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.045 * l, at, 0.08);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.08);
+              try { src.stop(at + 0.5); } catch (_) { /* already stopped */ }
             }
           };
         }

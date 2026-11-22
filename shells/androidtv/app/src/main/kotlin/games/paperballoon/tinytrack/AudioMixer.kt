@@ -467,8 +467,8 @@ class AudioMixer(private val bank: CueBank) {
 
             val idx = pos.toInt()
             val f = (pos - idx).toFloat()
-            // Looping interpolates ACROSS the seam: the baked loops are exactly
-            // 1.000 s, so frame 0 is the successor of the last one.
+            // Looping interpolates ACROSS the seam: each baked loop is exactly one
+            // period, so frame 0 is the successor of the last one.
             val next = (idx + 1) % s0.frames
             val a = cue.samples[lower]
             val b = cue.samples[upper]

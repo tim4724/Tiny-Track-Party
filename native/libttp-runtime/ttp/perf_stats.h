@@ -124,11 +124,14 @@ const char* key(Verdict v);
 // cells are in it and what is being driven. GPU cost scales with cells and
 // pixels TOGETHER, so a logged number carrying neither is not comparable to any
 // other logged number — which is the only reason they ride the readout at all.
+// `detail` (ttp/detail.h's name for the tier drawn) rides for the same reason:
+// the two tiers are two different worlds to price.
 struct Dims {
   int cells = 0;
   int width = 0, height = 0;
   double dpr = 1;
   std::string track;
+  std::string detail;
 };
 
 struct Readout {

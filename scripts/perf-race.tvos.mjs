@@ -87,6 +87,8 @@ const flag = (name) => process.argv.includes(`--${name}`);
  *                              the run is a results board over a still picture.
  *   dpr                        the buffer as a fraction of the panel; 0 hands
  *                              the buffer back to the adaptive rule
+ *   detail                     `-ttpDetail lite|full`; null leaves this
+ *                              platform's full tier
  *
  * tvOS-only flags, read off argv:
  *   --sim            drive the booted tvOS simulator instead of the paired box
@@ -96,6 +98,8 @@ const flag = (name) => process.argv.includes(`--${name}`);
  *   --aa 0|1         force the full-screen antialias pass off or on; absent
  *                    leaves the renderer's own default
  *   --tags 0         take the name tags out (Android: `debug.ttp.tags 0`)
+ *   --panel 0        measure without the readout drawn over the picture
+ *                    (`-ttpPerf 0`); absent leaves the bench's panel up
  *
  * The two ablation flags are the Android backend's by the same names. They ride
  * the LAUNCH here rather than a live property, which is what that shell needs
@@ -107,6 +111,7 @@ export function makeTvosBackend() {
   const features = arg('features', null);
   const aa = arg('aa', null);
   const tags = arg('tags', null);
+  const panel = arg('panel', null);
   let child = null;
   let timer = null;
   /** Readout lines not yet consumed, and the consumer waiting for one. */
@@ -177,8 +182,10 @@ export function makeTvosBackend() {
   };
 
   return {
-    async launch({ players, track, seconds, dpr }) {
+    async launch({ players, track, seconds, dpr, detail }) {
       const args = ['-ttpScenario', SCENARIO,
+        // The detail tier (`DisplayHost.detailAsk`); absent = this box's full.
+        ...(detail ? ['-ttpDetail', detail] : []),
         ...(track ? ['-ttpTrack', String(track)] : []),
         ...(players ? ['-ttpPlayers', String(players)] : []),
         // The shell reads this with `double(forKey:)`, which COERCES: the
@@ -187,7 +194,8 @@ export function makeTvosBackend() {
         ...(dpr > 0 ? ['-ttpRenderScale', String(dpr)] : []),
         ...(features ? ['-ttpFeatures', String(parseInt(features, 0))] : []),
         ...(aa != null ? ['-ttpAntialias', String(parseInt(aa, 10))] : []),
-        ...(tags != null ? ['-ttpTags', String(parseInt(tags, 10))] : [])];
+        ...(tags != null ? ['-ttpTags', String(parseInt(tags, 10))] : []),
+        ...(panel === '0' ? ['-ttpPerf', '0'] : [])];
 
       let argv;
       if (sim) {

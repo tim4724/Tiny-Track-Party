@@ -7,9 +7,9 @@
 // handed back to JS. That is the point: three shells, one palette.
 //
 // What crosses is what a shell genuinely draws or names for itself: the biome
-// NAME (the race-music pool key, the ?biome= override list) and two colours for
-// two 2D widgets the renderer does not draw — the HUD boost chip's stroke and
-// the music gallery's per-cup swatch. Plus the model lists (scenery, props,
+// NAME (the ?biome= override list) and two colours for two 2D widgets the
+// renderer does not draw — the HUD boost chip's stroke and the music gallery's
+// per-cup swatch. Plus the model lists (scenery, props,
 // a track's set pieces), because fetching bytes is a platform job.
 //
 // If you find yourself wanting another getter to reproduce part of the look in
@@ -35,6 +35,7 @@ export async function loadBiomes() {
   const setModels = m.cwrap('ttp_theme_set_models', 'string', ['string']);
   const showModels = m.cwrap('ttp_theme_showcase_models', 'string', []);
   const showPropModels = m.cwrap('ttp_theme_showcase_prop_models', 'string', []);
+  const showSetModels = m.cwrap('ttp_theme_showcase_set_models', 'string', []);
   const inventory = m.cwrap('ttp_showcase_inventory_json', 'string', []);
   // The name list is fixed for the life of the module, and its ORDER is
   // user-visible (the ?biome= dropdown), so it is read across once.
@@ -67,6 +68,7 @@ export async function loadBiomes() {
     // biome — these bytes are fetched before the build picks a look.
     showcaseModels: () => JSON.parse(showModels()),
     showcasePropModels: () => JSON.parse(showPropModels()),
+    showcaseSetModels: () => JSON.parse(showSetModels()),
     // What that showroom holds, for the gallery's legend. Captions, not ids:
     // the layer that stages the world is the one that says what it staged.
     showcaseInventory: () => JSON.parse(inventory()),

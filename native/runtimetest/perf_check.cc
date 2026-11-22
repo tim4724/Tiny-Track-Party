@@ -364,6 +364,7 @@ void json() {
   Monitor m = run(60, kBudgetMs, 4, 3);
   Dims d;
   d.cells = 4; d.width = 1280; d.height = 720; d.dpr = 2; d.track = "tidepool";
+  d.detail = "lite";
   const std::string s = readoutJson(m.fold(), d);
   // Canonical, so a parser can be written once. Spot-check the keys the bench
   // scripts read by name rather than the whole line, which would pin the
@@ -373,6 +374,7 @@ void json() {
   check(has("\"cells\":4") && has("\"width\":1280") && has("\"height\":720")
             && has("\"dpr\":2") && has("\"track\":\"tidepool\""),
         "the dims ride along — a cost without cells and pixels is not comparable");
+  check(has("\"detail\":\"lite\""), "…and the tier drawn, since full and lite are two worlds");
   check(has("\"verdict\":\"good\"") && has("\"fpsReady\":true")
             && has("\"warming\":false"),
         "the verdict and the two readiness flags are on the line");

@@ -80,7 +80,7 @@ test('engine totalLaps fallback matches protocol TOTAL_LAPS (C++ source)', () =>
 
 test('engine benchmark collision footprint matches the protocol reference car (C++ source)', () => {
   // A stats-less car gets the engine benchmark (ttp::Stats' member defaults).
-  // protocol.CAR_STATS holds the per-model footprints measured from the Kenney
+  // protocol.CAR_STATS holds the per-model footprints measured from the car
   // meshes; index 0 (Dash) is the reference body both sides were authored against.
   const src = fs.readFileSync(GAME_H, 'utf8');
   const m = /struct Stats \{[^}]*halfLen = ([\d.]+), halfWid = ([\d.]+);/.exec(src);

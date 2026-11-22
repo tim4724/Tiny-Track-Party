@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 251 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 259 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -24,7 +24,7 @@ object Ttp {
     external fun ttp_audio_cue_id(code: Int): ByteArray?
     external fun ttp_audio_drain(): ByteBuffer?
     external fun ttp_audio_frame(nowMs: Double)
-    external fun ttp_audio_music(op: Int, biomeOrNull: ByteArray?)
+    external fun ttp_audio_music(op: Int, trackIdOrNull: ByteArray?)
     external fun ttp_audio_roster(count: Int, inLobby: Int)
     external fun ttp_audio_song_json(index: Int): ByteArray?
     external fun ttp_audio_stop_car(idJson: ByteArray?)
@@ -55,7 +55,11 @@ object Ttp {
     external fun ttp_display_build(trackId: ByteArray?, rosterJson: ByteArray?): Int
     external fun ttp_display_burst(idJson: ByteArray?, s: Double, lat: Double)
     external fun ttp_display_camera(mode: Int)
+    external fun ttp_display_car_pose(cell: Int, s: Double, lat: Double)
+    external fun ttp_display_car_pose_clear()
     external fun ttp_display_cell_cards(mask: Int)
+    external fun ttp_display_cell_look(cell: Int, ex: Double, ey: Double, ez: Double, tx: Double, ty: Double, tz: Double, fov: Double)
+    external fun ttp_display_cell_look_clear()
     external fun ttp_display_cell_rects(out: FloatArray, max: Int): Int
     external fun ttp_display_cells(idsJson: ByteArray?)
     external fun ttp_display_chase_rig_json(x: Double, y: Double, z: Double, fx: Double, fz: Double, spd: Double): ByteArray?
@@ -70,6 +74,7 @@ object Ttp {
     external fun ttp_display_debug_sand_dust(knob: Int, value: Double): Double
     external fun ttp_display_debug_wipe_skids()
     external fun ttp_display_destroy()
+    external fun ttp_display_detail(platform: ByteArray?, ask: ByteArray?): ByteArray?
     external fun ttp_display_dividers(enabled: Int)
     external fun ttp_display_drain()
     external fun ttp_display_dress_keep(frac: Float)
@@ -77,10 +82,9 @@ object Ttp {
     external fun ttp_display_fog(enabled: Int)
     external fun ttp_display_frame(dtSeconds: Double): Int
     external fun ttp_display_gpu_ms(): Double
+    external fun ttp_display_ground_y(x: Double, z: Double): Double
     external fun ttp_display_hold(held: Int)
     external fun ttp_display_hud(): ByteBuffer?
-    external fun ttp_display_kit_field(count: Int)
-    external fun ttp_display_kit_field_layout(): ByteArray?
     external fun ttp_display_look(eyeX: Double, eyeY: Double, eyeZ: Double, tgtX: Double, tgtY: Double, tgtZ: Double)
     external fun ttp_display_look_fov(deg: Double)
     external fun ttp_display_model_variant(model: ByteArray?, variant: Int)
@@ -97,10 +101,13 @@ object Ttp {
     external fun ttp_display_scale_poll(tMs: Double, minScale: Double, maxScale: Double, baseLines: Double, panelMs: Double, out2: DoubleArray): Int
     external fun ttp_display_scale_resized(tMs: Double)
     external fun ttp_display_scale_scene(tMs: Double)
+    external fun ttp_display_scatter_layout(): ByteArray?
+    external fun ttp_display_set_layout(): ByteArray?
     external fun ttp_display_settled(): Int
     external fun ttp_display_shadows(enabled: Int)
     external fun ttp_display_showcase(on: Int)
     external fun ttp_display_slot_ids_json(): ByteArray?
+    external fun ttp_display_spot_issue(x: Double, z: Double, lo: Double, hi: Double, skip: Int): ByteArray?
     external fun ttp_display_steer_bars(enabled: Int)
     external fun ttp_dispose(h: Int)
     external fun ttp_events_json(h: Int): ByteArray?
@@ -184,7 +191,7 @@ object Ttp {
     external fun ttp_race_demo_next_json(roomHandle: Int, trackId: ByteArray?, shownMs: Double): ByteArray?
     external fun ttp_race_effect_ops_json(): ByteArray?
     external fun ttp_race_end_party_json(): ByteArray?
-    external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, biome: ByteArray?, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
+    external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
     external fun ttp_race_flag_live_json(sessionHandle: Int, roomHandle: Int): ByteArray?
     external fun ttp_race_flourish_ms(): Double
     external fun ttp_race_forfeit_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?
@@ -233,6 +240,7 @@ object Ttp {
     external fun ttp_theme_set_models(trackId: ByteArray?): ByteArray?
     external fun ttp_theme_showcase_models(): ByteArray?
     external fun ttp_theme_showcase_prop_models(): ByteArray?
+    external fun ttp_theme_showcase_set_models(): ByteArray?
     external fun ttp_track_build_json(descriptorJson: ByteArray?, laps: Int, seed: Int): ByteArray?
     external fun ttp_track_frames_json(trackIdOrDescriptor: ByteArray?, sListJson: ByteArray?): ByteArray?
     external fun ttp_track_json(trackId: ByteArray?, laps: Int, seed: Int): ByteArray?

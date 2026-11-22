@@ -370,8 +370,8 @@ export const MUTATIONS = [
     file: 'native/libttp-runtime/ttp/frame_builder.cc',
     // The lens rule: a cell is a small screen, not a crop of a big one. A fov
     // scaled by the layout is identity at one cell, so only a split can see it.
-    find: 'v.fov = cam.fov;',
-    replace: 'v.fov = cam.fov / (float) d.cells.size();',
+    find: 'look->fov : cam.fov;',
+    replace: 'look->fov : cam.fov / (float) d.cells.size();',
     expect: 'frame_builder',
   },
   {
@@ -392,7 +392,7 @@ export const MUTATIONS = [
   // 5900 times and no scripted case could), and the music trim — the one number
   // in this layer that a port is tempted to DERIVE rather than copy. Deriving it
   // with the vendored fdlibm pow is the exact mistake the corpus was re-recorded
-  // to make catchable, and it is caught on the very first music pick.
+  // to make catchable, and it is caught on the first pick of that song.
   {
     name: 'audio/impact-loses-its-payoff-floor',
     file: 'native/libttp-runtime/ttp/audio.cc',
@@ -411,13 +411,13 @@ export const MUTATIONS = [
   {
     name: 'audio/music-trim-derived-with-pow',
     file: 'native/libttp-runtime/ttp/audio.cc',
-    // One song's trim, as ttp_fd_pow(10, (-19.2 - -15.3) / 20) computes it: one
+    // One song's trim, as ttp_fd_pow(10, (-19.2 - -15.7) / 20) computes it: one
     // ULP below the literal V8's `10 ** x` produced and the corpus recorded.
     // Spelled as the number rather than as the pow CALL because a linkage
     // specification is illegal at block scope, so the honest mutation would not
     // compile — and a mutation that does not compile proves nothing.
-    find: '212, -15.3, 0.6382634861905488)',
-    replace: '212, -15.3, 0.63826348619054873)',
+    find: '169, -15.7, 0.6683439175686147)',
+    replace: '169, -15.7, 0.66834391756861455)',
     expect: 'audio',
   },
 

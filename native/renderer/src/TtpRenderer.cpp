@@ -12,7 +12,8 @@
 #include <mutex>
 
 #include "TtpRendererImpl.h"
-#include "../generated/kit_colors.h"
+#include "ttp/kit_colors.h"
+#include "../generated/kit_atlas.h"
 
 #include "ttp/glb.h"
 // The meshoptimizer the Filament SDK already links (native/vendor/meshoptimizer):
@@ -252,13 +253,11 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // mSkidRing) so each upload lands in a texture no in-flight frame samples.
     // The terrain sheets: a draw costs this driver CPU where the extra vertices
     // a coarser tile submits cost the GPU nothing it is bound on, so the sheets
-    // tile twice as coarse here (TtpRenderer.h, mSheetTile). The frame map's
-    // GL section has every reading.
+    // tile twice as coarse here (buildStatic, which the lite tier shares). The
+    // frame map's GL section has every reading.
     if (mAndroidGl) {
         mMaxTextureDim = std::min<uint32_t>(mMaxTextureDim, 4096);
         mSkidRingN = 2;
-        mSheetTile = 2.0f * kSheetTile;
-        mSheetMinTris = 4 * kSheetMinTris;
     }
 #endif
     mSwapChain = mEngine->createSwapChain(nativeWindow);
@@ -454,7 +453,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // until the reorder below.
     const bool welded = (fold || m.weld) && !lit && !uv && !baked;
     if (welded) weldExact(m);
-    m.layout = Mesh::Layout{ lit, uv, baked };
+    const bool skin = !m.bones.empty();
+    m.layout = Mesh::Layout{ lit, uv, baked, skin };
     const uint8_t uvSlot = m.layout.uvSlot();
     const uint8_t customSlot = m.layout.customSlot();
     m.vb = buildVertexBuffer((uint32_t) m.verts.size(), m.layout);
@@ -464,6 +464,11 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         m.uvs.resize(m.verts.size(), math::float2{ 0, 0 });
         m.vb->setBufferAt(*mEngine, uvSlot, VertexBuffer::BufferDescriptor(
                 m.uvs.data(), m.uvs.size() * sizeof(math::float2), nullptr));
+    }
+    if (skin) {
+        m.bones.resize(m.verts.size(), Mesh::Bone{ { 0, 0, 0, 0 }, { 255, 0, 0, 0 } });
+        m.vb->setBufferAt(*mEngine, m.layout.skinSlot(), VertexBuffer::BufferDescriptor(
+                m.bones.data(), m.bones.size() * sizeof(Mesh::Bone), nullptr));
     }
     if (baked) {
         m.custom0.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
@@ -516,7 +521,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         const float scale = meshopt_simplifyScale(&m.verts[0].px, m.verts.size(), sizeof(Vertex));
         for (size_t i = 0; i < ranges.size(); i++) {
             const auto [t0, n] = ranges[i];
-            far[i] = farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1);
+            far[i] = skin ? farFormByBone(m, t0 * 3, n * 3, !mLite)
+                          : farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1, !mLite);
         }
     }
     MaterialInstance* const mi = materialInstance ? materialInstance
@@ -559,8 +565,11 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         const auto [t0, n] = ranges[i];
         const auto [lo, hi] = boundsOf(t0 * 3, n * 3);
         utils::Entity e = utils::EntityManager::get().create();
-        RenderableManager::Builder(1)
-                .boundingBox({ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) })
+        RenderableManager::Builder rb(1);
+        // A skinned mesh's bones start at the identity; its owner poses them
+        // and states the box they sweep (buildSetMovers).
+        if (skin) rb.skinning(m.boneCount);
+        rb.boundingBox({ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) })
                 // Blend-pass draw order (default 4), for the few blended
                 // sheets that must stack deterministically instead of by an
                 // arbitrary depth sort.
@@ -604,20 +613,212 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
 // would otherwise each move their shared seam, and a near tile beside a far
 // one (or two far ones) would open a crack along it.
 // Answers the far offset, count and reached error (farCnt 0 = no far form).
+// [v0, v1) is the window of vertices the range draws from (v1 0: all of them),
+// which is all the simplifier is shown.
+//
+// `keepShades` (the full tier) holds every colour where it is: the simplifier
+// joins corners by position and counts only how far a surface strays, so it
+// slid a fir's snow tiers down its cone for no error at all, and the grove
+// turned green until the near form came back. Shown each shade a hair apart,
+// it sees a patch of one shade as a surface of its own and the locked border
+// keeps the patch's outline. Lite keeps the cheaper form: its frame is the
+// box's budget.
 TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
-        float scale, bool lockBorder) {
+        float scale, bool lockBorder, bool keepShades, uint32_t v0, uint32_t v1) {
     LodRange r;
+    if (!v1) v1 = (uint32_t) m.verts.size();
     if (!(scale > 0.0f)) return r;
-    std::vector<uint32_t> dst(idxN);
+    // A BIG FACE KEEPS ITS OWN CORNERS. A vertex carries its face's baked
+    // light, and a collapse re-points a corner at a vertex the range already
+    // owns: across a block's chamfer that hands a wall a corner lit as the
+    // roof is. On a small block nobody sees it; a house's wall wore a
+    // gradient from end to end until the near form swapped back in (a toy
+    // house changing colour as the racer came up to it). So a triangle over
+    // kFarFace is kept as it is, and so is every triangle at one of its
+    // corners that spans two shades (the chamfer beside it: corners further
+    // apart than kFarShade a channel). The rest is simplified with its
+    // border locked, which holds what it shares with the kept ones.
+    const uint32_t* src = m.idx.data() + idx0;
+    const auto shade = [&](uint32_t a, uint32_t b) {
+        const uint32_t x = m.verts[a].abgr, y = m.verts[b].abgr;
+        for (int sh = 0; sh < 24; sh += 8) {
+            if (std::abs((int) (x >> sh & 255) - (int) (y >> sh & 255)) > kFarShade) return true;
+        }
+        return false;
+    };
+    const auto big = [&](size_t i) {
+        const Vertex& a = m.verts[src[i]];
+        const Vertex& b = m.verts[src[i + 1]];
+        const Vertex& c = m.verts[src[i + 2]];
+        const float3 n = cross(float3{ b.px - a.px, b.py - a.py, b.pz - a.pz },
+                float3{ c.px - a.px, c.py - a.py, c.pz - a.pz });
+        return dot(n, n) > 4.0f * kFarFace * kFarFace;
+    };
+    std::vector<bool> faced(m.verts.size(), false);
+    for (size_t i = 0; i < idxN; i += 3) {
+        if (big(i)) faced[src[i]] = faced[src[i + 1]] = faced[src[i + 2]] = true;
+    }
+    // A SMALL THING IS KEPT WHOLE (with `keepShades`). A post, a rail, a ring
+    // is a closed shape of its own with a few dozen triangles, and the
+    // simplifier folds one along its own length for no error it counts: the
+    // far form simply had no post, and it stood up out of nothing as the car
+    // came on. So the range's triangles are grouped into the shapes they
+    // close (corners joined by position), and a shape of kFarWhole triangles
+    // or fewer stays as it is. The shapes are found in both tiers: what the
+    // simplifier leaves nothing of is judged by them below.
+    std::vector<uint32_t> shape, count;
+    {
+        std::vector<uint32_t> order;
+        for (size_t i = 0; i < idxN; i++) order.push_back(src[i]);
+        std::sort(order.begin(), order.end());
+        order.erase(std::unique(order.begin(), order.end()), order.end());
+        const auto before = [&](uint32_t a, uint32_t b) {
+            const Vertex& p = m.verts[a];
+            const Vertex& q = m.verts[b];
+            return p.px != q.px ? p.px < q.px : p.py != q.py ? p.py < q.py : p.pz < q.pz;
+        };
+        std::sort(order.begin(), order.end(), before);
+        shape.resize(m.verts.size());
+        for (const uint32_t v : order) shape[v] = v;
+        const auto root = [&](uint32_t v) {
+            while (shape[v] != v) v = shape[v] = shape[shape[v]];
+            return v;
+        };
+        for (size_t k = 1; k < order.size(); k++) {
+            if (!before(order[k - 1], order[k])) shape[root(order[k])] = root(order[k - 1]);
+        }
+        for (size_t i = 0; i < idxN; i += 3) {
+            shape[root(src[i + 1])] = root(src[i]);
+            shape[root(src[i + 2])] = root(src[i]);
+        }
+        count.assign(m.verts.size(), 0);
+        for (size_t i = 0; i < idxN; i += 3) count[root(src[i])]++;
+        for (const uint32_t v : order) shape[v] = root(v);
+    }
+    std::vector<uint32_t> keep, pool;
+    for (size_t i = 0; i < idxN; i += 3) {
+        const uint32_t a = src[i], b = src[i + 1], c = src[i + 2];
+        const bool held = big(i) || ((faced[a] || faced[b] || faced[c])
+                && (shade(a, b) || shade(b, c) || shade(c, a)))
+                || (keepShades && count[shape[a]] <= kFarWhole);
+        (held ? keep : pool).insert(held ? keep.end() : pool.end(), src + i, src + i + 3);
+    }
+    std::vector<uint32_t> dst(pool.size());
     float err = 0;
-    dst.resize(meshopt_simplify(dst.data(), m.idx.data() + idx0, idxN, &m.verts[0].px,
-            m.verts.size(), sizeof(Vertex), 0, kFarTol / scale,
-            lockBorder ? meshopt_SimplifyLockBorder : 0, &err));
+    if (!pool.empty()) {
+        for (uint32_t& k : pool) k -= v0;
+        const float* at = &m.verts[v0].px;
+        size_t stride = sizeof(Vertex);
+        std::vector<float3> apart;
+        if (keepShades) {
+            // Eight steps a channel, each a fifth of a millimetre: apart to the
+            // simplifier's bitwise join, nothing to its error.
+            constexpr float kApart = 2e-4f;
+            apart.resize(v1 - v0);
+            for (uint32_t i = v0; i < v1; i++) {
+                const Vertex& v = m.verts[i];
+                apart[i - v0] = float3{ v.px + (float) (v.abgr >> 5 & 7) * kApart,
+                        v.py + (float) (v.abgr >> 13 & 7) * kApart,
+                        v.pz + (float) (v.abgr >> 21 & 7) * kApart };
+            }
+            at = &apart[0].x;
+            stride = sizeof(float3);
+        }
+        dst.resize(meshopt_simplify(dst.data(), pool.data(), pool.size(), at,
+                v1 - v0, stride, 0, kFarTol / scale,
+                lockBorder || keepShades || !keep.empty() ? meshopt_SimplifyLockBorder : 0, &err));
+        for (uint32_t& k : dst) k += v0;
+        // NOTHING BIG IS SIMPLIFIED AWAY (both tiers). Lite does not keep
+        // the small shapes whole, and a shape thinner than the tolerance (a
+        // lift's cable, a palm's fronds, a flag) folded to no triangles at
+        // all, which the simplifier counts as no error: pylons with no
+        // cable, trunks with no crown, until the near form came back. So a
+        // shape the simplifier left nothing of is simplified again on its
+        // own, to a quarter of its triangles and no further, if it is longer
+        // than lite's own small thing is at the swap (kCutPx pixels where
+        // kFarTol covers kLodPx); a shorter one stays out, and whole ones
+        // would hand back most of what a far form saves the box.
+        const float small = kFarTol * kCutPx / kLodPx / scale;
+        std::vector<bool> left(m.verts.size(), false);
+        for (const uint32_t k : dst) left[shape[k]] = true;
+        for (const uint32_t k : keep) left[shape[k]] = true;
+        std::vector<float3> lo(m.verts.size(), float3{ 1e30f }), hi(m.verts.size(), float3{ -1e30f });
+        for (const uint32_t k : pool) {
+            const Vertex& v = m.verts[k + v0];
+            const float3 p{ v.px, v.py, v.pz };
+            lo[shape[k + v0]] = min(lo[shape[k + v0]], p);
+            hi[shape[k + v0]] = max(hi[shape[k + v0]], p);
+        }
+        std::vector<std::pair<uint32_t, uint32_t>> gone;   // (shape, its triangle in the pool)
+        for (size_t i = 0; i < pool.size(); i += 3) {
+            const uint32_t sh = shape[pool[i] + v0];
+            const float3 box = hi[sh] - lo[sh];
+            if (!left[sh] && std::max(box.x, std::max(box.y, box.z)) > small) gone.push_back({ sh, (uint32_t) i });
+        }
+        std::sort(gone.begin(), gone.end());
+        std::vector<uint32_t> one, less;
+        for (size_t a = 0, b = 0; a < gone.size(); a = b) {
+            one.clear();
+            for (; b < gone.size() && gone[b].first == gone[a].first; b++) {
+                one.insert(one.end(), pool.begin() + gone[b].second, pool.begin() + gone[b].second + 3);
+            }
+            less.resize(one.size());
+            float e = 0;
+            less.resize(meshopt_simplify(less.data(), one.data(), one.size(), at, v1 - v0, stride,
+                    std::max<size_t>(12, one.size() / 12 * 3), kFarTol / scale, 0, &e));
+            if (less.empty()) less = one;
+            err = std::max(err, e);
+            for (const uint32_t k : less) dst.push_back(k + v0);
+        }
+    }
+    dst.insert(dst.end(), keep.begin(), keep.end());
     if (dst.empty() || dst.size() * 5 > idxN * 4) return r;
     r.farOff = (uint32_t) m.idx.size();
     r.farCnt = (uint32_t) dst.size();
     r.err = err * scale;
     m.idx.insert(m.idx.end(), dst.begin(), dst.end());
+    return r;
+}
+
+// A SKINNED range's far form, a bone at a time: each part simplified on its
+// own vertices, as it was when each part was a draw of its own. Shown the
+// lot, the simplifier joins corners by POSITION, and parts may stand on one
+// another at rest (a run's marbles are built on one pivot), which left the
+// whole skin without a far form. A part that saves too little keeps its near
+// triangles in the far range; the range keeps a far form on farForm's terms.
+TtpRenderer::LodRange TtpRenderer::farFormByBone(Mesh& m, size_t idx0, size_t idxN, bool keepShades) {
+    LodRange r;
+    const uint32_t start = (uint32_t) m.idx.size();
+    float err = 0;
+    std::vector<uint32_t> near;
+    for (size_t a = idx0; a < idx0 + idxN;) {
+        const uint16_t bone = m.bones[m.idx[a]].idx[0];
+        uint32_t lo = UINT32_MAX, hi = 0;
+        size_t b = a;
+        for (; b < idx0 + idxN && m.bones[m.idx[b]].idx[0] == bone; b += 3) {
+            for (size_t k = b; k < b + 3; k++) {
+                lo = std::min(lo, m.idx[k]);
+                hi = std::max(hi, m.idx[k]);
+            }
+        }
+        const float scale = meshopt_simplifyScale(&m.verts[lo].px, hi - lo + 1, sizeof(Vertex));
+        const LodRange part = farForm(m, a, b - a, scale, false, keepShades, lo, hi + 1);
+        if (part.farCnt) {
+            err = std::max(err, part.err);
+        } else {
+            near.assign(m.idx.begin() + (std::ptrdiff_t) a, m.idx.begin() + (std::ptrdiff_t) b);
+            m.idx.insert(m.idx.end(), near.begin(), near.end());
+        }
+        a = b;
+    }
+    const size_t cnt = m.idx.size() - start;
+    if (!cnt || cnt * 5 > idxN * 4) {
+        m.idx.resize(start);
+        return r;
+    }
+    r.farOff = start;
+    r.farCnt = (uint32_t) cnt;
+    r.err = err;
     return r;
 }
 
@@ -657,8 +858,9 @@ ttp::rt::GlbMeshPrim TtpRenderer::weldPrimExact(const ttp::rt::GlbMeshPrim& p, b
 
 void TtpRenderer::weldExact(Mesh& m) {
     // The key is every attribute the vertex carries to the GPU, bit for bit —
-    // its position and colour; buildMesh only welds a mesh that has nothing
-    // else. A folded sheet's normals are spent and must not split it. meshopt
+    // its position and colour, and a skinned mesh's bone; buildMesh only welds
+    // a mesh that has nothing else. A folded sheet's normals are spent and
+    // must not split it. meshopt
     // numbers the unique vertices in order of first appearance, which keeps
     // each one's first slot; the order it is handed is the vertices' own,
     // padded to whole triangles (its precondition) with the last one again.
@@ -666,8 +868,10 @@ void TtpRenderer::weldExact(Mesh& m) {
     std::vector<uint32_t> order(nv + (3 - nv % 3) % 3, (uint32_t) nv - 1);
     for (size_t i = 0; i < nv; i++) order[i] = (uint32_t) i;
     std::vector<uint32_t> remap(nv);
-    const size_t unique = meshopt_generateVertexRemap(remap.data(), order.data(), order.size(),
-            m.verts.data(), nv, sizeof(Vertex));
+    const meshopt_Stream streams[] = { { m.verts.data(), sizeof(Vertex), sizeof(Vertex) },
+                                       { m.bones.data(), sizeof(Mesh::Bone), sizeof(Mesh::Bone) } };
+    const size_t unique = meshopt_generateVertexRemapMulti(remap.data(), order.data(),
+            order.size(), nv, streams, m.bones.size() == nv ? 2 : 1);
     std::vector<uint32_t> keep;
     keep.reserve(unique);
     for (size_t i = 0; i < nv; i++) {
@@ -682,13 +886,14 @@ void TtpRenderer::weldExact(Mesh& m) {
     };
     compact(m.verts);
     compact(m.normals);
+    compact(m.bones);
 }
 
 VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& l) {
     VertexBuffer::Builder vbb;
     vbb.vertexCount(vertexCount)
             .bufferCount((uint8_t)
-                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 2 : 0)))
+                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 2 : 0) + (l.skin ? 1 : 0)))
             .attribute(VertexAttribute::POSITION, 0,
                     VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
             .attribute(VertexAttribute::COLOR, 0,
@@ -709,6 +914,13 @@ VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::L
                 VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
         vbb.attribute(VertexAttribute::CUSTOM1, (uint8_t) (l.customSlot() + 1),
                 VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
+    }
+    if (l.skin) {
+        vbb.attribute(VertexAttribute::BONE_INDICES, l.skinSlot(),
+                VertexBuffer::AttributeType::USHORT4, 0, sizeof(Mesh::Bone));
+        vbb.attribute(VertexAttribute::BONE_WEIGHTS, l.skinSlot(),
+                VertexBuffer::AttributeType::UBYTE4, offsetof(Mesh::Bone, w), sizeof(Mesh::Bone))
+                .normalized(VertexAttribute::BONE_WEIGHTS);
     }
     return vbb.build(*mEngine);
 }
@@ -790,7 +1002,7 @@ void TtpRenderer::buryMeshBuffers(Mesh& m) {
     // built for this scene, and a grave per never-used slot would age a hundred
     // empty vectors every frame.
     if (m.verts.empty() && m.idx.empty() && m.normals.empty()
-            && m.quats.empty() && m.uvs.empty() && m.custom0.empty()) {
+            && m.quats.empty() && m.uvs.empty() && m.custom0.empty() && m.bones.empty()) {
         return;
     }
     MeshGrave g;
@@ -800,12 +1012,14 @@ void TtpRenderer::buryMeshBuffers(Mesh& m) {
     g.quats = std::move(m.quats);
     g.uvs = std::move(m.uvs);
     g.custom0 = std::move(m.custom0);
+    g.bones = std::move(m.bones);
     g.grace = kGraveGraceFrames;
     mGraves.push_back(std::move(g));
     // A moved-from vector is valid but unspecified; these are re-used by the
     // next build, so they are put back to a known empty rather than trusted.
     m.verts = {}; m.idx = {}; m.normals = {};
     m.quats = {}; m.uvs = {}; m.custom0 = {}; m.tileStarts = {};
+    m.bones = {}; m.boneCount = 0;
 }
 
 void TtpRenderer::ageGraves() {
@@ -863,9 +1077,12 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.pal[7] = th.road.sand;
     out.kerbW = th.road.kerbW;
     out.kerbH = th.road.kerbH;
+    out.kerbBank = th.road.kerbBank;
+    out.kerbSlush = th.road.kerbSlush;
     out.edgeLines = th.road.edgeLines;
 
     out.sky[0] = th.sky[0]; out.sky[1] = th.sky[1]; out.sky[2] = th.sky[2];
+    out.skyCurve = th.skyCurve;
     out.fog = th.fog;
     out.hillShape = th.hillShape;
     out.hillColors = th.hills;
@@ -892,6 +1109,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.scRocks = sc.rocks;
     out.scRockS[0] = sc.rockS[0];
     out.scRockS[1] = sc.rockS[1];
+    out.scRockBlocks = sc.rockBlocks;
     out.scModelCount = (uint32_t) sc.models.size();
     out.clDensity = sc.clutterDensity;
     out.clKinds.clear();
@@ -906,14 +1124,18 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     }
 
     out.lmKinds = th.landmarks;
-    out.setModelCount = (uint32_t) th.set.models.size();
+    out.setModels = th.set.models;
     out.setPieces.clear();
     for (const ttp::rt::SetPiece& p : th.set.pieces) {
         out.setPieces.push_back({ p.slot, p.u, p.lat, p.yaw, p.y, p.scale });
     }
+    out.land = th.land;
     out.structureCol = th.structure;
+    out.structureStack = th.structureStack;
+    out.pier = th.pier;
 
     out.groundKind = th.groundKind;
+    out.groundBase = th.groundBase;
     out.fogTune = th.fogTune;
     out.keyCol = th.key.color;
     out.keyIntensity = th.key.intensity;
@@ -952,6 +1174,11 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.ambWind = th.ambient.wind;
     out.ambBob = th.ambient.bob;
     out.ambBand = th.ambient.band;
+    out.life = th.life;
+    out.setNear.assign(th.set.models.size(), false);
+    for (size_t i = 0; i < th.set.models.size(); i++) {
+        out.setNear[i] = !th.life.near.empty() && th.set.models[i].find(th.life.near) != std::string::npos;
+    }
     out.birdCount = th.birds.count;
     out.birdTint = th.birds.tint;
     out.birdSize = th.birds.size;
@@ -1355,8 +1582,21 @@ const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
     return it->second.empty() ? nullptr : &it->second;
 }
 
+const ttp::kitcolors::Model* TtpRenderer::kitColors(uint64_t key) {
+    const auto meshIt = mGlbMeshCache.find(key);
+    if (meshIt == mGlbMeshCache.end() || meshIt->second.empty()) return nullptr;
+    const auto it = mKitColors.find(key);
+    if (it != mKitColors.end()) return it->second.get();
+    const auto t0 = std::chrono::steady_clock::now();
+    auto model = std::make_unique<ttp::kitcolors::Model>();
+    ttp::kitcolors::model_colors(meshIt->second, ttp::kitcolors::kAtlas,
+            ttp::kitcolors::kAtlasWidth, ttp::kitcolors::kAtlasHeight, *model);
+    mKitColorMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    return (mKitColors[key] = std::move(model)).get();
+}
+
 // The baked form of one run (MergedGroup::baked): every copy's vertices in
-// world space, coloured with the kit table's texture colour (the atlas's own
+// world space, coloured with the kit's texture colour (kitColors) (the atlas's own
 // sRGB bytes) times the LIVE instance's baseColorFactor (the biome's recolour
 // lands there, not in the GLB) times the matte light of the copy's own world
 // normal, as one unlit mesh in display space. Refuses — and the caller falls back to the instanced draw — when the
@@ -1365,57 +1605,136 @@ const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
 bool TtpRenderer::bakeMergedRun(MergedGroup& g,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
         const ttp::kitcolors::Mesh& colors, utils::Entity src0) {
-    if (colors.primCount != prims.size()) return false;
+    std::vector<float3> factor;
+    if (!bakeFactors(src0, prims, colors, factor)) return false;
     auto& tcm = mEngine->getTransformManager();
     auto& rcm = mEngine->getRenderableManager();
-    const auto ri0 = rcm.getInstance(src0);
-    if (!ri0) return false;
-    std::vector<float3> factor(prims.size(), float3{ 1.0f });
-    for (size_t p = 0; p < prims.size(); p++) {
-        if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()
-                || prims[p].normal.size() != prims[p].pos.size()) {
-            return false;
-        }
-        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri0, p);
-        if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
-        // The live factor is display-encoded (displayKitFactors); the bake
-        // multiplies in linear and encodes the product once, so decode it.
-        const float3 f = mi->getParameter<float4>("baseColorFactor").xyz;
-        factor[p] = { srgbChannel(f.x), srgbChannel(f.y), srgbChannel(f.z) };
-    }
-    const uint8_t layer = rcm.getLayerMask(ri0);
+    const uint8_t layer = rcm.getLayerMask(rcm.getInstance(src0));
     Mesh& m = g.baked;
     m.weld = true;
     m.simplify = true;
     for (const utils::Entity src : g.sources) {
         const auto ti = tcm.getInstance(src);
         if (!ti) return false;
-        const mat4f xf = tcm.getWorldTransform(ti);
-        const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
-        for (size_t p = 0; p < prims.size(); p++) {
-            const ttp::rt::GlbMeshPrim& sp = prims[p];
-            const uint8_t* rgb = colors.prims[p].rgb;
-            const uint32_t base = (uint32_t) m.verts.size();
-            const size_t nv = sp.pos.size() / 3;
-            for (size_t i = 0; i < nv; i++) {
-                const float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
-                        sp.pos[i * 3 + 2], 1.0f }).xyz;
-                const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
-                        sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
-                const float3 lin = float3{ srgbChannel(rgb[i * 3] / 255.0f),
-                        srgbChannel(rgb[i * 3 + 1] / 255.0f),
-                        srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
-                m.verts.push_back({ pw.x, pw.y, pw.z,
-                        packShown(lin * bakedMatteLight(nw), 1.0f) });
-            }
-            for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
-        }
+        appendBaked(m, tcm.getWorldTransform(ti), prims, colors, factor);
     }
     if (!buildMesh(m)) return false;
     g.ent = m.entity;
     // Whatever layer the originals sit on (a sweep may have tagged the scene).
     if (const auto ri = rcm.getInstance(m.entity)) rcm.setLayerMask(ri, 0xFF, layer);
     return true;
+}
+
+// The bake's check and colour inputs for one mesh as `src` draws it: the kit
+// table must agree with the decoded geometry about every count, and each prim
+// takes the live material's baseColorFactor, decoded to linear (the live factor
+// is display-encoded, displayKitFactors; the bake multiplies in linear and
+// encodes the product once).
+bool TtpRenderer::bakeFactors(utils::Entity src,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims,
+        const ttp::kitcolors::Mesh& colors, std::vector<float3>& factor) {
+    if (colors.primCount != prims.size()) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri = rcm.getInstance(src);
+    if (!ri || rcm.getPrimitiveCount(ri) != prims.size()) return false;
+    factor.assign(prims.size(), float3{ 1.0f });
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()
+                || prims[p].normal.size() != prims[p].pos.size()) {
+            return false;
+        }
+        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri, p);
+        if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
+        const float3 f = mi->getParameter<float4>("baseColorFactor").xyz;
+        factor[p] = { srgbChannel(f.x), srgbChannel(f.y), srgbChannel(f.z) };
+    }
+    return true;
+}
+
+// One copy of a mesh into a baked mesh: its vertices in world space under
+// `xf`, each coloured with the kit's texture colour times the prim's factor
+// times the matte light of its own world normal.
+void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims,
+        const ttp::kitcolors::Mesh& colors, const std::vector<float3>& factor,
+        const TrackBin* drapeOn, float foot, const float2* wallAt, bool turf, bool grade,
+        bool plane) {
+    const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
+    // A `drape_plane` part: the least-squares plane through the ground under
+    // its vertices (about the part's own origin, in doubles: the sums are of
+    // world coordinates), raised until it clears the ground under every one.
+    float pl[3] = { 0.0f, 0.0f, 0.0f };
+    const float3 po = xf[3].xyz;
+    if (drapeOn && plane) {
+        double sx = 0, sz = 0, sy = 0, sxx = 0, szz = 0, sxz = 0, sxy = 0, szy = 0, n = 0;
+        const auto each = [&](const auto& fn) {
+            for (const ttp::rt::GlbMeshPrim& sp : prims) {
+                for (size_t i = 0; i + 2 < sp.pos.size(); i += 3) {
+                    const float3 pw = (xf * float4{ sp.pos[i], sp.pos[i + 1], sp.pos[i + 2], 1.0f }).xyz;
+                    fn(pw.x - po.x, pw.z - po.z, groundSurfaceY(*drapeOn, pw.x, pw.z) - foot);
+                }
+            }
+        };
+        each([&](double x, double z, double y) {
+            sx += x; sz += z; sy += y; sxx += x * x; szz += z * z; sxz += x * z; sxy += x * y; szy += z * y; n += 1;
+        });
+        if (n > 0) {
+            const double mx = sx / n, mz = sz / n, my = sy / n;
+            const double cxx = sxx - n * mx * mx, czz = szz - n * mz * mz, cxz = sxz - n * mx * mz;
+            const double cxy = sxy - n * mx * my, czy = szy - n * mz * my;
+            const double det = cxx * czz - cxz * cxz;
+            const double b = det > 1e-9 ? (cxy * czz - czy * cxz) / det : 0.0;
+            const double c = det > 1e-9 ? (czy * cxx - cxy * cxz) / det : 0.0;
+            double a = my - b * mx - c * mz, up = -1e30;
+            each([&](double x, double z, double y) { up = std::max(up, y - (a + b * x + c * z)); });
+            pl[0] = (float) (a + up); pl[1] = (float) b; pl[2] = (float) c;
+        }
+    }
+    // How many points of the way from a wall's vertex to its foot are read,
+    // and how far along the wall (each way, kWallAlong apart) its lift may
+    // dip: a wall rides the lowest land along that much of its own length,
+    // so a short rise under its crest never pulls a summit up into a spike.
+    constexpr int kWallSteps = 4, kWallAlongSteps = 1;
+    constexpr float kWallAlong = 2.0f;
+    const float3 along = normalize(float3{ xf[2].x, 0.0f, xf[2].z });
+    for (size_t p = 0; p < prims.size(); p++) {
+        const ttp::rt::GlbMeshPrim& sp = prims[p];
+        const uint8_t* rgb = colors.prims[p].rgb;
+        const uint32_t base = (uint32_t) m.verts.size();
+        const size_t nv = sp.pos.size() / 3;
+        for (size_t i = 0; i < nv; i++) {
+            float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
+                    sp.pos[i * 3 + 2], 1.0f }).xyz;
+            if (drapeOn) {
+                float lift = plane ? pl[0] + pl[1] * (pw.x - po.x) + pl[2] * (pw.z - po.z)
+                        : (grade ? gradeSurfaceY(*drapeOn, pw.x, pw.z)
+                        : groundSurfaceY(*drapeOn, pw.x, pw.z)) - foot;
+                if (wallAt) {
+                    float low = lift;
+                    for (int k = 1; k <= kWallSteps; k++) {
+                        const float t = (float) k / kWallSteps;
+                        low = std::min(low, groundSurfaceY(*drapeOn, pw.x + (wallAt->x - pw.x) * t,
+                                                           pw.z + (wallAt->y - pw.z) * t) - foot);
+                    }
+                    for (int k = -kWallAlongSteps; k <= kWallAlongSteps; k++) {
+                        const float3 q = pw + along * ((float) k * kWallAlong);
+                        lift = std::min(lift, groundSurfaceY(*drapeOn, q.x, q.z) - foot);
+                    }
+                    lift = std::min(lift, low + std::max(0.0f, pw.y - foot));
+                }
+                pw.y += lift;
+            }
+            const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
+                    sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
+            const float3 lin = turf ? groundColorAt(pw.x) * landTint(pw.x, pw.z)
+                    : float3{ srgbChannel(rgb[i * 3] / 255.0f),
+                    srgbChannel(rgb[i * 3 + 1] / 255.0f),
+                    srgbChannel(rgb[i * 3 + 2] / 255.0f) } * factor[p];
+            m.verts.push_back({ pw.x, pw.y, pw.z,
+                    packShown(lin * bakedMatteLight(nw), 1.0f) });
+        }
+        for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
+    }
 }
 
 bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
@@ -1512,7 +1831,7 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
         if (!run.empty()) runs.push_back(std::move(run));
     }
 
-    // A static run the kit colour table covers is BAKED (MergedGroup::baked):
+    // A static run kitColors can colour is BAKED (MergedGroup::baked):
     // same draw count, no instancing, nothing lit at draw time. That holds for
     // a run of ONE as well: a straggler has nothing to instance with, but left
     // on its gltfio draw it is lit per vertex and per fragment beside identical
@@ -1788,7 +2107,7 @@ void TtpRenderer::setDressSheets(bool on) {
 // list but not the other makes an ablation arm silently stop covering it —
 // which reads as "this feature is free".
 void TtpRenderer::forEachDressSheet(const std::function<void(const Mesh&)>& fn) const {
-    for (const Mesh* m : { &mBoulders, &mLandmarks, &mWindmill, &mClutter }) fn(*m);
+    for (const Mesh* m : { &mBoulders, &mLandmarks, &mClutter }) fn(*m);
     for (const Mesh& m : mSmoke) fn(m);
     for (const Mesh& m : mSignMeshes) fn(m);
 }
@@ -1798,6 +2117,11 @@ void TtpRenderer::forEachDressSheet(const std::function<void(const Mesh&)>& fn) 
 void TtpRenderer::applyDressSheets() {
     if (!mScene) return;
     const bool on = mDressSheets;
+    // Every sheet is in (or out) whole now, so no lite cut stands on one; the
+    // next cell's chooseCuts takes the small ones out again.
+    for (CutRange& c : mCuts) {
+        if (c.sheet) c.cut = false;
+    }
     forEachDressSheet([&](const Mesh& m) {
         const auto one = [&](utils::Entity e) {
             if (e.isNull()) return;
@@ -1831,7 +2155,7 @@ void TtpRenderer::tagFeatures() {
     tagMesh(mRoad, kFeatRoad);
 
     // The world the deck stands in. mGroundProxy stays out (see tagEntities).
-    meshes({ &mGround, &mHills, &mWater, &mWet, &mStructures, &mBerms,
+    meshes({ &mGround, &mHills, &mWater, &mWet, &mPond, &mStructures, &mBerms,
              &mGroundShadows, &mGantry }, kFeatTerrain);
 
     // Set dressing: everything scattered beside the track. The sheets come
@@ -1871,6 +2195,7 @@ void TtpRenderer::tagFeatures() {
 
     // Items and the transient pools.
     tagMesh(mPollen, kFeatEffects);
+    tagMesh(mLife, kFeatEffects);
     meshVec(mRockets, kFeatEffects);
     meshVec(mRocketFlames, kFeatEffects);
     for (const Mesh& m : mBurstMeshes) tagMesh(m, kFeatEffects);
@@ -1878,6 +2203,9 @@ void TtpRenderer::tagFeatures() {
     instVec(mBoxInstances, kFeatEffects);
     instVec(mBoxFadeInstances, kFeatEffects);
     instVec(mBananaInstances, kFeatEffects);
+    // The sand a car kicks up: left untagged it drew through every ablation,
+    // and its puffs are dealt afresh on every draw.
+    tagEntities(&mSandEntity, 1, kFeatEffects);
 }
 
 // The road shader's channels, switched by the uniforms that already gate them.
@@ -1938,7 +2266,15 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
+    mLodHold = (mask & kDebugLodHold) != 0;
+    mNoCull = (mask & kDebugNoCull) != 0;
+    mFogWhole = (mask & kDebugFogWhole) != 0;
     mShadowSolid = (mask & kDebugShadowSolid) != 0;   // read per frame by placeCarShadow
+    const bool setId = (mask & kDebugSetId) != 0;
+    if (setId != mSetIdOn) {
+        mSetIdOn = setId;
+        paintSetIds();
+    }
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;
@@ -2159,6 +2495,7 @@ void TtpRenderer::releaseStatic() {
     // be handed back to the scene (the asset drops below take them out again,
     // properly, on their own path). The parsed-geometry cache stays — it is
     // keyed by the kit's bytes, which do not change between scenes.
+    restoreCuts();
     destroyMergedGroups(mMergedDress);
     mDressMergeDirty = false;
     mAssetMeshKey.clear();
@@ -2207,11 +2544,11 @@ void TtpRenderer::releaseStatic() {
     destroyMesh(mStructures);
     destroyMesh(mBerms);
     for (auto& m : mHaze) destroyMesh(m);
-    destroyMesh(mWindmill);
     for (auto& m : mSmoke) destroyMesh(m);
     for (auto& m : mSignMeshes) destroyMesh(m);
     destroyMesh(mWater);
     destroyMesh(mWet);
+    destroyMesh(mPond);
     destroyMesh(mPlane);
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);
@@ -2237,13 +2574,17 @@ void TtpRenderer::releaseStatic() {
     for (auto& m : mBurstBalls) destroyMesh(m);
     releaseAmbientCull();   // its parked renderables hold mPollen.vb
     destroyMesh(mPollen);
+    destroyMesh(mLife);
+    mLifeAnchors.clear();
+    mLifeCells = 0;
     mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
+    mAmbDrift.clear();
+    mAmbDriftAt = 0;   // mTime restarts at 0 per scene
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
     for (auto*& a : mSetAssets) dropAsset(a);
-    for (auto*& a : mKitAssets) dropAsset(a);
     dropAsset(mBoxAsset);
     dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);
@@ -2277,10 +2618,15 @@ void TtpRenderer::releaseStatic() {
     mPropAssets.clear();
     mPropInstances.clear();
     mPropSpins.clear();
+    mSetMovers.clear();
+    mSetPaths.clear();
+    mSetSkins.clear();
     mSetAssets.clear();
     mSetInstances.clear();
+    mSetRowOf.clear();
     mSetFeet.clear();
-    mKitAssets.clear();
+    mSetLayout = kNoSetLayout;
+    mScatterLayout = "[]";
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();
@@ -2304,15 +2650,26 @@ void TtpRenderer::releaseStatic() {
     mBirds.clear();
     mKites.clear();
     mSmoke.clear();
+    mSmokeIdSaved.clear();
+    mSmokeRow = -1;
+    mSmokeDrape = false;
     mShadowSpots.clear();
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
+    mLifeMat = nullptr;
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
     if (mAmbFloorTex) { mEngine->destroy(mAmbFloorTex); mAmbFloorTex = nullptr; }
+    mAmbFloorY.clear();
+    mAmbFloorBase.clear();
+    mAmbRoof.clear();
+    if (mLifeTex) { mEngine->destroy(mLifeTex); mLifeTex = nullptr; }
     mGroundBands.clear();
     mHillAnchors.clear();
     mShoreFn = nullptr;
+    mShoreLine.clear();
+    mWetLine.clear();
     mTrack.reset();
     mHillSf = 1;
+    mRoom = { 0, 0, -1, -1 };
     mTime = 0;
     mBoxScale = 1.0f;
 }

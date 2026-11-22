@@ -4,7 +4,7 @@
 // Relative, not root-absolute: this module resolves its own imports against
 // where IT was loaded from, so the page survives being hosted under a prefix
 // (see shared/assetUrl.js and tests/asset-urls.test.js).
-import { RACE_MUSIC } from './display/audio/musicCatalogue.js';
+import { TRACK_MUSIC } from './display/audio/musicCatalogue.js';
 import { creditsFor, licenseInfo } from './shared/credits.js';
 
 function el(tag, cls, text) {
@@ -42,7 +42,8 @@ function entryRow(entry) {
   // A bundle of many works names no one author (credits.js), so the row shows none.
   if (entry.author) what.appendChild(el('span', 'entry__author', entry.author));
   row.appendChild(what);
-  row.appendChild(licenseChip(entry));
+  // A credit for no shipped file (credits.js) has no terms to link.
+  if (entry.license) row.appendChild(licenseChip(entry));
   return row;
 }
 
@@ -61,4 +62,4 @@ function sectionCard({ section, entries }) {
 }
 
 const sections = document.getElementById('sections');
-for (const group of creditsFor(RACE_MUSIC)) sections.appendChild(sectionCard(group));
+for (const group of creditsFor(TRACK_MUSIC)) sections.appendChild(sectionCard(group));

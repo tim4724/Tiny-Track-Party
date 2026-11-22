@@ -1,10 +1,14 @@
 #include "ttp/theme.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
+#include "generated/track_defs.h"
 #include "ttp/canonical.h"
+#include "ttp/detail.h"
 #include "ttp/glb_mesh.h"
 #include "ttp/json_parse.h"
 #include "ttp/race_track.h"
@@ -24,6 +28,13 @@ void ambientKind(AmbientSpec& a, uint32_t kind) {
     case AMB_MOTE:   a.size = 0.13f; a.opacity = 0.5f;  a.fall = 0.05f; a.wind = 0.4f; a.bob = 0.4f;  a.band = 0.5f;  break;
     case AMB_SAND:   a.size = 0.17f; a.opacity = 0.4f;  a.fall = 0;     a.wind = 9;    a.bob = 0.5f;  a.band = 0.1f;  break;
     case AMB_POLLEN: a.size = 0.15f; a.opacity = 0.5f;  a.fall = 0.1f;  a.wind = 1.2f; a.bob = 0.6f;  a.band = 0.35f; break;
+    // The life's own: a petal sinks slowly and sways, low.
+    case AMB_PETAL:  a.size = 0.26f; a.opacity = 0.95f; a.fall = 0.3f;  a.wind = 1.4f; a.bob = 1.0f;  a.band = 0.12f; break;
+    // Rain: thin, fast and driven, from the whole height of the air; the
+    // renderer turns its `wind` at every cell's camera (vpoint.mat). `fall`
+    // is exact in a half (the per-cell cull's slack grows with what a
+    // mediump load could round off it, times the race's seconds).
+    case AMB_RAIN:   a.size = 0.08f; a.opacity = 0.4f;  a.fall = 8;     a.wind = 12;   a.bob = 0;     a.band = 1;     break;
     // An unlisted kind takes the flake preset, exactly as AMB_KINDS[kind] || AMB_KINDS.flake did.
     default:         a.size = 0.3f;  a.opacity = 0.85f; a.fall = 1;     a.wind = 0.7f; a.bob = 0;     a.band = 1;     break;
   }
@@ -52,21 +63,28 @@ void deriveModels(ScenerySpec& s) {
 
 // ---------------------------------------------------------------------------
 // Green-parkland scenery, shared by every biome that keeps the grass world
-// (grass + sunset — golden light over the SAME trees is the sunset look). Every
-// value is the VERBATIM pre-theming constant from buildScenery; do not drift it,
-// or grass-cup tracks lose their byte-identical guarantee (scenery placement is
-// seeded, so any changed literal reshuffles the whole scatter).
+// (grass + sunset: golden light over the SAME trees is the sunset look).
+// No kit fir stands on a lawn: the trees are our own build
+// (scripts/blender/set_prototypes.py, the tree_* pieces), one family per
+// backyard track, the same trees its set pieces are made of. The list names
+// every family, because the shell fetches a biome's scenery by the BIOME
+// (ttp_theme_scenery_models); a track picks its own by weight (lawnTrees),
+// and a lawn outside the cup wears the oak.
 // ---------------------------------------------------------------------------
 ScenerySpec grassScenery() {
   ScenerySpec s;
   s.trees = {
-    { "tree", 0.65f, 2.3f, 1.1f },       // round oak — the staple
-    { "tree-pine", 0.35f, 2.3f, 1.1f },  // pine as the accent
+    { "set-tree-oak", 1.0f, 1.0f, 0.4f },           // Pretzel's faceted broadleaf
+    { "set-tree-cherry", 0.0f, 0.8f, 0.7f },        // Cloverleaf's blossom, pink, young to old
+    { "set-tree-cherry-white", 0.0f, 0.8f, 0.7f },  // and white
+    { "set-tree-alder", 0.0f, 0.95f, 0.45f },       // Tangle's tall dark wood
+    { "set-tree-willow", 0.0f, 0.95f, 0.3f },       // and its willows
+    { "set-tree-apple", 0.0f, 1.3f, 0.6f },         // Ribbon's round orchard tree
   };
   s.hasBush = true;
-  s.bush = { "tree", 1.1f, 0.7f, 0.3f };
+  s.bush = { "set-lawn-shrub", 0.9f, 0.5f, 0.0f };
   s.mixTree = 0.62f; s.mixBush = 0.9f;
-  s.rocks = { 0xc6cbd6, 0xb4bac8, 0x9aa1b4 };  // pillar-concrete family
+  s.rocks = { 0x767c8c, 0x6a7080, 0x80869a };  // slate: pale stone read as dropped concrete on the grass
   s.rockS[0] = 0.3f; s.rockS[1] = 0.45f;
   s.density = 0.62f;
   // Near-field pass (own rand stream — the scatter above is untouched):
@@ -89,17 +107,14 @@ ScenerySpec grassScenery() {
 // light rigs.
 PropsSpec gardenProps() {
   PropsSpec p;
-  // The tent is Nature Kit, which is authored small — a third of a car length —
-  // so it is staged at better than twice its own size to read as something you
-  // could camp in beside a toy car. The generated crate and bale are already
-  // at world scale and are not. Hay bales line the kerb the way they line a
-  // real one, among road-works lights (City Kit Roads, authored at street
-  // scale, so well over twice its size). Only here: road works mean something
-  // on a country road, and nothing on a beach, a ski run or a bedroom floor.
-  p.models = { "prop-hay", "prop-crate", "tent-open", "construction-light" };
+  // Hay bales line the kerb the way they line a real one, among crates and
+  // road-works lights (a lamp authored at street scale, so staged at well
+  // over twice its size). Only here: road works mean something on a country
+  // road, and nothing on a beach, a ski run or a bedroom floor.
+  p.models = { "prop-hay", "prop-crate", "construction-light" };
   p.scatterDensity = 0.28f;
-  p.scatter = { { 0, 0.40f, 0.85f, 0.4f, false, true }, { 1, 0.22f, 0.9f, 0.25f },
-                { 2, 0.22f, 2.0f, 0.5f }, { 3, 0.16f, 2.4f, 0.4f, true, true } };
+  p.scatter = { { 0, 0.52f, 0.85f, 0.4f, false, true }, { 1, 0.28f, 0.9f, 0.25f },
+                { 2, 0.20f, 2.4f, 0.4f, true, true } };
   return p;
 }
 
@@ -113,12 +128,18 @@ Theme grassTheme() {
   t.groundKind = GROUND_LAWN;
   t.hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
   // The Backyard is a PLACE, not the default: garden clutter trackside, drifting
-  // pollen in the sun, and a hot-air balloon over the meadow.
+  // pollen in the sun, and a hot-air balloon over the meadow. The cup's four
+  // tracks take their own from this (backyardTrack): no giants, and the
+  // balloon over Ribbon's fete alone.
   ambientKind(t.ambient, AMB_POLLEN); t.ambient.count = 7; t.ambient.tint = 0xfff2c4;
   t.balloon = { { 0xd94f3d, 0xf5f0e2 }, 44, 6 };
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };
   t.scenery = grassScenery();
   t.props = gardenProps();  // hay bales and toy crates on the verge
+  // A garden's bridges stand on painted concrete: a pale shaft on a raw
+  // concrete footing, under a cap each track paints its own colour
+  // (backyardTrack).
+  t.pier = { PIER_PAINTED, 0xece6d8, 0, 0xaaa79e, 0xaaa79e, 0 };
   deriveRoad(t.road, false, false, false);
   return t;
 }
@@ -169,6 +190,7 @@ Theme beachTheme() {
   t.road.asphalt = 0x6c6a74;
   deriveRoad(t.road, false, false, false);
   t.structure = 0x9a7b55;  // overpass supports stay timber piles — pier flavour
+  t.pier = { PIER_TIMBER, 0, 0, 0x7a5f40, 0, 0 };   // a post under a cap beam
   t.landmarks = { LM_LIGHTHOUSE, LM_SAILBOAT, LM_UMBRELLA, LM_SANDCASTLE };
   // Gulls working the shoreline, flapping busily.
   t.birds.count = 4; t.birds.tint = 0x51616d; t.birds.size = 3.0f; t.birds.y = 13;
@@ -192,18 +214,341 @@ Theme beachTheme() {
                 { CL_DRIFTWOOD, 0.25f, { 0xcbb794, 0xb8a686 } } };
   s.clutterDensity = 0.28f;
   deriveModels(s);
-  // Washed-up freight and a pirate cove's leavings above the tide line. No
-  // fence — the coast stays open to the water. The Pirate Kit is authored large
-  // against a toy car (its barrel is taller than one), so its pieces stand at
-  // about half size, and the small ones stand on the verge.
-  t.props.models = { "prop-crate", "pirate-barrel", "pirate-chest", "pirate-crate",
-                     "pirate-cannon", "pirate-rowboat", "pirate-flag" };
-  t.props.scatterDensity = 0.28f;
-  t.props.scatter = { { 0, 0.10f, 0.9f, 0.3f }, { 1, 0.20f, 0.42f, 0.12f, false, true },
-                      { 2, 0.13f, 0.42f, 0.1f, false, true }, { 3, 0.17f, 0.55f, 0.15f },
-                      { 4, 0.14f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.6f, 0.15f },
-                      { 6, 0.12f, 0.5f, 0.15f } };
+  // Washed-up freight above the tide line: crates. No rowing boats: the
+  // scatter stands by the road, a long way up the sand from the water, and
+  // a boat there was left high and dry. No fence — the coast stays open to
+  // the water. The pirate leavings are Cove's alone (pirateCove, applied in
+  // resolve_theme): a chest or a cannon on every beach told the cup one
+  // story four times.
+  t.props.models = { "prop-crate" };
+  t.props.scatterDensity = 0.11f;
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  // No ambient life: the spray once thrown up along the surf read as a glow
+  // in front of the rocks.
   return t;
+}
+
+// Cove is a pirate island and nothing else. The holiday beach goes: its
+// lighthouse, sailboat, parasol and sandcastle landmarks, the kites, and the
+// lighthouse bands on the gantry, whose posts stand as timber instead. The
+// pirate leavings come in as its props. Sand, sea, palms, rocks, shells and
+// gulls are the island's own and stay. The Pirate Kit is authored large
+// against a toy car (its barrel is taller than one), so its pieces stand at
+// about half size, and the small ones stand on the verge.
+void pirateCove(Theme& t) {
+  t.landmarks.clear();
+  t.kites.count = 0;
+  t.kites.tints.clear();
+  t.gantry.pylon = t.structure;
+  t.gantry.hasRings = false;
+  t.gantry.finial = 0x38383d;
+  // Its boats are on the water (the ship's longboat, the one tied at the
+  // jetty), none left on the sand by the road.
+  t.props.models = { "prop-crate", "pirate-barrel", "pirate-chest", "pirate-crate",
+                     "pirate-cannon", "pirate-flag" };
+  t.props.scatterDensity = 0.24f;
+  t.props.scatter = { { 0, 0.12f, 0.9f, 0.3f }, { 1, 0.23f, 0.42f, 0.12f, false, true },
+                      { 2, 0.15f, 0.42f, 0.1f, false, true }, { 3, 0.2f, 0.55f, 0.15f },
+                      { 4, 0.16f, 0.5f, 0.1f, true, true }, { 5, 0.14f, 0.5f, 0.15f } };
+}
+
+// The other three beaches each tell their own story, and the holiday
+// postcard (lighthouse, sailboat, parasol, sandcastle) only stays where it
+// belongs to it. Sand, sea, palms, shells and gulls are the island's own.
+//
+// Tidepool is the reef at low tide: no postcard and no kites, the boulders
+// the reef's own grey stone, starfish and shells on the sand rather than
+// driftwood, and the gantry's posts the grey of the reef banded in the
+// shallows' teal.
+void lowTideReef(Theme& t) {
+  t.landmarks.clear();
+  t.kites.count = 0;
+  t.kites.tints.clear();
+  t.gantry.pylon = 0x9aa1b4; t.gantry.hasRings = true; t.gantry.rings = 0x1fc0c9;
+  t.gantry.finial = 0xe4784f;
+  ScenerySpec& s = t.scenery;
+  s.rocks = { 0x9aa1b4, 0x868ba1, 0x7b8194 };
+  s.clutter = { { CL_SHELL, 0.45f, { 0xf5ead8, 0xecc8b4, 0xd9b8c4 } },
+                { CL_STARFISH, 0.55f, { 0xe4784f, 0xd95f6a, 0xf2c14e } } };
+  t.props.models = { "prop-crate" };
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  t.props.scatterDensity = 0.1f;
+}
+
+// Driftwood is a storm beach: the gulls more of them and harder at it in the
+// wind, no kites and none of the postcard: the track's own light station on
+// its dune is the coast's one lighthouse (a second on an islet offshore read
+// as a mistake). Driftwood lies thick along the
+// tide line, the freight the sea brought in is crates, and the gantry is
+// timber, like the trunk. No palms: the trees here are dead.
+// The storm is still on: a slate overcast over a grey-green sea,
+// the sun a weak one behind it, and rain driven across the lap. The light
+// comes down by a sixth, no more, and the fog keeps the beach's reach: the
+// road and the cars read as they did, and no corner is hidden. The rain is
+// the snow cup's cloud (vpoint.mat) drawn as streaks, at under its lightest
+// day's count.
+void stormBeach(Theme& t) {
+  t.sky[0] = 0x55657a; t.sky[1] = 0x9db0bc; t.sky[2] = 0xb3c2c8;
+  t.fog = 0x9db0bc;
+  t.hemi = { 0xe9eff4, 0xc9b78a, 2.1f };
+  t.key = { 0xf4f1e6, 1.3f };
+  t.clouds = { 9, 0.75f, 1.5f, 0.3f, 0x8d98a4 };  // low, heavy, grey
+  t.water.shallow = 0x5fb3ab; t.water.deep = 0x2c7391;
+  ambientKind(t.ambient, AMB_RAIN); t.ambient.count = 2000; t.ambient.tint = 0xe4ecf2;
+  t.landmarks.clear();
+  t.kites.count = 0;
+  t.kites.tints.clear();
+  t.birds.count = 6; t.birds.speed = 0.34f; t.birds.flapHz = 2.8f;
+  t.gantry.pylon = 0x8a6a46; t.gantry.hasRings = false; t.gantry.finial = 0xfff6eb;
+  ScenerySpec& s = t.scenery;
+  // No living tree on a coast the storm killed the trees of: the snags are
+  // its one tree family (set_prototypes.py drift_snag), so the seeded palms
+  // go. Every spot that would have rolled one rolls a boulder instead, so
+  // the density falls by the palms' share to leave the boulders as they were.
+  s.mixTree = 0; s.mixBush = 0;
+  s.density *= 0.55f;
+  s.clutter = { { CL_DRIFTWOOD, 0.55f, { 0xcbb794, 0xb8a686, 0x9a8a70 } },
+                { CL_SHELL, 0.3f, { 0xf5ead8, 0xecc8b4 } },
+                { CL_STARFISH, 0.15f, { 0xe4784f } } };
+  s.clutterDensity = 0.36f;
+  t.props.models = { "prop-crate" };
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  t.props.scatterDensity = 0.22f;
+}
+
+// Riptide is the surf patrol's beach: its parasols and its tower are the
+// holiday here, so the procedural parasol and sandcastle go; the lighthouse,
+// the sailboat and the kites stay, and the gantry keeps the lifeguard's red
+// and white.
+void surfPatrol(Theme& t) {
+  t.landmarks = { LM_LIGHTHOUSE, LM_SAILBOAT };
+}
+
+// The snow cup's four tracks are four places, so each carries its own idea
+// round the lap past its set pieces: the scatter's Holiday Kit leavings, and
+// where it says something, the kerb banks and the gantry. One entry per
+// scatter model: (name, weight, s0, s1, face, verge).
+struct SnowProp { const char* model; float w, s0, s1; bool face, verge; };
+void snowProps(Theme& t, std::initializer_list<SnowProp> list) {
+  t.props.models.clear();
+  t.props.scatter.clear();
+  for (const SnowProp& p : list) {
+    t.props.scatter.push_back({ (uint32_t) t.props.models.size(), p.w, p.s0, p.s1, p.face, p.verge });
+    t.props.models.push_back(p.model);
+  }
+}
+
+// A road through the snow is edged by what the plough threw up, not by a
+// racing kerb: a lumpy white bank up to a little over a car's wheel, slush
+// on its road face (RoadPalette::kerbBank). Every snow track but the resort,
+// whose banks are its race course's.
+void ploughBanks(Theme& t) {
+  t.road.kerbA = 0xf3f7fb; t.road.kerbB = 0xf3f7fb;
+  t.road.kerbH = 0.42f;
+  t.road.kerbBank = true; t.road.kerbSlush = 0xa3aab4;
+}
+
+// Powder is a ski resort: the banks are the race course's red and blue gate
+// colours, the gantry's posts banded like slalom poles, and what lies about
+// is the guests' (a snowman by the road, sleds), at their real size beside a
+// car: the kit's snowman is a unit tall and its sled a unit long, twice the
+// real thing. At that size more of them clear the spacing rule, so they are
+// rolled less often, and the verge carries fewer of them (the kit snowman is
+// a heavy model, and the resort's chalets and lift spend that budget).
+void powderResort(Theme& t) {
+  t.props.scatterDensity = 0.18f;
+  t.road.kerbA = 0xf2877c; t.road.kerbB = 0x86a9e6;
+  t.gantry.pylon = t.road.kerbB; t.gantry.hasRings = true; t.gantry.rings = 0xff5040;
+  snowProps(t, { { "snowman", 0.12f, 0.45f, 0.1f, true, true }, { "sled", 0.25f, 0.4f, 0.1f, false, true },
+                 { "snow-pile", 0.38f, 1.0f, 0.6f, false, false }, { "set-snow-boulder", 0.25f, 0.6f, 0.3f, false, false } });
+}
+
+// Flurry is a frozen lake below a village: open snow round the ice (fewer
+// pines, which also pays for the lake on the long view down its middle leg),
+// sleds left by the road for the slope down to the ice; its one snowman is
+// the set's, on the lake.
+void flurryLake(Theme& t) {
+  ploughBanks(t);
+  t.scenery.density = 0.42f;
+  t.props.scatterDensity = 0.28f;
+  snowProps(t, { { "sled", 0.35f, 0.4f, 0.1f, false, true }, { "snow-pile", 0.35f, 1.0f, 0.6f, false, false },
+                 { "set-snow-boulder", 0.15f, 0.6f, 0.3f, false, false }, { "snow-bunker", 0.15f, 1.0f, 0.3f, false, false } });
+}
+
+// Glacier is wild ice: no cabin, no village leavings and no trees (open
+// snow, where the penguins read), rock the ice dropped.
+void penguinGlacier(Theme& t) {
+  t.landmarks.clear();
+  // No tree grows on a glacier (the penguins' climate, not the pines'): no
+  // spot rolls one, and the snow biome has no boulder palette, so the seeded
+  // scenery places nothing here. Its rock and drifts are the props below.
+  t.scenery.mixTree = 0; t.scenery.mixBush = 0;
+  t.scenery.density = 0.3f;
+  t.fogTune = 1.2f;  // clear alpine air: the range a lap's length away must read from the opening
+  ploughBanks(t);
+  snowProps(t, { { "snow-pile", 0.35f, 1.0f, 0.6f, false, false }, { "set-snow-boulder", 0.45f, 0.6f, 0.6f, false, false },
+                 { "snow-bunker", 0.20f, 1.0f, 0.3f, false, false } });
+}
+
+// Avalanche is a pass under a slope that lets go: tumbled snow along the
+// road and now and then a trunk a slide snapped (no lone rock on the open
+// snow: it read as dropped crates; its rock is the cirque's and the cuts';
+// no lone young spruce either: a single small fir of the narrow make beside
+// the stands' broad ones read as a tree of another kind, so the firs are
+// the stands'), and the gantry's posts banded
+// orange and black like the avalanche poles that mark a road through a
+// slide path.
+void avalanchePass(Theme& t) {
+  ploughBanks(t);
+  t.gantry.pylon = 0xff7e44; t.gantry.hasRings = true; t.gantry.rings = 0x38383d;
+  snowProps(t, { { "snow-pile", 0.85f, 1.0f, 0.6f, false, false }, { "set-snow-log", 0.15f, 1.0f, 0.2f, false, true } });
+}
+
+// Each playroom track is one game played on the floor at the toy cars' own
+// scale, and the finish gantry wears the track's colours (the snake's green
+// and yellow, the sky's blue, the marbles' purple, the castle's red).
+//
+// Each is also played in a ROOM OF ITS OWN: the wall is a third of most
+// frames, so one room made the four tracks one place. A room is its wall
+// over the rail, the deeper wall under it, its curtains and their rod
+// (playroomTheme's hills list, by index) and its floorboards (groundBase),
+// chosen to set off the orange deck and the blue rails.
+void room(Theme& t, uint32_t wall, uint32_t dado, uint32_t curtain, uint32_t rod, uint32_t boards) {
+  t.hills[5] = wall; t.hills[6] = dado; t.hills[7] = curtain; t.hills[10] = rod;
+  t.groundBase = boards;
+}
+void playroomTrack(Theme& t, const std::string& track) {
+  if (track == "skysnake") {
+    // the board-game room: cream over terracotta, the snake's green at the window, pine boards
+    room(t, 0xf6e9cf, 0xb5584c, 0x4f9f5c, 0x9a7b55, 0xd6b07c);
+    t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xf2c14e;
+  } else if (track == "skyline") {
+    // a city-night nursery: dusk blue over navy, curtains the yellow of lit windows, pale ash boards
+    room(t, 0x7f93cf, 0x2a3c8c, 0xf2c14e, 0xfbf6ec, 0xc2b49c);
+    t.gantry.pylon = 0x5a8fd8; t.gantry.finial = 0xfff6eb;
+    // the skyway's U stands on stacked toy blocks in two of the rails' blues,
+    // so under a town of coloured blocks they read as the track's own
+    // supports, not more towers
+    t.structureStack = { 0x4a6fc4, 0x6f93df };
+    // the town runs its own wooden train round the infield (set-block-town),
+    // so the skateboards stand sparser here
+    t.props.scatter = { { 0, 1.0f, 3.5f, 0.5f, false, true } };
+    t.props.scatterDensity = 0.14f;
+  } else if (track == "helix") {
+    // the workshop: pale aqua over teal, the marbles' purple at the window, walnut boards
+    room(t, 0xc4e4dc, 0x2f8c88, 0xa878e8, 0x5b4a3a, 0xa87c54);
+    t.gantry.pylon = 0xa878e8; t.gantry.finial = 0xe66a5a;
+    // the skyway and both spirals stand on one plain connector blue: a
+    // striped stack is a station of the marble run, and posts banded in two
+    // blues still striped into a picket along the kerb
+    t.structureStack = { 0x4a6fc4 };
+    // the marble run's own pieces fill the floor; the loose blocks and
+    // marbles strewn across it read as coloured specks at distance
+    t.scenery.density = 0.08f;
+    t.scenery.clutterDensity = 0.05f;
+  } else if (track == "gauntlet") {
+    // the castle's hall: pale stone over stone grey, heraldic red on a gold rod, grey oak boards
+    room(t, 0xd2cfc8, 0x868c98, 0xb8322f, 0xd9a441, 0xb5a288);
+    t.gantry.pylon = 0xe66a5a; t.gantry.finial = 0xf2c14e;
+    // the bridge past the ring stands on the castle's stacked toy blocks
+    t.structureStack = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
+    // One story: nothing lies about this floor that is not the tourney's.
+    // The biome's train set and skateboard, its loose blocks, marbles and
+    // dominoes are another game's toys; here the scatter is racks of
+    // shields and archery butts at the kerb and the sides' banners further
+    // out (set_prototypes.py).
+    t.scenery.density = 0;
+    t.scenery.clutterDensity = 0;
+    t.props.models = { "set-tourney-shields", "set-tourney-butt", "set-tourney-banner" };
+    t.props.scatterDensity = 0.3f;
+    t.props.scatter = { { 0, 0.4f, 1.0f, 0.15f, true, true }, { 1, 0.25f, 1.0f, 0.15f, true, true },
+                        { 2, 0.35f, 1.0f, 0.2f, true, false } };
+  }
+}
+
+// The backyard cup's four gardens, each one idea at the tiny world's own
+// scale, where a car is a car: Ribbon's village, Pretzel's treehouse,
+// Tangle's mill stream, Cloverleaf's playground (their set pieces and land
+// carry it). The grass biome's gnome, kennel and picnic are giants at that
+// scale, so no garden keeps them; and no bale or crate is scattered on their verges. Each garden wears its idea on the kerbs and the gantry.
+// A track's tree family: the scatter's weights by model, the rest at none.
+void lawnTrees(Theme& t, std::initializer_list<std::pair<const char*, float>> mix) {
+  for (TreeSpec& tr : t.scenery.trees) {
+    tr.w = 0;
+    for (const auto& m : mix) if (tr.model == m.first) tr.w = m.second;
+  }
+}
+
+void backyardTrack(Theme& t, const std::string& track) {
+  if (track != "ribbon" && track != "pretzel" && track != "tangle" && track != "cloverleaf") return;
+  t.landmarks.clear();
+  // The balloon is the fete's: one sky per track (Pretzel's is its kites).
+  if (track != "ribbon") t.balloon.panels.clear();
+  // Nothing scattered on the verge: a hay bale alone on the lawn belonged to
+  // no farm, as a tent pitched alone belonged to no camp. The hay is the
+  // farms' (Ribbon's hay meadow, Pretzel's wain).
+  t.props.models = { "prop-hay" };
+  t.props.scatter = { { 0, 1.0f, 0.34f, 0.08f, false, true } };
+  t.props.scatterDensity = 0.0f;
+  if (track == "ribbon") {
+    // The village: fewer wildflowers (a patch costs more vertices than a
+    // cottage) and a few fewer trees, so the village fits the frame the
+    // washing lines had.
+    // The kerbs the maypole's blue, the gantry white like the cottages.
+    t.scenery.clutterDensity = 0.12f;
+    t.scenery.density = 0.55f;
+    // One tree family: the orchard's round apple trees, no poplar among them.
+    lawnTrees(t, { { "set-tree-apple", 1.0f } });
+    t.road.kerbA = 0x339cf2;
+    t.gantry.pylon = 0xf8f8fb; t.gantry.finial = 0x339cf2;
+    t.pier.cap = 0x339cf2;
+  } else if (track == "pretzel") {
+    // The children's summer. Timber kerbs and gantry, the treehouse's.
+    // Fewer wildflowers: the road lies on the lawn, so its whole verge is
+    // open to them.
+    t.scenery.clutterDensity = 0.15f;
+    t.road.kerbA = 0xb08a5a;
+    t.gantry.pylon = 0xb08a5a; t.gantry.finial = 0x22c46e;
+    t.pier.cap = 0x22c46e;
+    // High summer on the downs: the garden's broadleaf oaks (the trees a
+    // racer passes: no set piece repeats a stand of them round the lap, so
+    // the scatter is where the downs get their trees, most spots one and
+    // fewer of them a shrub or a stone), and the far hills gone to hay.
+    lawnTrees(t, { { "set-tree-oak", 1.0f } });
+    t.scenery.density = 0.85f;
+    t.scenery.mixTree = 0.85f;
+    t.hills = { 0xb7bf6c, 0xa8b160, 0xc5cb7e };
+    t.groundBase = 0xa2b654;
+  } else if (track == "tangle") {
+    // The mill's water meadows: open grass mown along the stream, so the
+    // stream reads across it, fewer trees and wildflowers (the hose's lawn
+    // used to keep both off half the map), the hay made. Meadow-green kerbs
+    // and gantry.
+    t.scenery.clutterDensity = 0.1f;
+    t.scenery.density = 0.6f;
+    // A wooded valley: tall dark alders and the stream's willows, dark hills beyond.
+    lawnTrees(t, { { "set-tree-alder", 0.8f }, { "set-tree-willow", 0.2f } });
+    t.hills = { 0x5f9f6a, 0x4f8f5c, 0x6fae78 };
+    t.groundBase = 0x4f9a58;
+    t.road.kerbA = 0x2bb673;
+    t.gantry.pylon = 0x2bb673; t.gantry.finial = 0xffc044;
+    t.pier.cap = 0x2bb673;
+  } else if (track == "cloverleaf") {
+    // The park: the gantry in the climbing frame's blue. Fewer wildflowers,
+    // as on Pretzel: the road lies on the grass, its verge open to them.
+    t.scenery.clutterDensity = 0.15f;
+    // The park's trees are its cherries, in blossom.
+    // Thin on the open lawn: a park plants its trees in avenues and groves
+    // (the set).
+    lawnTrees(t, { { "set-tree-cherry", 0.55f }, { "set-tree-cherry-white", 0.45f } });
+    t.scenery.density = 0.26f;
+    // Petals, pink and white, drifting off the avenues across the road.
+    ambientKind(t.life, AMB_PETAL);
+    t.life.count = 900; t.life.tint = 0xf2a2ba; t.life.tint2 = 0xfbe4ec;
+    t.life.near = "cherry-avenue"; t.life.reach = 9;
+    t.gantry.pylon = 0x339cf2; t.gantry.finial = 0xff5040;
+    t.pier.cap = 0x339cf2;
+  }
 }
 
 // ── canyon — hot red-rock badlands (the Hard cup's biome). The air itself is
@@ -211,7 +556,11 @@ Theme beachTheme() {
 // across the mesas.
 Theme canyonTheme() {
   Theme t;
-  t.sky[0] = 0x4292d4; t.sky[1] = 0xe8c8a2; t.sky[2] = 0xf4e3c6;
+  // A clear desert blue over the dust: the canyon's one colour that is not
+  // the rock's, turning blue just over the mesas (skyCurve) instead of
+  // meeting the dust halfway up the frame as a mauve.
+  t.sky[0] = 0x4cbaf2; t.sky[1] = 0xe8c8a2; t.sky[2] = 0xf4e3c6;
+  t.skyCurve = 0.36f;
   t.fog = 0xe8c8a2;
   t.boost = 0x7a4fd0;  // violet — teal/aqua washes out in the sand-fog
   t.hemi = { 0xffeedd, 0xb9825e, 2.15f };
@@ -234,34 +583,78 @@ Theme canyonTheme() {
   // Grit on the wind: fast low sand streaks under the drifting dust banks.
   ambientKind(t.ambient, AMB_SAND); t.ambient.count = 240; t.ambient.tint = 0xe9c9a0;
   t.structure = 0xb4714d;  // supports read as red-rock columns, not city concrete
-  t.landmarks = { LM_HOODOO, LM_WINDMILL };
+  // …built of the rock itself: sandstone in courses, a footing and a cap.
+  t.pier = { PIER_STONE, 0, 0xa36443, 0xc4825c, 0x95583a, 0 };
+  t.landmarks = { LM_HOODOO };
   // Vultures riding a thermal — soaring, barely a wing-beat.
   t.birds.count = 2; t.birds.tint = 0x3a322c; t.birds.size = 3.6f; t.birds.y = 36;
   t.birds.rc = 150; t.birds.rb = 20; t.birds.speed = 0.1f; t.birds.flap = 0.15f; t.birds.flapHz = 0.5f;
   t.gate = 0xffdec2;  // hot dusty gate grade
   t.gantry.pylon = 0x8a5f3e; t.gantry.finial = 0xfff6eb;  // weathered timber posts
-  // Saguaros as the signature silhouette, barrel cacti as the low accent.
+  // Saguaros as the signature silhouette, prickly pear as the low accent:
+  // the set pieces' own cacti (set_prototypes.py saguaro), in their dusty
+  // grey-green, so a track's scatter and its stands are one family.
   ScenerySpec& s = t.scenery;
-  s.trees = { { "cactus-tall", 0.6f, 2.3f, 0.7f }, { "cactus-short", 0.4f, 1.15f, 0.55f } };
+  s.trees = { { "set-cactus-saguaro", 0.4f, 0.8f, 0.35f }, { "set-cactus-spear", 0.32f, 0.75f, 0.4f },
+              { "set-cactus-pear", 0.28f, 0.9f, 0.5f } };
   s.hasBush = false;
   s.mixTree = 0.4f; s.mixBush = 0.4f;
   s.rocks = { 0xc07a55, 0xa8623f, 0xd39a70 };  // rust -> dusty ochre family
   s.rockS[0] = 0.6f; s.rockS[1] = 0.9f;
   s.density = 0.45f;  // sparser than the shore; deserts read empty on purpose
-  s.clutter = { { CL_SCRUB, 0.5f, { 0x8a8f56, 0x7c8a4e, 0x9c9460 } },
-                { CL_DRIFTWOOD, 0.22f, { 0xd8c8a8, 0xc4b494 } },
-                { CL_PEBBLES, 0.28f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
+  // Scrub and red pebbles only: no driftwood, which is the beach's (and dead
+  // wood reads as the trees a canyon has none of). The scrub is sagebrush's
+  // grey-green, the one green beside the cacti that is not a lawn's.
+  s.clutter = { { CL_SCRUB, 0.62f, { 0x93a37a, 0x86996c, 0xa3ad86 } },
+                { CL_PEBBLES, 0.38f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
   s.clutterDensity = 0.25f;
   deriveModels(s);
   // Supply crates and barrels by the road, among sandstone rocks and stone
   // heaps (Survival Kit, Mini Forest — both authored small, so they stand well
   // over their own size). The crates and barrels are on the verge, where they
-  // read; the barrel is the beach's, at the beach's size.
-  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones" };
+  // read; the barrel is the beach's, at the beach's size. The list is every
+  // canyon track's: the shell stages a BIOME's props (ttp_theme_prop_models
+  // resolves no track), so a track picks among these by slot in its scatter
+  // (canyonTrack) and never re-lists them. A list of its own would bind its
+  // slots to the biome's models: rocks drawn as crates, lamps as barrels.
+  // A band of sagebrush (set_prototypes.py canyon_sage) among them on every
+  // track, its grey-green the bloom's partner.
+  t.props.models = { "prop-crate", "pirate-barrel", "rock-sand", "stones", "prop-hay", "construction-light",
+                     "set-canyon-sage" };
   t.props.scatterDensity = 0.24f;
-  t.props.scatter = { { 0, 0.22f, 0.9f, 0.3f, false, true }, { 1, 0.26f, 0.42f, 0.12f, false, true },
-                      { 2, 0.30f, 1.5f, 0.6f }, { 3, 0.22f, 1.4f, 0.5f } };
+  t.props.scatter = { { 0, 0.2f, 0.9f, 0.3f, false, true }, { 1, 0.24f, 0.42f, 0.12f, false, true },
+                      { 2, 0.28f, 1.5f, 0.6f }, { 3, 0.18f, 1.4f, 0.5f }, { 6, 0.1f, 1.1f, 0.5f } };
   return t;
+}
+
+// Each canyon track tells its own story (its `set` and `land` in tracks.js),
+// and the biome's scatter and structures follow it. The props are re-chosen
+// from the biome's list by slot (0 crate, 1 barrel, 2 sandstone rocks,
+// 3 stones, 4 hay, 5 road-works lamp, 6 sagebrush): no story gets another's
+// leftovers. The hoodoos and the brush stand on every track: they are the
+// badlands themselves, not a story.
+//   wash        a dry wash and its canyon: the rock alone, rocks and stones
+//   gulch       a gold mine: timber supports like a trestle, crates and
+//               barrels of supplies, broken stone, no hay
+//   crag        a ranch in butte country: hay by the fences, a barrel, rocks
+//   sidewinder  an oil field: road-works lights on the verge, stones
+void canyonTrack(Theme& t, const std::string& track) {
+  const PropStamp sage = { 6, 0.0f, 1.1f, 0.5f };
+  const auto with = [&](PropStamp p, float w) { p.w = w; return p; };
+  if (track == "wash") {
+    t.props.scatter = { { 2, 0.44f, 1.6f, 0.6f }, { 3, 0.36f, 1.4f, 0.5f }, with(sage, 0.2f) };
+  } else if (track == "gulch") {
+    t.structure = 0x8a6a46;  // timber, like the mine's own trestles
+    t.pier = { PIER_TIMBER, 0, 0, 0x6e5236, 0, 0 };
+    t.props.scatter = { { 0, 0.3f, 0.6f, 0.2f, false, true }, { 1, 0.26f, 0.3f, 0.08f, false, true },
+                        { 3, 0.3f, 1.4f, 0.5f }, with(sage, 0.14f) };
+  } else if (track == "crag") {
+    t.props.scatter = { { 4, 0.26f, 0.6f, 0.25f, false, true }, { 1, 0.14f, 0.3f, 0.08f, false, true },
+                        { 2, 0.26f, 1.5f, 0.6f }, { 3, 0.2f, 1.4f, 0.5f }, with(sage, 0.14f) };
+  } else if (track == "sidewinder") {
+    t.props.scatter = { { 5, 0.2f, 2.4f, 0.4f, true, true }, { 2, 0.36f, 1.5f, 0.6f },
+                        { 3, 0.3f, 1.4f, 0.5f }, with(sage, 0.14f) };
+  }
 }
 
 // ── snow — winter alpine (the Medium rung of the ladder). Scenery leans on one
@@ -277,14 +670,18 @@ Theme snowTheme() {
   t.groundKind = GROUND_SNOW;
   t.hills = { 0xeef4f9, 0xdfe9f2, 0xf7fafc };
   t.clouds = { 6, 0.55f, 1.25f, 0.3f, 0xe9edf2 };  // low flat overcast
-  // Wet ploughed asphalt between snowbanks: a darker, colder deck (free contrast
+  // Wet ploughed asphalt between snowbanks: a darker deck (free contrast
   // against the white ground), ice-tinted paint, and kerbs that become plain
-  // white banks — wider and taller than a racing kerb.
-  t.road.asphalt = 0x494f5e;
+  // white banks — wider and taller than a racing kerb. A grey a step off
+  // slate: deeper and bluer, the road filled half the picture in dark blue.
+  t.road.asphalt = 0x5c616e;
   t.road.line = 0xc2d6e6;
   t.road.kerbA = 0xeff4f9; t.road.kerbB = 0xdde7f0;  // whisper-contrast bank pair
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb
-  deriveRoad(t.road, false, false, false);
+  // The slab's sides and belly a pale concrete, not the asphalt: under a
+  // crossing the belly filled the top of the picture in near-black slate.
+  t.road.skirt = 0x979ba6;
+  deriveRoad(t.road, false, true, false);
   ambientKind(t.ambient, AMB_FLAKE);
   t.ambient.count = 3200; t.ambient.size = 0.3f; t.ambient.tint = 0xffffff;
   // A pair of geese crossing high.
@@ -294,7 +691,12 @@ Theme snowTheme() {
   // sheets. Same spin-out, same cones.
   t.hasIce = true; t.ice = { 0xa9d7ee, 0xf0f8fd };
   t.gate = 0xdfe9f6;  // cold-cast gate grade
-  t.gantry.pylon = 0x3f7bd9; t.gantry.finial = 0xfff6eb;  // pops against the white world
+  // The finish gantry keeps its celebration red (GantrySpec): it pops against
+  // the white world, where blue posts were the lap's one saturated dark blue.
+  // Bridges on stone piers: pale granite in courses on a footing, under a
+  // dressed cap, snow lying on both. Not slate: a pier stands in the deck's
+  // shadow, where slate read near-black, a dark tower in a white world.
+  t.pier = { PIER_STONE, 0x8e929e, 0x7c808c, 0xa2a6b0, 0x7c808c, 0xf3f7fb };
   // The snowman that used to head this list is a Holiday Kit model now, in the
   // prop scatter below — one greeter a track became several a lap.
   t.landmarks = { LM_CABIN };
@@ -307,7 +709,7 @@ Theme snowTheme() {
   s.hasBush = false;
   s.mixTree = 0.55f; s.mixBush = 0.55f;
   // NO boulder palette: the flat-shaded grey granite this cup used to scatter
-  // sat wrong beside the snow-capped kit rock in the props below, which is the
+  // sat wrong beside the snow-capped rock in the props below, which is the
   // rock this biome has now. An empty palette places none (buildScenery).
   s.rocks = {};
   s.density = 0.55f;
@@ -315,19 +717,18 @@ Theme snowTheme() {
   s.clutterDensity = 0.3f;
   deriveModels(s);
   // The snow the crates used to stand in for: a greeter by the road, sleds left
-  // out, wind-heaped drifts and snow-capped rock, all Holiday Kit. The SNOWMAN
+  // out, wind-heaped drifts, all Holiday Kit, and faceted rock (the kit's read
+  // as stacked crates; set_prototypes.py snow_boulder, at its scale). The SNOWMAN
   // is here rather than in the landmark list it used to head, because a scatter
   // gives several a lap where a landmark gives one a track — and it is the same
   // object either way.
-  t.props.models = { "snowman", "sled", "snow-pile", "rocks-medium", "rocks-large",
-                     "snow-bunker" };
+  t.props.models = { "snowman", "sled", "snow-pile", "set-snow-boulder", "snow-bunker" };
   t.props.scatterDensity = 0.34f;
   t.props.scatter = { { 0, 0.18f, 1.0f, 0.3f, true, true },  // snowman, at the kerb facing the cars
                       { 1, 0.16f, 1.0f, 0.3f, false, true }, // sled, left by the road
                       { 2, 0.20f, 1.0f, 0.6f },        // drift
-                      { 3, 0.20f, 0.9f, 0.4f },        // rock cluster
-                      { 4, 0.08f, 0.85f, 0.35f },      // the big one, sparingly
-                      { 5, 0.18f, 1.0f, 0.3f } };      // snow bunker
+                      { 3, 0.28f, 0.6f, 0.6f },        // rock, small to big
+                      { 4, 0.18f, 1.0f, 0.3f } };      // snow bunker
   return t;
 }
 
@@ -336,17 +737,24 @@ Theme snowTheme() {
 // rails; indoors, but still broad daylight.
 Theme playroomTheme() {
   Theme t;
-  t.sky[0] = 0x8cbcea; t.sky[1] = 0xf3e3c3; t.sky[2] = 0xfaf0da;
+  // Indoors there is no blue overhead: over the room's walls the zenith is a
+  // warm ceiling, so a racer up on a deck sees no sky above a wall.
+  t.sky[0] = 0xf6ecdc; t.sky[1] = 0xf3e3c3; t.sky[2] = 0xfaf0da;
   t.fog = 0xf3e3c3;
   t.boost = 0x39c24a;  // green — complementary pop on the orange deck
   t.hemi = { 0xfff2dc, 0xa88860, 2.2f };  // warm room light, wood-floor bounce
   t.key = { 0xffeac2, 1.5f };             // low afternoon sun through the window
   t.groundKind = GROUND_WOOD;
-  // Giant toy blocks scattered on the floor past the fog. hills[0] also tints
-  // the controller's cup panel, so the warm red keeps the playroom distinct
-  // from beach sand / canyon clay.
-  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
-  t.hillShape = HILL_BLOCK;
+  // The room round the floor (the renderer's buildRoomRing), each part
+  // picking its colour from this list by index: red, blue, yellow, green (the
+  // toys', and the bunting's), then the white trim (skirting, dado rail, window frame), the
+  // wall over the rail, the deeper wall under it, the curtains, the daylight
+  // at the top and the foot of the window, and the curtain rod. hills[0] also
+  // tints the controller's cup panel, so the warm red keeps the playroom
+  // distinct from beach sand / canyon clay.
+  t.hills = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c, 0xfbf6ec, 0x9ccbea, 0x5fae6a,
+              0xd9453a, 0x4f9fe6, 0xc0e2f8, 0x9a7b55 };
+  t.hillShape = HILL_ROOM;
   // Indoors: no cumulus, just faint warm puffs of sunbeam bloom.
   t.clouds = { 3, 0.22f, 1.3f, 0.3f, 0xffedd2 };
   t.fogTune = 1.25f;  // the tall stunt structures must read from track level
@@ -362,42 +770,46 @@ Theme playroomTheme() {
   // Dust motes hanging in the window sunbeams, and a paper airplane on a long
   // lazy glide around the room (REAL 3D — a folded dart that banks into turns).
   ambientKind(t.ambient, AMB_MOTE); t.ambient.count = 11; t.ambient.tint = 0xffdf9e;
+  // …and thick in the shaft of window light, wherever a track's sunbeam
+  // falls (a set piece named so: the playroom's set-play-sunbeam).
+  ambientKind(t.life, AMB_MOTE);
+  t.life.count = 500; t.life.size = 0.42f; t.life.opacity = 0.4f; t.life.tint = 0xfff1c8;
+  t.life.near = "sunbeam"; t.life.reach = 4; t.life.band = 0.5f;
   t.hasPlane = true;
   t.plane.tint = 0xfaf7ec; t.plane.size = 3.2f; t.plane.y = 22;
   t.plane.rc = 95; t.plane.rb = 32; t.plane.speed = 0.3f; t.plane.bank = 0.4f;
   t.structure = 0x4a6fc4;  // support columns read as the kit's blue connectors
-  // LM_TRAIN is gone from here: the wind-up loco is the Holiday Kit's own train
-  // set now (the prop below). Its procedural geometry survives as the asset
-  // gallery's model bench, which is where retired shapes live.
-  t.landmarks = { LM_BLOCKS, LM_DUCK, LM_BALL, LM_CRAYONS, LM_BOOKS };
+  // No procedural landmarks: the giant blocks, duck, ball, crayons and books
+  // were everyday things at many times a toy car's scale. Each track's toys
+  // are its set pieces, at their real size (tracks.js `set`); the retired
+  // shapes live on in the asset gallery's model bench.
+  t.landmarks.clear();
   t.gate = 0xfff3e2;  // warm indoor-light gate grade
   t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xff5040;  // a third primary
-  // No trees indoors — the "boulder" channel does all the work: faceted toy bits
-  // in the same plastic primaries as the horizon blocks.
+  // No trees indoors — the "boulder" channel does all the work: a child's
+  // building blocks left about the floor (cubes and long blocks, 3 to 7 cm,
+  // the set pieces' own blocks), in the toys' painted primaries. Faceted
+  // stones in those colours read as rocks, and a floor has none.
   ScenerySpec& s = t.scenery;
   s.hasBush = false;
   s.mixTree = 0; s.mixBush = 0;  // everything rolls "rock"
   s.rocks = { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c };
-  s.rockS[0] = 0.5f; s.rockS[1] = 0.7f;  // chunky toy-piece scale
+  s.rockS[0] = 0.5f; s.rockS[1] = 0.7f;  // a block's side
+  s.rockBlocks = true;
   s.density = 0.35f;                     // floors are tidier than meadows
   s.clutter = { { CL_BRICK, 0.5f, { 0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c } },
                 { CL_MARBLE, 0.3f, { 0x7db8e8, 0xe89a8a, 0x9cd89c } },
                 { CL_DOMINO, 0.2f, { 0xf5f2ea } } };
   s.clutterDensity = 0.22f;
   deriveModels(s);
-  // The toy train, as the Holiday Kit's own set on a ring of its own rails
-  // (scripts/gen-trainset.mjs). ONE composed model, because a train set is one
-  // object to a player and a dozen to a scatter: dropped in as pieces this
-  // channel would strew rails across the floor. Drawn at a fixed 2x, because
-  // the kit's train is smaller than its cars and should stand at least as
-  // big as them; a ring that size is a landmark, so it is sparse.
-  // A skateboard left on the floor is a real one beside a toy car, so it
-  // stands at three and a half times its kit size, by the road.
-  t.props.models = { "trainset", "skateboard" };
-  // The ring keeps its own rate (0.03 a candidate) under the skateboard's
-  // density: at 2.8k vertices it is the heaviest thing the scatter plants.
-  t.props.scatterDensity = 0.12f;
-  t.props.scatter = { { 0, 0.25f, 2.0f }, { 1, 0.75f, 3.5f, 0.5f, false, true } };
+  // The room's one train runs round the walls on its own rails (a track's
+  // set-room-train piece), so the floor's scatter lays no train set of its
+  // own: a second railway would be another game's. A toy skateboard (a
+  // fingerboard's big brother, about 14 cm) left on the floor stands at
+  // three and a half times its kit size, by the road.
+  t.props.models = { "skateboard" };
+  t.props.scatterDensity = 0.18f;
+  t.props.scatter = { { 0, 0.75f, 3.5f, 0.5f, false, true } };
   return t;
 }
 
@@ -470,8 +882,6 @@ const TintPair kPalmBend[] = { { "70e6d6", 0x54b573 }, { "f2be9e", 0xb8926c } };
 const ModelTintDef kModelTints[] = {
   { "palm-tall", false, 0, kPalmTall, 2 },
   { "palm-bend", false, 0, kPalmBend, 2 },
-  { "cactus-tall", true, 0x6da85c, nullptr, 0 },
-  { "cactus-short", true, 0x7cb464, nullptr, 0 },
 };
 
 // glTF baseColorFactor is LINEAR; the theme's keys are authored as sRGB hex.
@@ -517,11 +927,11 @@ const char* biome_for_track(const char* trackId) {
   return biome_for_cup(def ? def->cup : nullptr);
 }
 
-Theme resolve_theme(const char* biomeName, const char* trackId) {
-  const BiomeEntry* b = findBiome(biomeName);
-  Theme t = (b ? b->build : grassTheme)();
-  const std::string track = trackId ? trackId : "";
+namespace {
 
+// What one track patches over its biome's theme: its weather, its props, its
+// carriers.
+void patchTrack(Theme& t, const BiomeEntry* b, const std::string& track) {
   // Weather varies ACROSS the snow cup: each track patches the flake cloud, so
   // the four races read as four different winter days rather than one repeated
   // snow globe. A count is "particles in the camera box" (the renderer's
@@ -531,10 +941,82 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   // rather than a heavy fall (powder is the lightest day of the four). The
   // renderer clamps at 9600.
   if (b && std::strcmp(b->name, "snow") == 0) {
-    if (track == "powder") { t.ambient.count = 2800; t.ambient.size = 0.28f; }
-    else if (track == "flurry") { t.ambient.count = 4500; }
-    else if (track == "glacier") { t.ambient.count = 6000; t.ambient.size = 0.22f; }
-    else if (track == "avalanche") { t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f; }
+    if (track == "powder") { t.ambient.count = 2800; t.ambient.size = 0.28f; powderResort(t); }
+    else if (track == "flurry") { t.ambient.count = 4500; flurryLake(t); }
+    else if (track == "glacier") { t.ambient.count = 6000; t.ambient.size = 0.22f; penguinGlacier(t); }
+    else if (track == "avalanche") {
+      t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f;
+      avalanchePass(t);
+    }
+  }
+
+  // Each beach cup track is its own place (pirateCove and the three after it).
+  if (b && std::strcmp(b->name, "beach") == 0) {
+    if (track == "cove") pirateCove(t);
+    else if (track == "tidepool") lowTideReef(t);
+    else if (track == "driftwood") stormBeach(t);
+    else if (track == "riptide") surfPatrol(t);
+  }
+  if (b && std::strcmp(b->name, "playroom") == 0) playroomTrack(t, track);
+  if (b && std::strcmp(b->name, "grass") == 0) backyardTrack(t, track);
+
+  // Each canyon track's own carriers (canyonTrack): its story's props and
+  // structures.
+  if (b && std::strcmp(b->name, "canyon") == 0) canyonTrack(t, track);
+
+  // No procedural landmark beside a set piece that contradicts it. Where
+  // the track's set has its own houses (Flurry's smoking log cabins, Powder's
+  // chalets round the valley station, Avalanche's cabin by the crossing), the
+  // procedural cabin goes: never a lone cabin beside a village of other ones,
+  // nor two cabins.
+  const auto drop = [&](uint32_t k) {
+    t.landmarks.erase(std::remove(t.landmarks.begin(), t.landmarks.end(), k), t.landmarks.end());
+  };
+  if (b && std::strcmp(b->name, "snow") == 0 && (track == "powder" || track == "flurry" || track == "avalanche")) {
+    drop(LM_CABIN);
+  }
+}
+
+// The prop<i>.glb slot order of a biome, which the shell fetches by the BIOME
+// (ttp_theme_prop_models): the biome's own props, then each of its catalogue
+// tracks' own in catalogue order. A track that patches its props (snowProps,
+// pirateCove, ...) names its models in an order of its own, so resolve_theme
+// puts its slots back into this one: left in its own, Glacier's snow piles
+// drew as the biome's snowmen and its rocks as sleds.
+std::vector<std::string> biomeProps(const BiomeEntry* b) {
+  std::vector<std::string> out = b->build().props.models;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    if (std::strcmp(biome_for_track(TTP_TRACKS[i].id), b->name) != 0) continue;
+    Theme x = b->build();
+    patchTrack(x, b, TTP_TRACKS[i].id);
+    for (const std::string& m : x.props.models) {
+      if (std::find(out.begin(), out.end(), m) == out.end()) out.push_back(m);
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
+namespace {
+void lite_model(std::string& m) {
+  for (int i = 0; i < TTP_LITE_MODEL_COUNT; i++) {
+    if (m == TTP_LITE_MODELS[i]) { m += "-lite"; return; }
+  }
+}
+}  // namespace
+
+Theme resolve_theme(const char* biomeName, const char* trackId) {
+  const BiomeEntry* b = findBiome(biomeName);
+  Theme t = (b ? b->build : grassTheme)();
+  const std::string track = trackId ? trackId : "";
+  patchTrack(t, b, track);
+  if (b) {
+    const std::vector<std::string> all = biomeProps(b);
+    for (PropStamp& p : t.props.scatter) {
+      p.slot = (uint32_t) (std::find(all.begin(), all.end(), t.props.models[p.slot]) - all.begin());
+    }
+    t.props.models = all;
   }
 
   // shorelineFn's per-track seed, so the island's lobes/crinkle/swash come out
@@ -544,25 +1026,65 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
 
   // The set pieces, deduped into slots in first-appearance order — the order
   // the shell fetches them in (ttp_theme_set_models).
+  const bool lite = detail_in_force() == Detail::Lite;
   if (const TrackDef* def = trackId ? find_track_def(trackId) : nullptr) {
+    // A piece or a form authored `lite: false` is not in the lite tier's list
+    // at all; a landform anchored on a piece (SET_GROUND) follows it to its
+    // new index, and the generator refuses `lite: false` on such a piece.
+    std::vector<int> pieceAt((size_t) def->nSet, -1);
     for (int i = 0; i < def->nSet; i++) {
       const SetDef& d = def->set[i];
+      if (lite && !d.lite) continue;
+      pieceAt[(size_t) i] = (int) t.set.pieces.size();
       uint32_t slot = 0;
       while (slot < t.set.models.size() && t.set.models[slot] != d.model) slot++;
       if (slot == t.set.models.size()) t.set.models.push_back(d.model);
       t.set.pieces.push_back({ slot, (float) d.u, (float) d.lat,
                                (float) (d.yaw * M_PI / 180.0), (float) d.y, (float) d.scale });
     }
+    for (int i = 0; i < def->nLand; i++) {
+      const LandDef& d = def->land[i];
+      if (lite && !d.lite) continue;
+      Landform l;
+      l.kind = (uint32_t) d.kind; l.piece = d.piece < 0 ? d.piece : pieceAt[(size_t) d.piece];
+      l.u = (float) d.u; l.lat = (float) d.lat; l.yaw = (float) (d.yaw * M_PI / 180.0);
+      l.x = (float) d.x; l.z = (float) d.z; l.len = (float) d.len;
+      l.r = (float) d.r; l.r1 = (float) d.r1; l.w = (float) d.w; l.rz = (float) d.rz;
+      l.h = (float) d.h; l.h1 = (float) d.h1; l.top = (float) d.top; l.shape = (float) d.shape;
+      l.tint = d.tint;
+      l.near = (float) d.near;
+      t.land.push_back(l);
+    }
+  }
+  if (lite) {
+    // The life is the corner of the eye's, and every millisecond on the box
+    // is the race's: none until it has been priced there.
+    t.life = AmbientSpec{};
+    // The trees and the bush name their models, and the renderer finds each
+    // one's slot in scenery.models by that name: renamed with the list, or
+    // every tree with a lite build draws slot 0 (apples as oaks).
+    for (TreeSpec& tr : t.scenery.trees) lite_model(tr.model);
+    lite_model(t.scenery.bush.model);
+    lite_models(t.scenery.models);
+    lite_models(t.props.models);
+    lite_models(t.set.models);
   }
   return t;
+}
+
+void lite_models(std::vector<std::string>& models) {
+  for (std::string& m : models) lite_model(m);
 }
 
 std::vector<MatTint> resolve_model_tints(const std::string& model,
                                          const uint8_t* glb, size_t len) {
   std::vector<MatTint> out;
+  // A lite build (<model>-lite.glb) is recoloured as the model it stands in for.
+  const std::string base = model.size() > 5 && model.compare(model.size() - 5, 5, "-lite") == 0
+      ? model.substr(0, model.size() - 5) : model;
   const ModelTintDef* def = nullptr;
   for (const ModelTintDef& d : kModelTints) {
-    if (model == d.model) { def = &d; break; }
+    if (base == d.model) { def = &d; break; }
   }
   if (!def) return out;
 

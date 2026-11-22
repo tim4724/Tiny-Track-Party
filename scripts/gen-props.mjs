@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // gen-props.mjs — generate the trackside prop GLBs (prop-*.glb) into
 // public/assets/toycar/, in the toy-car kit's own format: axis-aligned box
-// assemblies, flat-shaded, every face UV'd to one flat cell of the kit's
+// assemblies, flat faces with chamfered edges, every face UV'd to one flat cell of the kit's
 // shared Textures/colormap.png (referenced by URI, exactly like tree.glb).
 //
 // The props are PROCEDURAL SOURCE, not sourced art: re-run this script after
@@ -28,27 +28,53 @@ const PAL = {
 
 const uv = ([px, py]) => [(px + 0.5) / 512, (py + 0.5) / 512];
 
-// One axis-aligned box: 24 verts (per-face normals, the kit's flat look), one
-// palette cell per face set. cy is the box CENTRE.
+// One axis-aligned box, its edges chamfered as the set pieces' blocks are
+// (set_prototypes.py chamfer()): one cut a fifth of its thinnest side, never
+// past 0.05, with hardened normals, so its faces stay flat and the cut shades
+// from one face's light to the next. Each face keeps its four corners (24
+// verts, the kit's flat box's own count); the cut is triangles between them.
+// One palette cell per box. cy is the box CENTRE.
+const CHAMFER = 0.05;
 function box(mesh, cx, cy, cz, sx, sy, sz, pal) {
   const [u, v] = uv(pal);
-  const hx = sx / 2, hy = sy / 2, hz = sz / 2;
-  const faces = [
-    [[+1, 0, 0], [[+hx, -hy, -hz], [+hx, +hy, -hz], [+hx, +hy, +hz], [+hx, -hy, +hz]]],
-    [[-1, 0, 0], [[-hx, -hy, +hz], [-hx, +hy, +hz], [-hx, +hy, -hz], [-hx, -hy, -hz]]],
-    [[0, +1, 0], [[-hx, +hy, -hz], [-hx, +hy, +hz], [+hx, +hy, +hz], [+hx, +hy, -hz]]],
-    [[0, -1, 0], [[-hx, -hy, +hz], [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, -hy, +hz]]],
-    [[0, 0, +1], [[-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz]]],
-    [[0, 0, -1], [[+hx, -hy, -hz], [-hx, -hy, -hz], [-hx, +hy, -hz], [+hx, +hy, -hz]]],
-  ];
-  for (const [n, corners] of faces) {
-    const base = mesh.pos.length / 3;
-    for (const [x, y, z] of corners) {
-      mesh.pos.push(cx + x, cy + y, cz + z);
-      mesh.nrm.push(...n);
-      mesh.uv.push(u, v);
+  const h = [sx / 2, sy / 2, sz / 2], c = Math.min(CHAMFER, 0.2 * Math.min(sx, sy, sz));
+  const at = new Map();                   // a face's corner: its normal's axis and side, its sides on the other two
+  const key = (a, sa, s) => `${a}${sa}${s[(a + 1) % 3]}${s[(a + 2) % 3]}`;
+  for (let a = 0; a < 3; a++) for (const sa of [-1, 1]) for (const s1 of [-1, 1]) for (const s2 of [-1, 1]) {
+    const s = [0, 0, 0], p = [0, 0, 0], n = [0, 0, 0];
+    s[(a + 1) % 3] = s1; s[(a + 2) % 3] = s2;
+    for (let q = 0; q < 3; q++) p[q] = q === a ? sa * h[q] : s[q] * (h[q] - c);
+    n[a] = sa;
+    at.set(key(a, sa, s), mesh.pos.length / 3);
+    mesh.pos.push(cx + p[0], cy + p[1], cz + p[2]);
+    mesh.nrm.push(...n);
+    mesh.uv.push(u, v);
+  }
+  const P = (i) => mesh.pos.slice(i * 3, i * 3 + 3);
+  const tri = (i, j, k) => {              // wound to face away from the box's centre
+    const [A, B, C] = [P(i), P(j), P(k)];
+    const e1 = B.map((x, q) => x - A[q]), e2 = C.map((x, q) => x - A[q]);
+    const f = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const o = [0, 1, 2].map((q) => (A[q] + B[q] + C[q]) / 3 - [cx, cy, cz][q]);
+    mesh.idx.push(...(f[0] * o[0] + f[1] * o[1] + f[2] * o[2] >= 0 ? [i, j, k] : [i, k, j]));
+  };
+  const quad = (q) => { tri(q[0], q[1], q[2]); tri(q[0], q[2], q[3]); };
+  const V = (a, sa, s) => at.get(key(a, sa, s));
+  const S = (x, y, z) => [x, y, z];
+  for (let a = 0; a < 3; a++) for (const sa of [-1, 1]) {   // the faces
+    const b = (a + 1) % 3, d = (a + 2) % 3, s = (sb, sd) => { const r = [0, 0, 0]; r[b] = sb; r[d] = sd; return r; };
+    quad([V(a, sa, s(-1, -1)), V(a, sa, s(1, -1)), V(a, sa, s(1, 1)), V(a, sa, s(-1, 1))]);
+  }
+  for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++) {   // the cut along each edge, between faces a and b
+    const d = 3 - a - b;
+    for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
+      const s = (sd) => { const r = [0, 0, 0]; r[a] = sa; r[b] = sb; r[d] = sd; return r; };
+      quad([V(a, sa, s(-1)), V(a, sa, s(1)), V(b, sb, s(1)), V(b, sb, s(-1))]);
     }
-    mesh.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {   // the cut at each corner
+    const s = S(x, y, z);
+    tri(V(0, x, s), V(1, y, s), V(2, z, s));
   }
 }
 
@@ -135,7 +161,9 @@ function writeGlb(name, mesh) {
 function hayBale() { // strapped straw block
   const m = { pos: [], nrm: [], uv: [], idx: [] };
   box(m, 0, 0.31, 0, 1.0, 0.62, 0.64, PAL.straw);
-  box(m, 0, 0.31, 0, 1.02, 0.6, 0.62, PAL.strawShade); // shaded core peeks at edges
+  // the shaded core peeks out at the ends; a finger thinner than the straw, or
+  // its chamfer lies in the straw's at the end edges and flickers
+  box(m, 0, 0.31, 0, 1.02, 0.58, 0.6, PAL.strawShade);
   for (const px of [-0.28, 0.28]) box(m, px, 0.31, 0, 0.09, 0.66, 0.68, PAL.wood);
   return m;
 }

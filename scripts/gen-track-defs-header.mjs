@@ -38,7 +38,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TRACKS, CUPS } from '../public/shared/tracks.js';
+import { TRACKS, CUPS, SET_GROUND } from '../public/shared/tracks.js';
 // The cup PAPER COLOURS. Authored in the picker because the PHONE imports that
 // file and a phone has no wasm to ask; carried across here so a native shell
 // does not retype five hex literals (the first one did). trackPicker.js has no
@@ -96,7 +96,7 @@ const checkKeys = (obj, allowed, what) => {
 };
 
 // ---- segments ----
-const SEG_KEYS = ['kind', 'length', 'radius', 'angle', 'rise', 'bank', 'roll', 'width', 'pillars', 'over', 'drift'];
+const SEG_KEYS = ['kind', 'length', 'radius', 'angle', 'rise', 'bank', 'roll', 'width', 'pillars', 'over', 'drift', 'grade'];
 function segInit(seg) {
   checkKeys(seg, SEG_KEYS, 'segment');
   let kindEnum;
@@ -113,11 +113,13 @@ function segInit(seg) {
     } else if (typeof seg.width === 'number') { widthKind = 1; w0 = seg.width; }
     else fail(`segment width must be a number or [a,b], got ${typeof seg.width}`);
   }
+  if (seg.grade && !(seg.kind === 'straight' && Array.isArray(seg.grade) && seg.grade.length === 2)) fail('segment grade must be [in, out] on a straight');
   const over = !(seg.over === false); // over===false -> vert -1; default up
   // Field order MUST match SegDef in trackbuilder.h.
   return `{ ${kindEnum}, ${D(seg.length || 0)}, ${D(seg.radius || 0)}, ${D(seg.angle || 0)}, `
     + `${D(seg.rise || 0)}, ${D(seg.bank || 0)}, ${D(seg.roll || 0)}, ${D(seg.drift || 0)}, `
-    + `${B(over)}, ${widthKind}, ${D(w0)}, ${D(w1)}, ${B(!!seg.pillars)} }`;
+    + `${B(over)}, ${widthKind}, ${D(w0)}, ${D(w1)}, ${B(!!seg.pillars)}, `
+    + `${B(!!seg.grade)}, ${D(seg.grade ? seg.grade[0] : 0)}, ${D(seg.grade ? seg.grade[1] : 0)} }`;
 }
 
 // ---- waypoints ----
@@ -152,21 +154,71 @@ function bananaInit(f) {
 }
 
 // ---- descriptor ----
-const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set'];
+const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'sandOffFrom', 'sandOffTo', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
 
 // ---- set pieces (renderer-only: the builder never reads them) ----
-// `model` names a GLB under public/assets/toycar that scripts/gen-set-pieces.mjs
-// composed; the rest place it. Absent yaw/y read 0 and absent scale reads 1, so
+// `model` names a GLB under public/assets/toycar that scripts/gen-set-prototypes.mjs
+// built; the rest place it. Absent yaw/y read 0 and absent scale reads 1, so
 // a plain 0 would not be faithful for scale — it is carried as authored.
-const SET_KEYS = ['model', 'u', 'lat', 'yaw', 'y', 'scale'];
+// `lite: false` keeps a piece off the lite tier (Android TV) altogether; a
+// piece that brings its own ground (SET_GROUND) cannot, since that ground is
+// anchored on it.
+const SET_KEYS = ['model', 'u', 'lat', 'yaw', 'y', 'scale', 'lite'];
 function setInit(p) {
   checkKeys(p, SET_KEYS, 'set piece');
   if (typeof p.model !== 'string' || !/^[a-z0-9-]+$/.test(p.model)) fail(`set piece model ${JSON.stringify(p.model)} is not a GLB base name`);
   if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${p.model}.glb`))) fail(`set piece model "${p.model}" has no public/assets/toycar/${p.model}.glb`);
   if (typeof p.u !== 'number' || p.u < 0 || p.u >= 1) fail(`set piece u ${JSON.stringify(p.u)} must be a number in [0, 1)`);
   if (p.scale != null && !(p.scale > 0)) fail(`set piece scale ${JSON.stringify(p.scale)} must be positive`);
-  // Field order MUST match SetDef: model, u, lat, yaw, y, scale.
-  return `{ ${JSON.stringify(p.model)}, ${D(p.u)}, ${D(p.lat || 0)}, ${D(p.yaw || 0)}, ${D(p.y || 0)}, ${D(p.scale ?? 1)} }`;
+  if (p.lite != null && p.lite !== false) fail(`set piece lite ${JSON.stringify(p.lite)}: only \`lite: false\` is meaningful`);
+  if (p.lite === false && SET_GROUND[p.model]) fail(`set piece "${p.model}" brings its own ground, so it cannot leave the lite tier`);
+  // Field order MUST match SetDef: model, u, lat, yaw, y, scale, lite.
+  return `{ ${JSON.stringify(p.model)}, ${D(p.u)}, ${D(p.lat || 0)}, ${D(p.yaw || 0)}, ${D(p.y || 0)}, ${D(p.scale ?? 1)}, ${p.lite === false ? 0 : 1} }`;
+}
+
+// ---- landforms (renderer-only, like the set) ----
+// A track's `land` entries are anchored by u/lat/yaw like a set piece; a set
+// piece whose model has a SET_GROUND entry brings that ground with it,
+// anchored on the piece itself (its index), since the model was built standing
+// on it. Absent numbers read their kind's neutral: r1 = r, h1 = h, the rest 0
+// but shape (1), a plain's or paint's fade (8) and tint (0, none).
+const LAND_KINDS = { ridge: 0, ring: 1, plain: 2, mound: 3, fan: 4, paint: 5, shore: 6, pond: 7, clear: 8, street: 9, snake: 10, ladder: 11, shed: 12 };
+const LAND_KEYS = ['kind', 'u', 'lat', 'yaw', 'x', 'z', 'len', 'r', 'r1', 'w', 'rz', 'h', 'h1', 'top', 'shape', 'tint', 'near', 'lite'];
+function landInit(l, piece, where) {
+  checkKeys(l, LAND_KEYS, where);
+  if (!(l.kind in LAND_KINDS)) fail(`${where}: kind ${JSON.stringify(l.kind)} is not one of ${Object.keys(LAND_KINDS).join(', ')}`);
+  if (piece < 0 && (typeof l.u !== 'number' || l.u < 0 || l.u >= 1)) fail(`${where}: u ${JSON.stringify(l.u)} must be a number in [0, 1)`);
+  if (piece >= 0 && (l.u != null || l.lat != null)) fail(`${where}: a set piece's ground is anchored on the piece; it takes no u/lat (yaw turns it in the piece's frame)`);
+  if (piece < 0 && (l.kind === 'mound' || l.kind === 'fan')) fail(`${where}: a ${l.kind} is the ground a set piece was modelled on: it belongs in SET_GROUND`);
+  if (l.kind === 'street' && (piece >= 0 || l.lat != null || l.r != null || l.h != null || l.tint != null || !(l.len > 0))) fail(`${where}: a street is the stretch of road through a village, its kerb a low kerbstone: len of road centred on u, nothing else`);
+  if ((l.kind === 'snake' || l.kind === 'ladder') && (piece >= 0 || l.lat != null || l.r != null || l.h != null || l.tint != null || !(l.len > 0))) fail(`${where}: a ${l.kind} is the stretch of road that is one of the board's: len of road centred on u, nothing else`);
+  if (l.kind === 'clear' && (piece >= 0 || l.h != null || l.tint != null)) fail(`${where}: a clear only keeps the seeded scatter off (r round its spine, len along it): no height or tint, never on a piece`);
+  if (l.kind === 'shed' && (piece >= 0 || l.lat != null || l.r != null || l.h != null || l.tint != null || !(l.len > 0))) fail(`${where}: a shed is the stretch of road under a gallery's roof: len of road centred on u, nothing else`);
+  if (!['street', 'snake', 'ladder', 'shed'].includes(l.kind) && !(l.r > 0)) fail(`${where}: r must be positive`);
+  if (l.r1 != null && !(l.r1 > 0)) fail(`${where}: r1 must be positive (the form's reach at its far end)`);
+  if (l.h1 != null && !(l.h1 >= 0)) fail(`${where}: h1 must not be negative (ground never goes below the plain)`);
+  if (l.kind === 'pond' && (piece >= 0 || l.h != null)) fail(`${where}: a pond is open water on the plain: len and r (its water), w (the land's fade back), no height, never on a piece`);
+  if (!['plain', 'paint', 'shore', 'pond', 'clear', 'street', 'snake', 'ladder', 'shed'].includes(l.kind) && !(l.h > 0)) fail(`${where}: h must be positive (ground never goes below the plain)`);
+  if (l.kind === 'shore' && (piece >= 0 || l.h != null || l.tint != null || !(l.len > 0) || (l.w != null && !(l.w > 0)))) fail(`${where}: a shore brings the sea in to its anchor: len (the shore it holds), r (its fade) and, to let the water in past the road, w (how far inside the road's reach it may come); no height or tint, never on a piece`);
+  if (l.kind === 'paint' && (l.h != null || l.tint == null)) fail(`${where}: a paint only colours the ground: a tint and no height`);
+  if (l.kind === 'mound' && !(l.r1 > 0 && l.rz > 0)) fail(`${where}: a mound needs r (toward +X), r1 (toward -X) and rz`);
+  if (l.kind === 'mound' && l.tint != null) fail(`${where}: a mound takes no tint`);
+  if (l.kind === 'ring' && !(l.w > 0)) fail(`${where}: a ring needs its bank's half-width w`);
+  if (l.top != null && !(l.top >= 0 && l.top < 1)) fail(`${where}: top must be in [0, 1)`);
+  if (l.tint != null && !(Number.isInteger(l.tint) && l.tint > 0 && l.tint <= 0xffffff)) fail(`${where}: tint must be a 0xRRGGBB colour`);
+  if (l.near != null && (!['ridge', 'ring'].includes(l.kind) || !(l.near > 0))) fail(`${where}: near (how close past the kerb a flank stands at full height) is a ridge's or ring's, and positive`);
+  if (l.lite != null && l.lite !== false) fail(`${where}: lite ${JSON.stringify(l.lite)}: only \`lite: false\` is meaningful`);
+  if (l.lite === false && piece >= 0) fail(`${where}: a set piece's ground follows its piece, so it cannot leave the lite tier alone`);
+  const n = (v, d = 0) => D(v ?? d);
+  const fades = l.kind === 'plain' || l.kind === 'paint' || l.kind === 'pond';
+  // Field order MUST match LandDef: kind, piece, u, lat, yaw, x, z, len, r, r1, w, rz, h, h1, top, shape, tint, near, lite.
+  return `{ ${LAND_KINDS[l.kind]}, ${piece}, ${n(l.u)}, ${n(l.lat)}, ${n(l.yaw)}, ${n(l.x)}, ${n(l.z)}, `
+    + `${n(l.len)}, ${n(l.r)}, ${n(l.r1, l.r)}, ${n(l.w, fades ? 8 : 0)}, ${n(l.rz)}, `
+    + `${n(l.h)}, ${n(l.h1, l.h)}, ${n(l.top)}, ${n(l.shape, 1)}, 0x${(l.tint || 0).toString(16)}u, ${n(l.near)}, ${l.lite === false ? 0 : 1} }`;
+}
+for (const [model, list] of Object.entries(SET_GROUND)) {
+  if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${model}.glb`))) fail(`SET_GROUND "${model}" has no GLB`);
+  if (!Array.isArray(list) || !list.length) fail(`SET_GROUND "${model}" must list its landforms`);
 }
 
 const out = [];
@@ -239,15 +291,27 @@ for (const id of [...trackIds, ...devIds]) {
     out.push('};');
     setRef = `kSet_${sym}`; nSet = desc.set.length;
   }
+  const lands = [];
+  (desc.set || []).forEach((p, i) => (SET_GROUND[p.model] || []).forEach((l, k) =>
+    lands.push(landInit(l, i, `SET_GROUND "${p.model}"[${k}]`))));
+  (desc.land || []).forEach((l, k) => lands.push(landInit(l, -1, `track "${id}" land[${k}]`)));
+  let landRef = 'nullptr';
+  if (lands.length) {
+    out.push(`constexpr LandDef kLand_${sym}[] = {`);
+    for (const s of lands) out.push(`  ${s},`);
+    out.push('};');
+    landRef = `kLand_${sym}`;
+  }
   out.push('');
 
   // Field order MUST match TrackDef in trackbuilder.h.
   const cup = CUP_OF[id] ? JSON.stringify(CUP_OF[id]) : 'nullptr';
   perTrack.push(`  { ${JSON.stringify(id)}, ${JSON.stringify(desc.name || id)}, ${cup}, `
     + `${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
-    + `${D(trackWidth)}, ${D(desc.sand ?? 0)}, ${D(startU)}, `
+    + `${D(trackWidth)}, ${D(desc.sand ?? 0)}, ${D(desc.sandOffFrom ?? 0)}, ${D(desc.sandOffTo ?? 0)}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
-    + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n}, ${kickers.ref}, ${kickers.n}, ${setRef}, ${nSet} }`);
+    + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n}, ${kickers.ref}, ${kickers.n}, ${setRef}, ${nSet}, `
+    + `${landRef}, ${lands.length} }`);
 }
 
 out.push('constexpr TrackDef TTP_TRACKS[] = {');
@@ -257,6 +321,20 @@ out.push('// The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).');
 out.push(`constexpr int TTP_TRACK_COUNT = ${trackIds.length};`);
 out.push('// Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.');
 out.push(`constexpr int TTP_TRACK_TOTAL = ${trackIds.length + devIds.length};`);
+out.push('');
+
+// ---- the lite tier's own models -------------------------------------------
+// A model <m> with a <m>-lite.glb beside it is drawn from that file in the lite
+// tier (Android TV): a simpler build of the same thing (scripts/bake-lite.mjs,
+// or authored). The full tier is uncapped; this is where the box's cost is cut.
+const LITE = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
+  .filter((f) => f.endsWith('-lite.glb')).map((f) => f.slice(0, -'-lite.glb'.length)).sort();
+for (const m of LITE) {
+  if (!fs.existsSync(path.join(ROOT, 'public/assets/toycar', `${m}.glb`))) fail(`${m}-lite.glb has no ${m}.glb to stand in for`);
+}
+out.push('// The models with a lite-tier build (<model>-lite.glb), sorted.');
+out.push(`constexpr const char* TTP_LITE_MODELS[] = { ${LITE.length ? LITE.map((m) => JSON.stringify(m)).join(', ') : 'nullptr'} };`);
+out.push(`constexpr int TTP_LITE_MODEL_COUNT = ${LITE.length};`);
 out.push('');
 
 // ---- the cups ---------------------------------------------------------------

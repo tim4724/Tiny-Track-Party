@@ -64,7 +64,7 @@ final class AssetStore {
 
     /// Read a staged file. `relativePath` is relative to the staged `assets/`
     /// root, so it is spelled the way `stage-assets.sh` writes it:
-    /// `"toycar/tree.glb"`, `"materials/vlit.filamat"`,
+    /// `"toycar/set-tree-oak.glb"`, `"materials/vlit.filamat"`,
     /// `"toycar/Textures/colormap.png"`.
     ///
     /// There is deliberately **no fallback to a flattened basename**. If the
@@ -100,7 +100,7 @@ final class AssetStore {
 
     /// A model from the toy-car kit by its base name — the spelling every layer
     /// above uses, because that is how the engine names them:
-    /// `ttp_theme_scenery_models` answers `["tree", "tree-pine"]` and
+    /// `ttp_theme_scenery_models` answers `the lawn's tree models in order` and
     /// `protocol.js`'s `CAR_MODELS` names `vehicle-gt`.
     ///
     /// Not cached. The bundle read is a memory map serviced by the unified page

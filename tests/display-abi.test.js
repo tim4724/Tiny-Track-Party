@@ -47,9 +47,14 @@ test('the shipped module exports the display ABI the shell binds to', async () =
                       'cells', 'cell_rects', 'cell_cards', 'dividers',
                       'safe_insets',
                       'camera', 'look', 'fog', 'shadows',
+                      // The landmark gallery's: where the set pieces and scenery stand
+                      // and where one may, a camera and a parked car per cell to look
+                      // at them with, and the ground a sight line to one must clear.
+                      'set_layout', 'scatter_layout', 'spot_issue', 'cell_look', 'cell_look_clear',
+                      'car_pose', 'car_pose_clear', 'ground_y',
                       'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
                       'profile', 'profile_names',
-                      'biome', 'showcase',
+                      'biome', 'showcase', 'detail',
                       // What still has to be fetched, and the derived bytes kept
                       // between runs. Both are WALKS this side performs every
                       // build (asset_plan, asset_textures) or every frame
@@ -66,6 +71,27 @@ test('the shipped module exports the display ABI the shell binds to', async () =
 test('slot ids answer [] with no display — a HUD with no rows, not a crash', async () => {
   const M = await load();
   assert.equal(M.cwrap('ttp_display_slot_ids_json', 'string', [])(), '[]');
+});
+
+// THE DETAIL TIER IS DECIDED IN C++ (ttp/detail.h), from the platform each
+// shell names, and answered with or without a display — so the decision itself
+// is pinned here, where nothing else executes it: lite on the Android TV box
+// alone, full on the web and the Apple TV, and an explicit ask over either.
+test('the detail tier: lite on the Android TV, full elsewhere, an ask over both', async () => {
+  const M = await load();
+  const detail = M.cwrap('ttp_display_detail', 'string', ['string', 'string']);
+  assert.equal(detail('androidtv', null), 'lite');
+  assert.equal(detail('web', null), 'full');
+  assert.equal(detail('tvos', null), 'full');
+  assert.equal(detail('web', 'lite'), 'lite');
+  assert.equal(detail('androidtv', 'full'), 'full');
+  assert.equal(detail('androidtv', 'bogus'), 'lite', 'an unknown ask leaves the platform\'s tier');
+  assert.equal(detail(null, null), 'full');
+  // The readout states the tier a DISPLAY was handed, so a decision taken with
+  // none up leaves it at a fresh renderer's full.
+  const readout = M.cwrap('ttp_perf_readout_json', 'string',
+    ['number', 'number', 'number', 'number', 'string']);
+  assert.equal(JSON.parse(readout(1, 960, 540, 1, null)).detail, 'full');
 });
 
 test('the cell-overlay setters are a safe no-op with no display', async () => {
@@ -150,8 +176,8 @@ test('ttp_display_cell_rects is a safe no-op with no display', async () => {
 // tables (theme_check) and the marshalling (abi_check); what only this file can
 // see is that the SHIPPED artifact still exports them — the biome ABI sits
 // OUTSIDE the Filament gate in native/CMakeLists.txt, so a build that dropped it
-// would still link, still race, and lose the HUD boost accent, the ?biome=
-// dropdown and the race music's pool key in the browser.
+// would still link, still race, and lose the HUD boost accent and the ?biome=
+// dropdown in the browser.
 test('the shipped module exports the biome ABI, and resolves through it', async () => {
   const M = await load();
   for (const name of ['biome_count', 'biome_name', 'has_biome', 'biome_for_cup',
@@ -170,19 +196,6 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
   const forTrack = M.cwrap('ttp_theme_biome_for_track', 'string', ['string']);
   assert.equal(forTrack('tidepool'), 'beach', 'a track resolves through its own cup');
   assert.equal(forTrack('gym'), 'grass', 'a dev-only track falls back to grass');
-
-  // Every biome must name a race-music pool that exists, or a race in it plays
-  // the fallback song silently. This is the ONE place the two halves meet: the
-  // pool keys come from audio/musicCatalogue.js (the catalogue's authored home
-  // — it moved there when the decide.js oracle was retired), the biome names are
-  // C++. Read straight from the data rather than through Audio.js, which does
-  // not re-export it: the device half performs commands and holds no table.
-  const { RACE_MUSIC } = await import(pathToFileURL(
-    path.join(ROOT, 'public/display/audio/musicCatalogue.js')).href);
-  const unpooled = names.filter((b) => !RACE_MUSIC[b] || !RACE_MUSIC[b].length);
-  assert.deepEqual(unpooled, ['sunset'],
-    'sunset is the one cupless biome with no pool of its own (it falls back); '
-    + 'any other name here means a cup races to the wrong music');
 
   // The two colours a shell still draws itself, and the model list it fetches by.
   const boostIcon = M.cwrap('ttp_theme_boost_icon', 'number', ['string']);
@@ -207,7 +220,7 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
 test('the asset showroom stages every scenery GLB in the kit', async () => {
   const M = await load();
   for (const name of ['ttp_theme_showcase_models', 'ttp_theme_showcase_prop_models',
-                      'ttp_showcase_inventory_json']) {
+                      'ttp_theme_showcase_set_models', 'ttp_showcase_inventory_json']) {
     assert.equal(typeof M[`_${name}`], 'function',
       `_${name} is not exported — gallery-assets.js would fail at the cwrap call`);
   }
@@ -243,38 +256,55 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
     .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
   const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps, ...placed]);
+  // A lite build (<m>-lite.glb) is what the lite tier draws in m's place. Only
+  // the themed lists are renamed to it (ttp/theme.h lite_models), and each TV
+  // app ships one tier's files (its stage-assets.sh), so a car or an always
+  // loaded prop with a lite build would be asked for by a name the Android TV
+  // app does not carry.
+  assert.deepEqual([...CARS, ...PROPS].filter((m) => kit.includes(`${m}-lite`)), [],
+    'a car or an always-loaded prop has a lite build the lite tier would never draw');
+  for (const m of [...drawnBy]) drawnBy.add(`${m}-lite`);
   assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
     'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');
+
+  // The set ROW: every catalogue track's pieces, so a placed model the showroom
+  // never stands would be a prototype nobody can look at.
+  const stagedSet = JSON.parse(M.cwrap('ttp_theme_showcase_set_models', 'string', [])());
+  const catalogue = Object.keys(TRACKS).flatMap((id) => JSON.parse(setModels(id)));
+  assert.deepEqual([...new Set(catalogue)].filter((m) => !stagedSet.includes(m)), [],
+    'a track places a set piece the asset gallery never shows');
 
   const inv = JSON.parse(M.cwrap('ttp_showcase_inventory_json', 'string', [])());
   assert.deepEqual(inv.scenery, staged, 'the legend lists what the build stages');
   assert.deepEqual(inv.props, stagedProps, 'the legend lists the staged props too');
-  // 15 since the snowman and the wind-up train were retired as procedural kinds
-  // — the snow and playroom biomes plant Kenney models for both now. The literal
-  // is the tripwire: a kind added and not staged, or retired and left behind,
-  // has to come past this line.
-  assert.equal(inv.landmarks.length, 15, 'every hero landmark kind is staged');
+  assert.deepEqual(inv.set, stagedSet, 'the legend lists the set row too');
+  // 9 since the snowman and the wind-up train were retired as procedural kinds
+  // (the snow and playroom biomes plant built models for both now), the
+  // windmill for Crag's real-size windpump, and the playroom's five giants for
+  // toys at their real size. The literal is the tripwire: a kind added and not
+  // staged, or retired and left behind, has to come past this line.
+  assert.equal(inv.landmarks.length, 9, 'every hero landmark kind is staged');
   assert.ok(inv.clutter.includes('dominoes') && inv.fliers.includes('hot-air balloon'),
     'the legend spans kinds no single biome carries');
 });
 
-// ---- a decoration is cheap ---------------------------------------------------
-// A biome prop is stamped many times a lap and drawn in every cell that sees it,
-// while what it has to carry at the verge is a silhouette. The kit authors a
-// barrel or a skateboard with as many vertices as a whole car, so a model over
-// the cap is slimmed (scripts/slim-kit-models.mjs) or not planted. The toy train
-// set is the one exception: an animated ring of track, sparse by design, whose
-// spin subtree a decimation would break.
+// ---- a decoration is cheap on the box ---------------------------------------
+// A biome prop is stamped many times a lap and drawn in every cell that sees it.
+// The full tier (the web, the Apple TV) is uncapped; the cap holds the LITE tier
+// (the Android TV box), which draws a model's lite build where it has one
+// (<model>-lite.glb, ttp/theme.h lite_models). So a prop over the cap gets a
+// lite build (its builder's, or scripts/bake-lite.mjs).
 const PROP_VERTEX_CAP = 400;
-test('every biome prop stays under the decoration vertex cap', async () => {
+test('every biome prop the lite tier draws stays under the decoration vertex cap', async () => {
   const M = await load();
   const nameAt = M.cwrap('ttp_theme_biome_name', 'string', ['number']);
   const propModels = M.cwrap('ttp_theme_prop_models', 'string', ['string']);
   const heavy = [];
+  const glb = (m) => path.join(ROOT, 'public/assets/toycar', `${m}.glb`);
   for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
-    for (const m of JSON.parse(propModels(nameAt(i)))) {
-      if (m === 'trainset') continue;
-      const b = fs.readFileSync(path.join(ROOT, 'public/assets/toycar', `${m}.glb`));
+    for (const full of JSON.parse(propModels(nameAt(i)))) {
+      const m = fs.existsSync(glb(`${full}-lite`)) ? `${full}-lite` : full;
+      const b = fs.readFileSync(glb(m));
       const j = JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString());
       const v = j.meshes.flatMap((x) => x.primitives)
         .reduce((s, p) => s + j.accessors[p.attributes.POSITION].count, 0);

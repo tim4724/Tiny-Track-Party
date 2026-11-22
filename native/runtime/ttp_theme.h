@@ -9,8 +9,8 @@
 // own cup and hands libttp-renderer the whole thing in-process. What a shell
 // gets is only what a shell genuinely draws or names for itself:
 //
-//   - the biome NAME, because the shell owns the music (the race song is picked
-//     from a per-biome pool) and the ?biome= override list,
+//   - the biome NAME, for the ?biome= override list and the HUD's accent
+//     lookup below,
 //   - one COLOUR each for two 2D widgets the renderer does not draw: the HUD
 //     boost chip's stroke and the biome swatch in the music gallery,
 //   - the scenery MODEL LIST, because fetching bytes is a platform job and the
@@ -22,7 +22,7 @@
 //
 // Unlike the rest of the display ABI this is NOT behind the Filament gate: the
 // biome tables are plain data in libttp-runtime, so a shell can name a biome
-// (for its music, its debug panel) with no renderer in the build at all.
+// (for its debug panel) with no renderer in the build at all.
 #ifndef TTP_THEME_H
 #define TTP_THEME_H
 
@@ -74,7 +74,9 @@ TTP_ABI uint32_t ttp_theme_hill_color(const char* biomeName, int index);
 TTP_ABI const char* ttp_theme_scenery_models(const char* biomeName);
 
 /* The trackside prop GLBs this biome stamps (scattered set dressing), same
- * JSON array and same slot contract — handed back as "prop<i>.glb". Empty
+ * JSON array and same slot contract — handed back as "prop<i>.glb". Every one
+ * of the biome's tracks stamps from this list, including the props a track
+ * patches in for itself, so the shell needs no track to fetch them. Empty
  * array for a biome that runs no props. */
 TTP_ABI const char* ttp_theme_prop_models(const char* biomeName);
 
@@ -107,9 +109,15 @@ TTP_ABI const char* ttp_theme_showcase_models(void);
  * ttp_theme_showcase_models's biome-independence rule. */
 TTP_ABI const char* ttp_theme_showcase_prop_models(void);
 
+/* The set-piece GLBs a showcase build stages, handed back as "set<i>.glb": every
+ * catalogue track's pieces in one row, under the same biome-independence rule.
+ * A shell building the showroom fetches THESE in place of ttp_theme_set_models
+ * (whose answer for the showroom's own id is empty). */
+TTP_ABI const char* ttp_theme_showcase_set_models(void);
+
 /* What that world holds, as JSON, for the gallery's legend:
  *
- *   {"clutter":[…],"fliers":[…],"landmarks":[…],"props":[…],"scenery":[…]}
+ *   {"clutter":[…],"fliers":[…],"landmarks":[…],"props":[…],"scenery":[…],"set":[…]}
  *
  * HUMAN-READABLE captions, not ids: nothing resolves by them. They come from
  * here because the layer that decides what is staged should be the one that says

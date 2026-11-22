@@ -80,7 +80,7 @@ function ui_() {
       raceAdvanceLive: c('ttp_race_advance_live_json', 'string',
         ['number', 'number', 'number', 'number', 'string', 'string']),
       raceEventsLive: c('ttp_race_events_live_json', 'string',
-        ['number', 'number', 'string', 'number', 'number', 'number', 'number']),
+        ['number', 'number', 'number', 'number', 'number', 'number']),
       raceSeriesState: c('ttp_race_series_state_json', 'string', ['number']),
       raceBegin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
       raceAddHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
@@ -209,8 +209,7 @@ function ui_() {
           finish: (order) => {
             order.forEach((id, i) => raw.raceForceFinish(session, J(id), 60 + i));
             raw.raceUpdate(session, 16);
-            const d = JSON.parse(raw.raceEventsLive(session, room, 'beach', 0, 0,
-                                                    8000, 100000));
+            const d = JSON.parse(raw.raceEventsLive(session, room, 0, 0, 8000, 100000));
             perform(d.effects);
           },
           nextRace: () => launch(raw.raceAdvanceLive),

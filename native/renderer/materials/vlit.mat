@@ -53,7 +53,9 @@ vertex {
     // albedo and grades nothing. Per vertex is per face for the kit — its
     // vertices are split at every edge — and smooth over metres elsewhere.
     void materialVertex(inout MaterialVertexInputs material) {
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
+        // A vertex with no alpha is the sky's (the balloon, posed past the
+        // fog's cutoff): unfogged. Nothing here blends, so alpha is free.
+        material.fog = vec4(material.color.a < 0.5 ? 0.0 : ttpFogFactor(material.worldPosition.xyz),
                 ttpMatteLightDisplay(normalize(material.worldNormal)));
     }
 }

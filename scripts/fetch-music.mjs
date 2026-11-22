@@ -11,7 +11,7 @@
 //
 //   node scripts/fetch-music.mjs              rebuild every shipped file
 //   node scripts/fetch-music.mjs --verify     download + hash only, write nothing
-//   node scripts/fetch-music.mjs --only happy_bee.mp3,bit_shift.mp3
+//   node scripts/fetch-music.mjs --only hyperfun.mp3,bit_shift.mp3
 //   node scripts/fetch-music.mjs --masters DIR  keep/reuse masters in DIR
 //
 // Masters are cached (default .cache/music-masters/, gitignored) so a second run

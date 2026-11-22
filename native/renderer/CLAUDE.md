@@ -330,7 +330,7 @@ only near exact; `vpresent` and `voverlay` sit past all of it and read bytes.
   coordinates and world units stay high. `vshadow` is medium though blended;
   the other blended materials (`vglbfade`, `vblend`, `vcloud`, `vburst`,
   `vpoint`) keep their default precision.
-- **The kit colour table is the atlas's own bytes** (`gen-kit-colors.mjs`),
+- **A baked vertex's colour is the atlas's own bytes** (`ttp/kit_colors.h`),
   sampled the way the GPU samples them; the merged bake decodes them to
   multiply the light and encodes the product once.
 - **Blends, fog and the deck's compositing happen in gamma space**, as they
@@ -359,6 +359,13 @@ material's own blending. Target preservation comes from `Renderer::ClearOptions`
 > materials onto what is there. Read a view's blend mode before pricing anything
 > inside it — and price a pass at each panel size, since one priced at 1080 says
 > nothing about 4K.
+
+**A value a shader reads PER CELL rides the cell's view, never a material
+parameter.** A MaterialInstance commits its parameters once a frame, so every
+cell would draw with the last cell's value. A per-cell input is a per-view
+material global (`View::setMaterialGlobal`: 0 the debug knobs, 1 rain's drift,
+3 the folded overlay's cell), set on that cell's view before its `render()`;
+what differs per cell in geometry is swapped between the `render()` calls.
 
 **Skid marks are the same road-shader paint, accumulated — on the CPU.** Rubber
 lands in a per-track R8 texture in track space (u = s / lap, v = lat) that `vroad`
@@ -459,7 +466,7 @@ what was measured and not taken; the rules it left:
 **THE STATIC SCENE IS A FUNCTION OF ITS KEY, and a build whose key matches the
 resident one rebuilds only the FIELD.** The key is the shim's
 (`track|biome|showcase|backend`, `bakeKeyFor`) plus the inputs the renderer
-latches — shadows, the bench, the model variants, the kit field — whose setters
+latches — shadows, the bench, the model variants — whose setters
 drop it on a change (`dropStaticKey`). The track, its dressing, the sky and the
 sun bake stay up across a join, a leave, a race launch and a restart; `rebuildField`
 rebuilds the cars, and `resetRace` puts back what a race left on the static
@@ -486,6 +493,12 @@ memory until another track builds or the renderer goes.
   scene-scoped list piles up once per rebuild until the track changes.
   `loadInstancedProp` does not dirty the dressing merge (only `buildStatic`
   does), or every field rebuild would regroup the whole dressing.
+- **What stands in the scene is in `fillObstacles`, or the lobby's cameras film
+  from inside it.** They know scenery only as the voxels that function fills
+  from the drawn triangles (`ttp/obstacles.h`; `LensPlan` in `ttp/camera.h` is
+  the reader), so a new family of standing geometry joins its list. It is
+  filled inside `ttp_display_build`, never on a frame: it costs tens of
+  milliseconds, which on a TV box would be a visible hitch.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and
   `buildField` each log their phases (`PhaseLog`).
 - **A bake never `flushAndWait`s**: its GPU time belongs behind the thread that
@@ -502,6 +515,337 @@ memory until another track builds or the renderer goes.
   parked body still wears the last frame's pose, so `takeAsset` hands one back at
   its snapshotted parse pose (`mBodyRest`). Anything added to a reuse path asks
   the same question: what would a fresh `createAsset` have guaranteed?
+
+## The ground meets the road
+
+`groundY` (the track's) is the plain under the deck's LOWEST point. A seeded
+track lies near it except on its crossings' ramps and its hills
+(`scripts/track-gen.mjs` localLift). The renderer's ground (`terrainY`,
+`TtpRendererTrack.cpp`) rises toward the deck and rolls into hills away from
+it. LOW road sits IN the land: the field stands `kVergeDrop` under the deck's
+top beside it, and the VERGE BAND (below) lays the land up to the kerb's foot,
+so only the kerb stands over the ground. Only RAISED road, a crossing or a
+ramp from its first pillar, shows stilts (`kRaiseDrop`), the toy-track read.
+Road on a hill keeps its berm's top tucked just under the deck's top, so it
+too shows only the kerb. Dropping the berm under the slab cures a sub-pixel
+sliver of slab side that crawls along a far crest at 4P, but bares a dark slab
+edge under every far kerb on a hill; the user kept the kerb-only look. It is
+renderer-only: the sim never reads it, and pillars, berms and the gantry still
+stand on `groundY` with their feet buried.
+
+**A cup builds its own piers** (`theme.pier`, `buildStructures`): stone in
+courses, painted concrete, timber. The sim's pillar is a 0.5 u column whatever
+is drawn, so a make stays inside the margin the builder keeps a pillar from
+any road (`RADIUS + MARGIN`), and nothing drawn reaches one. **The
+deck's underside is lit as the deck in shade**, baked (`buildRoadMesh`): lit as
+what it faces, it was a near-black slab over every road that passes under a
+bridge.
+
+THE GROUND IS TWO SURFACES IN ONE MESH: the 9 u grid, and the verge band laid
+over it along the road (`buildVergeBand`, `TtpRenderer.h` has its numbers). The
+drawn ground is the HIGHER of them, and so is every lookup (`groundSurfaceY`,
+the camera's `GroundGrid::at`, the bake of the ground's sun map, which is
+depth-tested for it). The grid cannot meet a road at the road's height: the
+deck cap holds every triangle a deck touches under that deck's LOWEST section,
+and its chords cannot rise within a cell of the kerb. The band is a strip of
+rows out from the kerb's outer foot on rings a few units apart, fine enough
+to do both:
+
+- **The apron.** On low road the band stands just under the deck's top from
+  under the kerb out a little past it, then eases down to the land; its
+  first row, inside the kerb, stands a hair over the deck's top, so no
+  sliver of the slab shows at the kerb's foot. Road climbing past
+  `kVergeLow` over the plain rises out of it (fill 0 keeps the grid's
+  ground, so a ramp keeps its stilts and what lies under it), and so does
+  road on its own pillars however low (a hop over the beach shows every
+  pier, not a sand wedge swallowing them); road the
+  land itself stands beside keeps it however high it runs (a cut). A short
+  rise in the deck (a jump's lip, a crest hump) stands out of the land: the
+  apron follows the deck's top less what it rises over the chord either side.
+- **The land at the kerb.** Past the apron the band is the field as its OWN
+  road raises it (another road's raised ground, a ramp's beside it, is the
+  grid's), kept within `kBandOver` of the grid but for a form authored
+  `near`: the band follows the road, not every swell the grid smoothed away,
+  so the land the set pieces were placed and scored against stays put. It
+  hands over to the grid at its end (light, normal and colour terms too) and
+  dives under it there, from its own last standing corners, never up to the
+  grid's height a row out: at a massif's foot that chord runs over the
+  grid's concave foot as a pale sliver standing out of the slope. Where the grid cannot draw what stands at the usual
+  end (a `near` flank the cap pulls down) it runs on to its last row, eased
+  along the road. Every band vertex is paid in every cell that sees it, so
+  it ends at the first row past the apron from which on it would only copy
+  the grid (`kBandFlat`): over most of a lap it is a strip a couple of units
+  wide (`npm run budget:scene` prices it).
+- **It yields**: inside a footprint (it comes down to the grid by
+  `kHoldSlope` a unit as it nears one, so a piece's flat parts stand at their
+  level; a `near` form's rise passes, below), at the sea and a pond, along a street, where another road at its
+  height is nearer (that road's band takes the ground), and under another
+  strand's deck it is capped like the grid.
+
+- **NO GROUND THROUGH A DECK, PROVABLY.** The cap is per grid vertex
+  (`buildTerrainCap`): every triangle a deck section touches keeps its corners
+  `kDeckClear` under that deck's TOP at its lower kerb edge. A linear triangle
+  never rises above its corners, so no tuning of the lift can push the surface
+  through a road, and a road under a bridge keeps its own clearance; the land
+  may meet the slab inside its skirt, where the opaque deck hides it. Change
+  the lift freely; never bypass the cap. Beside the road the lift is held
+  under every OTHER strand nearby (a crossing's lower road, a hairpin's far
+  leg), so no bank walls the road under a bridge. The band holds to the same
+  rule its own way: under another strand's deck it is capped per vertex, and
+  under its own it never reaches: its first row stops `kBandKerbIn` short of
+  the kerb's inner face, past what a chord between rings sags round a bend.
+  `tests/e2e/terrain-ground.spec.js` reads the cap and the stilts off the
+  drawn ground.
+- **The cap, not the lift, sets the GRID's stilt on a short crest.** A grid
+  vertex sits under the LOWEST deck section crossing any triangle around it,
+  two cells (up to 18 u) of road, so the grid alone stays at a hump's foot.
+  The band is what meets the road; a finer grid would cost its step
+  everywhere, the band only along the road.
+- **NEVER BELOW `groundY`, but for a sunk sea.** The sun bake's flat caster
+  proxy sits at the lowest ground: ground under it bakes fully shadowed, and
+  the posts standing on the plain would hang. A valley is land left UNRAISED,
+  not dug. The one exception is the sea a causeway crosses (below), and what
+  stands in it is drawn down to its bed.
+- **A PIECE STANDS WHERE THE LAND LIES.** A set piece's or landmark's
+  clearing is levelled to the lowest natural ground under its footprint
+  (`naturalFootY`) and only ever CUTS: it lowers what stands above that and
+  fills nothing, since a piece on its own knoll reads as a plinth, which the
+  art direction rejects. Two rules keep what lies FLAT on it (a pitch's
+  lines, a path, a bed) out of the ground:
+  - a footprint reaching into the verge's level band is a **verge hold**
+    (`mVergeHolds`): the band's height carries across it, fading from its
+    edge as from the road's, so a piece beside low road stands on the verge
+    it meets rather than cutting a step under the deck;
+  - every grid triangle a footprint touches is **capped** at its level
+    (`capFootprint`), since the 9 u chords from a corner outside, up a bank,
+    climb over the footprint's edge. Never a verge corner below the verge:
+    a piece lower than the verge it sits by keeps a buried road-side edge,
+    and the fix is its spot, not the road's step. A cap reaches a cell past
+    the footprint, so a neighbour within it drops to that level (levels are
+    settled to a fixed point before anything stands). A box longer than
+    `kFloorHalf` a side is a row along the road (a telegraph line), mostly
+    bare land, and is neither held nor capped.
+- **A `clear` KEEPS THE SEEDED PASSES OFF** a capsule of verge (`inSetFoot`):
+  an avenue's verge holds its own trees, never a random one between them.
+- **A STREET'S PAVEMENT IS THE ROAD'S.** Neither the grid nor a piece can
+  reach the kerb (the cap, spotIssue's margin), so a `street` landform turns
+  the kerb along its stretch into a kerbstone's step and paving out to that
+  margin (`kStreetKerbW`), and the street's piece carries on at its height.
+- **A SHED'S FLOOR IS THE ROAD'S TOO.** Under a gallery's roof (a `shed`
+  landform) the snow cup's plough bank gives way to the plain kerb's section
+  as a concrete kerbstone and paving (`kShedKerbW`), out past the gallery's
+  columns and to the foot of its back wall: snow lying under a roof read as a
+  fault, and no piece can lay a floor at the kerb.
+- **NOTHING FALLS UNDER A ROOF.** Snow, rain and dust stop at any roof a set
+  piece puts over the road (a gallery, a tunnel, a hull): nothing is authored
+  for it. The baked pieces' sky-facing faces are noted on a unit grid, and a
+  road vertex with roof all round it lifts the particles' floor to that roof
+  (`layAmbientRoofs`); a split's lite cells, which skip the floor's tap, thin
+  their own cloud when their camera is under it (`cullAmbientCells`). A cable
+  or a banner across the road is narrower than the test and shelters nothing.
+- **A PART THAT DRAPES LIES ON THE LAND.** A set piece's node named `drape…`
+  (a hose across a lawn, a post's pad) has each baked vertex lifted by the
+  ground drawn under it over the placement's foot (`bakePlacements`), so a
+  spine longer than any clearing follows the land instead of flattening it,
+  and a small part on `SET_GROUND` (a sign, a rock, a rake on a slope) sits
+  on the 9 u grid's chords rather than the curve they cut across. A model
+  with one stands on the plain and levels nothing (`mSetDrapes`): its other
+  parts are built from the plain up (a post sunk through whatever land it
+  meets). Only the baked path drapes; a model the bake refuses stands flat.
+  A `drape_wall` part (a canyon length) drapes as a wall: each vertex rides
+  the lowest land along a few units of the wall's own length, and at most
+  its own height over the lowest land between it and the placement's spot
+  (the face's foot). A summit stays a summit over a short rise in the land,
+  and a tail over a massif's flank sinks into it instead of standing on it
+  as a needle.
+- **A `drape_grade…` PART LIES ON THE GRADED LAND** (a railway's bed), and
+  so does a `drapegrade…` path (its train): `gradeSurfaceY`, the drawn
+  ground's highest across a bed's width averaged over a train's length round
+  the point (`kGradeRun`: over less, the bed rolled in short waves and the
+  train pitched over them), one
+  smooth surface in world XZ. A line draped vertex by vertex kinks on every
+  crease of the 9 u grid and rolls with every facet; on the graded land it
+  takes a rise in a vertical curve, lengths cut from one line meet at one
+  height, and what rides it pitches with the grade (`f=2`). The surface
+  stands OVER the land on a side slope and in a dip, so the piece brings its
+  own bank down to the ground (a skirt built under its foot,
+  `drape_grade_turf` in the field's colour). It smooths what is there and
+  cannot make a grade: route the line where the land is gentle.
+- **A `drape_plane…` PART LIES ON ONE PLANE** (a floral clock's dial): the
+  best fit to the ground under its vertices, raised to clear it everywhere
+  (`appendBaked`), so a figure drawn on it keeps its shape on a slope; draped
+  facet by facet over a crease a circle came out a bean. It stands off the
+  land by what the land is not flat, so the part brings its own edge down
+  into the turf and wants a spot on one even slope, off a crest.
+- **A `drape_floor…` PART CLAIMS NO GROUND** (a gravel lane, the stones along
+  it): it drapes like any other, but the piece's footprint is taken without it
+  (`mSetBox`), so the verge band does not come down at it and it may run on to
+  the kerb's foot; the gallery's clash shape leaves it out the same way
+  (`glbTriangles` marks it `print`). Keep what stands (a van, a kiosk) clear
+  of the kerb as before: the footprint is theirs.
+- **A `floor…` PART IS A PRINT ON THE FLOOR** (a play mat): it joins
+  `mStructures`, the static receiver, instead of the dressing merge, so the
+  deck's baked shadow falls on it (`appendFloorPart`), and `spotIssue` lets a
+  part that low (`FLOOR_PRINT`) pass under any deck and round any pillar.
+- **Everything else grounds through `groundSurfaceY` / `footprintY`** — the
+  grid as the mesh draws it — never `tb.groundY`.
+- **A track's shapes are authored landforms** (`tracks.js` `land`, summed in
+  `landforms`), never more noise: short wavelengths read as lumps tracing the
+  road. The grid is laid over the track and every form's reach
+  (`setupTerrain`), so a form reaching past the others moves every grid
+  vertex round the lap, and with them the footing of every piece placed and
+  scored against that ground: reshape a track's land inside the reach it
+  already has. A set piece modelled standing on terrain carries it as `SET_GROUND`;
+  the Blender builder reads the same numbers, so its parts stand on what the
+  renderer lays, and the piece levels no clearing. Its mounds take the land
+  under them as the HIGHEST of them or of the raised ground, so two pieces'
+  slopes join without a trough and the road along a mountain's foot keeps the
+  raised ground's verge (a part at the foot may be buried a little there); its fans
+  (debris) add their rise on top. The formula lives three times —
+  `landforms`, `set_prototypes.py set_ground()` and `tracks.js setGroundY` —
+  and the e2e spec catches the C++ and the GLB disagreeing. Within a grid
+  cell of a deck the cap holds the land lower than any of them, so a fan
+  stops a cell short of the road: a part built on it there floats, and one
+  sunk under the formula has its upper blocks read as feet by the spec. A
+  fan narrower than about two grid cells cannot be drawn either: the 9 u
+  chords cut through whatever lies on it (a chute's scar).
+- **A BIG LANDFORM AT THE KERB is a ridge or ring with `near`**: its flank
+  keeps full height to that many units past the kerb (reaching it over
+  `kNearRamp`), where every other form clears the road's corridor. The band
+  draws it at its own resolution from the verge out, so a massif tens of
+  units high and as wide as the scene can rise straight off the kerb zone,
+  and the slope rock (below) dresses its face, but on snow (below).
+  Author it round the OUTSIDE of a bend or along a straight: on a bend's
+  inside it walls the road ahead off.
+  A set piece's mound withholds every other form under it, but JOINS a
+  `near` one, the higher of the two (`landforms`): a mountainside runs on
+  round a piece's slope. Keep it clear of that piece's parts, which stand on
+  their own formula. Its rise also passes the band's hold by a piece that
+  levels nothing (one that drapes, one on its own ground), never a clearing:
+  a gallery stands IN the mountainside it is let into. A rock piece at the
+  kerb either stands in front of the flank's ramp and tucks under the land
+  past it, built over the plain against the ground drawn there (Avalanche's
+  galleries, set_prototypes.py `cut_face`), or is a draped face (a canyon
+  length) with `near` set past its BACK: the drape rides the drawn ground,
+  so a flank rising under the face lifts it (a wall's drape keeps that from
+  stretching it into needles, above, but a back over the ramp's foot still
+  stands out of it as a slab); past it, the face stands whole and its back
+  sinks into the land at the massif's foot (Gulch). A shoulder low
+  enough to need no face may be its own face instead: a `near` of a couple
+  of units brings its flank to the verge (Gulch's crest). `near`
+  counts from EVERY strand: where a massif's flank reaches toward another
+  strand it is cut a ramp's width into a cliff that far off that kerb, and a
+  face whose back lies within that reach has no land to sink into, so its
+  back stands bare as one flat plane. Give that strand its own face with the
+  massif behind it, or end the face and the flank short of it. A massif
+  cannot stand in the middle of a loop ringed by road: the cap holds the
+  grid there, the band holds it off every footprint nearby and splits it
+  between the strands around, so a loop's middle gets a piece's face, not
+  land. Nor may a massif run on under a piece that levels a clearing: the
+  clearing cuts it and `capFootprint` caps every grid triangle the
+  footprint touches, which slices the flank off in a sheer face; end it in
+  its own shoulder a grid cell and the clearing's fade short of the
+  footprint. Avalanche's mountains round its last loop and Gulch's range
+  along its descent are the worked examples.
+- **ROCK WHERE THE LAND IS STEEP, decided per FACET.** `gateRock` decides
+  each ground triangle, past the biome's slope (`groundRock`), and writes it
+  into the vertex alpha exactly (0 rock, 1 not; a corner a rock facet shares
+  is split in two), so `vground.mat`'s branch covers whole facets and the edge
+  is the mesh's own, as crisp as the rock pieces' cut faces. An interpolated
+  weight or a noise threshold blurs it into camouflage blobs: never go back to
+  one. Structures, berms and the flat sheet keep 1 and skip the branch.
+  Every rock facet has corners of its own carrying its shade in their colour,
+  baked from its normal: the shader's screen-derivative normal was most of
+  what a bare rock pixel cost on the box.
+  Only a CLIFF is rock where the biome asks a `rise` (the badlands): steep
+  facets joined through their corners must climb that far between them, so
+  a spoil heap, a dune's lee, a road's bank or one lone steep facet keeps its
+  sand (banded rock on one paints a striped dome) while a massif's face is
+  rock to its foot. The band's skirt (a face diving under the grid) is a
+  short run on low land, so its sliver never pokes through the grid as a
+  crawling dotted line of rock.
+  SNOW HAS NO GROUND ROCK: a 9 u facet is too big to be a crag at any range.
+  Alone it read as a painted stripe, in a small mass as a grey panel on the
+  slope (Flurry's peaks), and a whole face of them as a stage flat. A snow
+  massif is snow and wears its rock as geometry: crags draped on its crest
+  (set_prototypes.py `crag`, Avalanche's crags), whole peaks draped on the
+  land (`alp`, Glacier's range), the galleries' cut faces. Ribs down a face
+  by the road hung into the top of the picture as loose shards, so what
+  rises near the road stays low, and a skyline peak keeps its summit under
+  the top of the chase camera's picture where it comes nearest in sight. Nor
+  does the snow canvas band: it maps world XZ, so on a steep face its bands stood as pleats down
+  the slope. Strata stack on the square root of height over the plain, so a
+  tall face shows a few thick bands, not a contour map, and their edges are
+  filtered by the pixel's height span (no shimmer in a 4P cell). The beach
+  has none either.
+  No pass and no tap; the derivatives (the facet's shading normal) sit
+  outside the branch because a derivative in a branch a quad splits is
+  undefined.
+- **A form's `tint` is the ground's colour, never a texture**: a multiplier
+  per grid vertex (`landTint`), so at the 9 u step it is a broad wash (a
+  piste); a `paint` is a tint with no shape. What must break crisply is a
+  piece draped on the form: a glacier's ice as a tint read as a colour
+  gradient (set_prototypes.py `glacier_tongue_build`). The band
+  samples it at its own step but comes to the grid's over its last rows, or
+  its end shows as a ragged patch of another colour. On a convex slope the grid's chords run under the curve the
+  parts were built on, so `buildTerrainGrid` lifts each vertex there by what a
+  chord misses; a part floats only if that is bypassed.
+- **The beach rolls inland only** (`beachMask`): its dunes stand inside the
+  lap's loop, never on the beach between the road and the sea (a ring of
+  dunes read as a wall and hid it).
+- **THE SHELF: no land in the damp sand or the sea.** Both are FLAT sheets,
+  so ground rising under them cuts them along its own facets (sand wedges in
+  the water, the damp band ending on a triangle's edge). From the damp
+  sand's visible inner edge out, the ground is the shelf, `kWaterLift` under
+  the sheet, and every grid triangle touching it lies in it: the grid's land
+  (paints too) starts a cell's diagonal inland of that edge (`mShelfReach`),
+  the verge band's at the edge itself. It is measured as DRAWN, the true
+  distance to the polylines `buildWater` lays (`shoreDist`, one set of
+  spokes for both), never the polar radius: along a bay's flank that is many
+  times the distance to the water, and a hill stood out over it. The same
+  drawn waterline is every keep-out's (`inSea`: scatter, props, clutter,
+  `spotIssue`), and it is rounded over a few spokes, since a spit between
+  two bays turns within one and drew as a spike.
+- **The sea comes to the track.** A `shore` landform brings the curve in to a
+  stretch of road (Riptide's surf beach): the track never moves to meet the
+  sea, the sea moves to meet the track. It stops short of the road unless
+  the shore carries a `w`, which lets the waterline in that far inside the
+  road's reach, so the deck runs over the sea on a causeway (Riptide past
+  its hop). There the sea also SINKS (`kSeaSink`, `seaSink`/`bedSink`): low
+  road's slab bottoms out a few cm over the plain, so on a sea at its usual
+  level it lies on the water. The sunk sea stands clear under the deck, the
+  deck stands on timber bents the renderer adds wherever it clears the water
+  (nothing collides with them), and its lagoon wears no surf. The shelf goes
+  down with it, so the sheet's own feathered edge is the waterline there as
+  on the open shore, and the beach comes back up to the plain inland of the
+  shelf. Never let the sand's slope meet the water instead: the grid's
+  chords set that edge, as angular wedges. The sea goes down along the shore
+  over `kSinkFade` at least, or the grid and the sheet disagree on its level.
+  A piece standing rigid within the shelf's reach of a sunk bay stands over
+  sand that low. The curve is polar about the world origin, so a shore can only
+  reach a stretch of road that is the outermost on its bearing; anchored
+  anywhere else it lands far off.
+- **A BEACH RISE is the one form that stands on that beach**: a ridge with
+  both `near` and `w`. The road stands most of a unit over the plain, so a
+  piece on the sea side of it is under the kerb from the seat. `landforms`
+  keeps such a ridge out of the hills and `terrainField` lays it under its
+  own mask (from the shelf's edge, or its `w` inside the waterline, full
+  `kBeachRamp` further in) as a FILL: the sand comes up to it and it adds
+  nothing where the land already stands that high (the raised ground beside
+  a hop). ONLY THE VERGE BAND DRAWS IT (`fine`): its ramps are shorter than
+  a grid cell, so the grid laid it as blocks on its own axes with the damp
+  sand cut along them. That holds beside RAISED road too, where the band
+  otherwise yields to the grid: a rise as high as a hop counts as land the
+  road lies in (the apron's `cut`), and a lower one still stands there as
+  sand against the berm. The band runs wide for it and hands over to the flat
+  grid at its end, so a rise reaches as far as the band does. The piece on
+  it must level nothing, or its clearing cuts back down to the rise's foot,
+  and it DRAPES whole (`set_prototypes.py lie_on_land()`): no rise is flat,
+  so a piece standing rigid at a typed `y` hangs over the sand's fall. The
+  authoring side is in `tracks.js`'s landform header.
+- **The road ahead stays visible**: a tree or prop that would cut the chase
+  camera's sight line on a bend's inside is dropped (`blocksRoadAhead`); the
+  raised verge would otherwise stand it over the camera.
 
 ## The sun: one static light rule, three receivers, three maps
 
@@ -521,7 +865,8 @@ parameterisation, and the reasons are the rule:
 
 - **The GROUND** (vground.mat) taps a map on the LIGHT's own grid (vvis.mat
   renders it through the ESM's camera), which works only for a surface that is
-  single-valued under a near-overhead sun. One surface, no depth buffer.
+  single-valued under a near-overhead sun. Depth-tested, so the verge band
+  lying over the grid wins its texels.
 - **The STRUCTURES and BERMS** (also vground.mat, white albedo) share a SECOND
   light-space map, DEPTH-TESTED. One map cannot hold the ground and an occluder
   above it: drawing the occluder erases the very texels of its own cast shadow.
@@ -628,7 +973,7 @@ So:
   their vertex colours at build (`Mesh::bakeLight`, `bakedMatteLight`); the static
   kit copies do the same through their merged groups; the shadow RECEIVERS keep it
   in custom0 (above). What lights live is only what MOVES — the cars, the cone
-  pool, the windmill, the plane, the rockets. Lighting the kit material per vertex
+  pool, the plane, the rockets. Lighting the kit material per vertex
   for those measured a null. The one visible difference of a vertex bake is a
   coarse smooth-normal cylinder lit between its vertices.
 - **Triangle ORDER is a cost too.** A tiler re-shades a vertex per primitive batch,
@@ -644,8 +989,30 @@ So:
   is two pictures, the clean seconds and a few a lap where every cell looks across
   the whole circuit. A listed renderable owns a second index range that strays at
   most `err` world units, drawn past the distance where `err` covers `kLodPx`
-  pixels OF THAT CELL. The deck's is a ribbon over same-coloured rings; a static
-  unlit mesh opts in with `simplify`; the flowers do not (it strips the petals).
+  pixels OF THAT CELL, counted as its share of a frame no taller than
+  `kLodLines`, so a 4K panel swaps where a 1080 one does. **That is lite's
+  rule. Full swaps at `kLodPxFull`, of what the haze lets through**: a far
+  form is a different picture up close (a fir's snow tiers gone, a pole
+  gone altogether, neither of which `err` counts), and at lite's gate whole
+  groves changed form 60 to 100 u ahead of a racer. Full's far forms also
+  keep every shade where it is (`farForm`'s `keepShades`): the simplifier
+  counts how far a surface strays and nothing else, so it slid a fir's snow
+  down its cone for free. `npm run see:pops` counts what swaps per frame;
+  hold a change to the gate or the forms to it. Full's forms also keep a
+  small closed shape whole (`kFarWhole`: a post, a rail, a ring), which the
+  simplifier otherwise folds away for no error. In both tiers a shape the
+  simplifier left nothing of (thinner than `kFarTol`: a cable, a frond, a
+  flag) goes back in at a quarter of its triangles if it is longer than a
+  small thing is at the swap; kept whole, those were a tenth to a fifth of
+  lite's vertices, and left out, a lift stood with no cable. **No full-tier platform keeps lite's gate in a split, the
+  Apple TV included**: lite's gate in a 540-line cell puts 15 to 55 pops a
+  lap back against 1 to 3, so a full-tier platform short of frame pays in
+  render scale instead.
+  **The fog's far exit is the sky's alone** (`TTP_FOG_SKY`, `ttp_fog.inc`):
+  the world fogs all the way out, or a roof 400 u off stands crisp before
+  hazed hills. The deck's is a
+  ribbon over same-coloured rings; a static unlit mesh opts in with
+  `simplify`; the flowers do not (it strips the petals).
   It runs at every cell count (the user's call). **A chunk a car shadow lies on
   stays NEAR in every cell** (`mShadowRings`, from `placeCarShadow`): the
   shadow pass is the fine rings' own planes, and under the far ribbon's
@@ -677,11 +1044,11 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
 - **A STATIC dressing group is BAKED, not instanced** (`MergedGroup::baked`,
   `bakeMergedRun`): the copies expand into one world-space mesh whose vertex
   colour is texture × live baseColorFactor × matte light, drawn unlit. The texture
-  half comes from `generated/kit_colors.h` (`scripts/gen-kit-colors.mjs`, gated by
-  codegen-freshness) — the kit's atlas is flat swatches, so a vertex sample
-  interpolates back to the picture. The FACTOR is read from the live instance,
-  never the GLB, because the biome recolours untextured models through it. A model
-  the table does not know keeps the instanced, live-lit draw.
+  half is sampled from the atlas per vertex when a model is first baked
+  (`kitColors`, `ttp/kit_colors.h`; the atlas's bytes are `generated/kit_atlas.h`,
+  gated by codegen-freshness) — the kit's atlas is flat swatches, so a vertex
+  sample interpolates back to the picture. The FACTOR is read from the live instance,
+  never the GLB, because the biome recolours untextured models through it.
 - **An INSTANCED prim that is not flat is welded on bit-identical (position,
   normal, uv) first** (`weldPrimExact`): same attributes, same quats, same
   pixels, fewer vertices per instance. A baked run expands the prims as they
@@ -700,36 +1067,157 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
 
 **A track's SET PIECES ride the same path** (`buildSetPieces`, the track's
 `set` list in `public/shared/tracks.js`): composed GLBs instanced like props,
-so they merge, bake and get a far form with no renderer path of their own. Two
+so they bake with the same colour and light and get a far form. One
+difference is in the grouping: a set piece bakes **per PLACEMENT, not per mesh**
+(`bakePlacements`). A Blender piece exports a mesh per part and its placements
+stand too far apart for a per-mesh run to join two, so the per-mesh merge drew
+every part of every placement as its own renderable (a hundred-odd draws a
+piece). Each placement's still parts become one mesh per `mPieceTile` tile,
+split by whole part, so a big piece still culls and takes its far form a
+corner at a time (never through a part, so a tile's far form needs no locked
+border). **What hangs under an `anim_*` node is no static merge's**: the
+motion pass bakes it (below), and until it does the part draws live-lit and
+the live-dressing gate names it.
+A `spin` subtree is mirrored per frame like the toy train's. Two more
 things differ from the scatter, both deliberate. They CAST into the sun bake
 (the baked run inherits the caster layer) — the bake is per track, so it costs
 build time, never frame time. And everything seeded after them keeps out of
 their oriented footprints (`mSetFeet`): they are authored, so they win their
 ground. The scatters keep out of the grass berms the same way (`inBerm`), since
 they ground a piece on the terrain beneath one; the verge band starts at the
-berm's foot, and a prop is grounded under its model's own footprint and
-dropped, never sunk, where its uphill edge would bury a quarter of its height. A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
+berm's foot. **What the scatters stand reads the ground at its own foot**,
+since the band's apron is a slope through the very strip they dress: a prop
+under its model's own footprint, lying tilted on the slope if it is squat (a
+bale on a bank) and standing plumb if tall, dropped, never sunk, where its
+uphill edge would still bury a quarter of its height; a boulder at the
+lowest point under it, dropped where the land climbs more than its own height
+across it (half-sunk in a flank it read as a lump); a tree at the lowest
+point under its trunk; each part of the clutter (a flower, a pebble, a rod
+of driftwood) under itself, not its spot's centre.
+**Each scatter SPOT draws from its own seeded stream** (`spotSeed`): with one
+stream for the pass, a spot a piece's foot skipped shifted the draws of every
+spot after it, so moving one set piece re-rolled every tree further round the
+lap and no placement could be judged before it was built
+(`npm run place:landmarks`). A piece is authored where it stands. What a piece costs at draw time is its vertices in the cells
 that see it, so a heavy one belongs where few cells look at once, and is
 priced on the box's 4P heavy seconds like any other geometry. A composed
 model whose node names point at two meshes is REFUSED by the merge and draws
-live-lit with nothing to say so, which is why `scripts/lib/glb-compose.mjs`
-renames them; a kit model shipped whole can carry the same flaw (the budget
-names it).
+live-lit with nothing to say so (the budget names it).
+
+**A set piece's MOVING PART is a node named `anim_...`** (the grammar is
+`ttp/set_motion.h`, the drawing `TtpRendererMotion.cpp`): baked unlit like
+the static runs, light frozen at rest, and moved by one transform a frame that
+is a closed form of the scene clock and the cars, so it has no state to reset.
+**In full a placement's parts are ONE skinned draw**, that transform each
+part's own bone, so a knot of penguins costs a draw and every penguin still
+moves by itself; Filament culls a skinned draw on the box it is handed, so
+that box holds every pose of what moves in place and, frame by frame, where
+each traveller is now. Lite keeps a draw per part (its builds group a knot
+into one part), because the skinned draw is a pipeline the box would compile
+on first sight, mid-race; warm it there before lite takes it. Hence the verbs: spins about the part's own axis,
+sways, bobs, hops, turns of a few tens of degrees, and paths whose hidden half
+runs inside something opaque (or whose loop is closed in sight). **Cloth
+(`flutter`: a flag, a pennant, a windsock) is the one part that bends**: the
+motion pass cuts it across its fly and gives each cut a bone of the skin, so a
+ripple runs down it; in lite, with no skin, it swings whole. A plate on a
+`sway` read as a board on a hinge. A part inside
+another rides on it: its pose composes onto the outer part's pose of the same
+frame, so the outer one is built and moved first. A part that travels leaves the sun bake; one that
+moves in place keeps its rest shadow. Every part takes a far form (in full, the placement's skin
+takes one); one that travels, or rides a traveller, measures it to its reach round that traveller's
+pivot THIS frame, since its rest box is wherever it was built. Measured to the whole loop's sweep,
+a line round the map (Sidewinder's trains) was never culled and never far. So a traveller's skin
+is only as tight as the placement: travellers spread round one loop belong in placements of their own.
+A traveller is drawn only on its path, so where it is built is just its pivot: a flier is built on
+the floor under its loop, or it would count in the piece's box, its sight points and the floating
+check as a part standing in the air. The static merge leaves every `anim_`
+slot alone, so a merge change (per-placement bakes) must too.
 
 **New world content is priced on the host first, the box once per batch.**
 `npm run budget:scene` counts what each cell submits over a whole lap (the
 count is decided in this C++ before any backend sees it, so it transfers to
-the box) and fails a track whose worst frame grows, a shipped track's 4P frame
-over the baseline's `ceiling`, and any static dressing the merge left live-lit
-(`ttp_display_debug_live_dressing` names it). The ceiling is a box fact, the
-worst frame a track may have while 4P still holds, so it moves only on a box
-reading. Over budget: move it off the vista (what every cell sees down the
-straight), then make it lighter. Never a per-fragment term, a blended material
-or a new material.
-A biome PROP is capped per model before it is priced at all
-(`tests/display-abi.test.js`): it is stamped many times a lap, and the kit
-authors a barrel with a car's vertices. `scripts/slim-kit-models.mjs`
-decimates a kit model from the ratio SOURCES.json records for it.
+the box), in BOTH detail tiers (below), and fails a track whose worst frame
+grows, a shipped track's lite 4P frame over the box's `ceiling` or its 4P draws
+per cell over its `drawCeiling`, and any static dressing the merge left
+live-lit (`ttp_display_debug_live_dressing` names it). The ceilings are device
+facts, the most vertices and the most draws a track may have while 4P still
+holds on the box: there each limits as much as the other, so both are gated
+(the calibration is in `scripts/scene-budget.mjs`), and they move only on a
+box reading. **FULL IS UNCAPPED** (the user's call): the world is
+authored as rich as it should look, and what the box cannot carry is cut in
+the lite tier (below), not from the world. Over the box's budget: cut it in
+lite (a lite build, `lite: false`), move it off the vista (what every cell
+sees down the straight), or merge it. Never a per-fragment term, a blended
+material or a new material.
+A biome PROP is capped per model in the lite tier (`tests/display-abi.test.js`):
+it is stamped many times a lap. Over the cap, it gets a lite build: authored
+in its builder (`lite_too`, an `own-<file>-lite` piece) or decimated
+(`scripts/bake-lite.mjs`).
+
+## The detail tier
+
+**LITE is the same world with what a racer barely sees taken off the frame**,
+so the weakest device (the Android TV box at 4P/540) holds while the web and
+the Apple TV draw FULL and keep the headroom over it. The tier is decided in
+C++ (`ttp/detail.h`, from the platform each shell names to
+`ttp_display_detail`) and latched like the shadows: `setLite` drops the static
+key, since most cuts are built in, and the static scene's key (`bakeKeyFor`)
+names the tier, since the two tiers build different worlds. The shell asks for
+the tier before it fetches a track's models, because the theme names the lite
+ones by the tier in force. The landforms, the set pieces, the deck and
+the cars are the world and lite leaves them whole unless their author says
+otherwise (car far forms were rejected
+on look; the deck is the surface the cars sit on). What it cuts, each beside
+its code:
+
+- **A model's lite build**: a model with a `<model>-lite.glb` beside it is
+  drawn from that file (`ttp/theme.h` `lite_models`, from the generated
+  `TTP_LITE_MODELS`), for set pieces, props and scenery alike, recoloured as
+  the model it stands in for. A built piece gets one from its own builder
+  (`lite_too` in `scripts/blender/set_prototypes.py`): the builder's general
+  cuts for a `-lite` piece (`BOX_TIER`: coarser rings, no chamfer on a small
+  block) and whatever the piece leaves out under `LITE`.
+  `scripts/bake-lite.mjs model:ratio` decimates a static model that has no
+  builder.
+- **Full-only pieces and land**: a set entry or a `land` form authored
+  `lite: false` is left out of the lite tier's list altogether (not a piece
+  that brings its own ground, SET_GROUND, nor that ground, which the
+  generator refuses).
+
+- **The cup's ambient life** (`theme.life`: petals, motes): blended
+  sprites are fill, and none has been priced on the box yet
+  (`resolve_theme`).
+
+- **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
+  16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a
+  few percent more vertices (less of each sheet culled).
+- **A coarser sky dome** (16 rings, 24 spokes): never culled, so every cell
+  paid all of the full one; the gradient between rings strays a few code values.
+- **Octagonal ground-shadow discs**: the rim fades to nothing.
+- **Unbanded ground rock** (`setRockParams`): `vground.mat`'s strata are off,
+  so a rock facet is the plain `rockA`, still shaded by its own normal. The
+  banding is the expensive part of a rock pixel on the box, and a canyon's
+  walls are much of its frame.
+- **The small-thing cut** (`CutRange`, `chooseCuts`): a run of scatter or
+  props, or a chunk of clutter, leaves a cell's scene once what it holds covers
+  under `kCutPx` pixels of THAT cell. Per cell like the far forms, so a 1P cell
+  keeps what a 4P one drops. By scene membership: a layer bit is spoken for and
+  a range of nothing is still a draw.
+
+Tried and left out, each 1-3% of the vertices: far forms from 3 px (a near
+tree's canopy swaps at 17 u, not 26) and the cut at 8 px, both pops a
+frame-matched still shows; and no copse companions, or a thinner scatter or
+clutter, which change the verge in 1P too, where the box has the headroom.
+
+Priced at the box's 4P buffer on the heavy tracks, lite's worst frame has
+about 30% fewer draws and 6-13% fewer vertices than full's; most of the rest
+of the vertices are the road, the cars and the ground, which it does not touch. It
+changes no sim, so `film:laps -- --detail lite` films the same race frame for
+frame beside full, and `score:verge -- --detail lite` scores it. `perf:race --
+--detail lite|full` prices either tier on any of the three shells; the
+readout's `detail` is the tier the display was handed, read in C++. Each TV app
+SHIPS only its own tier's models (its `stage-assets.sh`), so pricing the other
+tier there takes a build staged with `TTP_STAGE_TIERS=all`.
 
 **What a draw cut buys is a fact about the device.** On a fill-bound frame (the
 Android box) it steadies the tail and leaves the median; on a submission-bound one

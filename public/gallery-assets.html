@@ -48,20 +48,6 @@
     </label>
   </div>
 
-  <!-- The KIT FIELD: every model in the three Kenney kits, standing on the
-       ground beyond the track. Not a picker beside the scene — the scene. The
-       concept cars stand in the same field, ahead of the kits. -->
-  <div class="group">
-    <label class="checkbox-label" for="asset-concepts">
-      <input type="checkbox" id="asset-concepts">
-      Concept cars
-    </label>
-    <label class="checkbox-label" for="asset-kits">
-      <input type="checkbox" id="asset-kits">
-      Kit field
-    </label>
-  </div>
-
   <!-- In a .group so the mobile header collapses it behind ⚙ with the rest. -->
   <div class="group">
     <button class="ctrl" id="asset-home">Back to the cars</button>
@@ -74,6 +60,7 @@
     <a href="/gallery-controller.html">Phone</a>
     <a href="/gallery-tracks.html">Tracks</a>
     <a href="/gallery-assets.html" class="active">Assets</a>
+    <a href="/gallery-landmarks.html">Landmarks</a>
     <a href="/gallery-artwork.html">Artwork</a>
     <a href="/gallery-sounds.html">Sounds</a>
     <a href="/gallery-music.html">Music</a>
@@ -91,18 +78,6 @@
   <aside class="legend" id="asset-legend-panel" hidden>
     <p class="legend__hint">Drag to look · scroll to fly · WASD · Q/E</p>
     <div id="asset-legend-lists"></div>
-  </aside>
-  <!-- The field's TABLE OF CONTENTS. The models themselves are out there on the
-       ground at their own size; this is how you find one among six hundred — a
-       row flies the camera to it, and the filter rebuilds the field with only
-       what matches. -->
-  <aside class="kits" id="kit-sheet" hidden>
-    <div class="kits__bar">
-      <select id="kit-set" hidden><option value="">All kits</option></select>
-      <input type="search" id="kit-filter" placeholder="Filter by name…" autocomplete="off">
-      <span class="kits__count" id="kit-count"></span>
-    </div>
-    <div id="kit-body"></div>
   </aside>
 </section>
 

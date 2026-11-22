@@ -17,15 +17,12 @@ const site = require('./site.js');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const REVIEW_DIR = path.join(__dirname, '..', 'scratch', 'review');
+const REVIEW_NOTE_MAX = 48 * 1024 * 1024;
 // partyplug (the transport kit) lives OUTSIDE public/ as a clearly-separate
 // vendored dependency, served via the remap below. Restricted to .js so
 // package artifacts / binaries can't be walked.
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
-// The Kenney kits the game's models are PICKED FROM, and candidates for more,
-// for the asset gallery's kit browser. `npm run fetch:kits` fills this (a
-// gitignored cache, never deployed), which is why the route below is allowed
-// to 404 — the gallery reads that as "not fetched" and says so.
-const KITS_DIR = path.join(__dirname, '..', '.cache', 'kenney-kits');
 
 // The working tree's HEAD, for the version label ('' without git).
 function detectLocalSha() {
@@ -71,7 +68,7 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
-  // 3D assets — glTF binary. The Kenney GLBs are self-contained (no .gltf/.bin
+  // 3D assets — glTF binary. The GLBs are self-contained (no .gltf/.bin
   // companions are served); without this they'd fall back to octet-stream.
   '.glb': 'model/gltf-binary',
   // Audio. The race itself is asset-free Web Audio synthesis, but the sound
@@ -145,6 +142,116 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // REVIEW, for /gallery-landmarks.html: notes taken on the stage, and a round
+  // of items set up to be judged there with the verdicts given on it; and for
+  // /gallery-music.html, the song picked for each track. It reads
+  // and writes the checkout's scratch/review/ (gitignored), so it exists only on
+  // this local host (no deployed host has it) and answers only this machine.
+  if (urlPath.startsWith('/api/review-')) {
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) {
+      sendJson(res, 403, { error: 'review is kept on a local dev server only' });
+      return;
+    }
+    const readJson = (max, use) => {
+      const chunks = [];
+      let size = 0;
+      req.on('data', (c) => { size += c.length; if (size > max) req.destroy(); else chunks.push(c); });
+      req.on('end', () => {
+        try { use(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { sendJson(res, 400, { error: String((e && e.message) || e) }); }
+      });
+    };
+    // A NOTE: a picture of the stage, what the viewer wrote on it and where in
+    // the lap it was taken, for whoever works the note off.
+    if (urlPath === '/api/review-note' && req.method === 'POST') {
+      readJson(REVIEW_NOTE_MAX, ({ meta, note, pins, png, marked }) => {
+        const track = String((meta && meta.track) || 'track').replace(/[^a-z0-9-]/gi, '');
+        const id = `${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}-${track}`;
+        const image = (url, type) => Buffer.from(String(url).replace(new RegExp(`^data:image/${type};base64,`), ''), 'base64');
+        fs.mkdirSync(REVIEW_DIR, { recursive: true });
+        fs.writeFileSync(path.join(REVIEW_DIR, `${id}.png`), image(png, 'png'));
+        if (marked) fs.writeFileSync(path.join(REVIEW_DIR, `${id}-pins.jpg`), image(marked, 'jpeg'));
+        fs.writeFileSync(path.join(REVIEW_DIR, `${id}.json`), JSON.stringify({ id, note, pins, meta }, null, 2) + '\n');
+        sendJson(res, 200, { id, dir: path.relative(path.join(__dirname, '..'), REVIEW_DIR) });
+      });
+      return;
+    }
+    // A ROUND: round.json, written by whoever sets the round up (its shape is
+    // scripts/review-round.example.json), answered with the verdicts given on
+    // it so far. No round file is a 404, and the gallery shows no panel.
+    const roundFile = path.join(REVIEW_DIR, 'round.json');
+    const readRound = () => (fs.existsSync(roundFile) ? JSON.parse(fs.readFileSync(roundFile, 'utf8')) : null);
+    const verdictsFile = (round) => path.join(REVIEW_DIR, `verdicts-${String(round).replace(/[^\w-]/g, '')}.json`);
+    const readVerdicts = (round) => (fs.existsSync(verdictsFile(round)) ? JSON.parse(fs.readFileSync(verdictsFile(round), 'utf8')) : {});
+    if (urlPath === '/api/review-round' && req.method === 'GET') {
+      try {
+        const round = readRound();
+        if (!round) sendJson(res, 404, { error: 'no review round in scratch/review/' });
+        else sendJson(res, 200, { ...round, verdicts: readVerdicts(round.round) });
+      } catch (e) {
+        sendJson(res, 500, { error: `scratch/review: ${(e && e.message) || e}` });
+      }
+      return;
+    }
+    // A VERDICT on one item of the current round: that item's one entry in
+    // verdicts-<round>.json, { decision, note, answers, at, title }, a later
+    // verdict replacing it. `answers` follow the item's `ask` in order; an
+    // item that only asks (an idea, a question) may be answered with no
+    // decision.
+    if (urlPath === '/api/review-verdict' && req.method === 'POST') {
+      readJson(64 * 1024, ({ round, id, decision, note, answers }) => {
+        const current = readRound();
+        const item = current && current.round === round && (current.items || []).find((it) => it.id === id);
+        if (!item) { sendJson(res, 400, { error: `'${id}' is not an item of the current round` }); return; }
+        if (decision != null && !['keep', 'rework', 'drop'].includes(decision)) { sendJson(res, 400, { error: 'a decision is keep, rework or drop' }); return; }
+        const said = Array.isArray(answers) ? answers.map((a) => String(a || '').trim()) : [];
+        if (decision == null && !said.some(Boolean) && !String(note || '').trim()) { sendJson(res, 400, { error: 'nothing to save' }); return; }
+        const verdicts = readVerdicts(round);
+        verdicts[id] = { decision: decision || null, note: String(note || '').trim(), answers: said,
+                         at: new Date().toISOString(), title: item.title || id };
+        fs.writeFileSync(verdictsFile(round), JSON.stringify(verdicts, null, 2) + '\n');
+        sendJson(res, 200, { verdict: verdicts[id], file: path.relative(path.join(__dirname, '..'), verdictsFile(round)) });
+      });
+      return;
+    }
+    // MUSIC PICKS, for /gallery-music.html: the song chosen for each track and
+    // a note on it, in music-picks.json as { <track>: { song, at, note } }. A
+    // post names one track and touches only that entry: `song` a file under
+    // /assets/audio/music/ (null clears it, absent keeps it), `note` likewise.
+    const picksFile = path.join(REVIEW_DIR, 'music-picks.json');
+    const readPicks = () => (fs.existsSync(picksFile) ? JSON.parse(fs.readFileSync(picksFile, 'utf8')) : {});
+    if (urlPath === '/api/review-music' && req.method === 'GET') {
+      try {
+        sendJson(res, 200, readPicks());
+      } catch (e) {
+        sendJson(res, 500, { error: `scratch/review: ${(e && e.message) || e}` });
+      }
+      return;
+    }
+    if (urlPath === '/api/review-music' && req.method === 'POST') {
+      readJson(64 * 1024, ({ track, song, note, rain }) => {
+        if (!/^[a-z0-9-]{1,40}$/.test(String(track))) { sendJson(res, 400, { error: 'a track is a catalogue track id' }); return; }
+        if (song != null && !/^(candidates\/)?[\w-]+(\.[\w-]+)*\.mp3$/.test(String(song))) {
+          sendJson(res, 400, { error: 'a song is a file under /assets/audio/music/' });
+          return;
+        }
+        const picks = readPicks();
+        const was = picks[track] || {};
+        const entry = { song: song === undefined ? (was.song || null) : song, at: new Date().toISOString() };
+        const said = String(note === undefined ? (was.note || '') : (note || '')).trim().slice(0, 4000);
+        if (said) entry.note = said;
+        // The rain knob's level, as a share of the game's (a rain track only).
+        const wet = rain === undefined ? was.rain : rain;
+        if (Number.isFinite(wet) && wet >= 0 && wet <= 2) entry.rain = Math.round(wet * 100) / 100;
+        if (entry.song || entry.note || entry.rain != null) picks[track] = entry;
+        else delete picks[track];
+        fs.mkdirSync(REVIEW_DIR, { recursive: true });
+        fs.writeFileSync(picksFile, JSON.stringify(picks, null, 2) + '\n');
+        sendJson(res, 200, { pick: picks[track] || null, file: path.relative(path.join(__dirname, '..'), picksFile) });
+      });
+      return;
+    }
+  }
+
   // --- route remaps (public/.htaccess has the same) ---
   if (urlPath === '/') {
     urlPath = '/display/index.html';
@@ -167,36 +274,12 @@ const server = http.createServer((req, res) => {
     if (!/^\/[\w.-]+\.js$/.test(urlPath.slice('/partyplug'.length))) { res.writeHead(404); res.end('Not Found'); return; }
     baseDir = PARTYPLUG_DIR;
     lookupPath = urlPath.slice('/partyplug'.length);
-  } else if (urlPath.startsWith('/kits/')) {
-    // The kit cache, for /gallery-assets.html's kit browser: its manifest, one
-    // preview render per model, and the models themselves — the browser stages a
-    // candidate on the showroom grid by handing the renderer its bytes.
-    //
-    // Reachable here is not the same as shipped: a kit model ENTERS the game by
-    // being copied into public/assets/toycar and recorded in its SOURCES.json.
-    // Nothing may load one of these at play time, because this cache exists on
-    // one laptop and on no deployed host.
-    const rest = urlPath.slice('/kits'.length);
-    if (!/^\/(index|shortlist)\.json$/.test(rest)
-        && !/^\/[\w-]+\/previews\/[\w.-]+\.png$/.test(rest)
-        && !/^\/[\w-]+\/models\/[\w.-]+\.glb$/.test(rest)) {
-      res.writeHead(404); res.end('Not Found'); return;
-    }
-    baseDir = KITS_DIR;
-    lookupPath = rest;
   }
 
-  let filePath = path.join(baseDir, lookupPath);
+  const filePath = path.join(baseDir, lookupPath);
   // Directory-traversal guard. The trailing separator is load-bearing.
   if (!filePath.startsWith(baseDir + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
 
-  // A kit the game has not shipped from yet keeps its palette in the kit cache
-  // (`npm run fetch:kits`), under the name its staged models reference — so the
-  // kit browser draws them coloured. Dev only: no deployed host has the cache.
-  if (/^\/assets\/toycar\/Textures\/[\w-]+\.png$/.test(urlPath)
-      && !fs.existsSync(filePath)) {
-    filePath = path.join(KITS_DIR, 'textures', path.basename(urlPath));
-  }
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not Found'); return; }
 

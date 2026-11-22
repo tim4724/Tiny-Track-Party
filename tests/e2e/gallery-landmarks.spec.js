@@ -1,0 +1,442 @@
+// @ts-check
+// The landmark gallery's scene (/gallery-landmarks.html drives it through
+// window.__landmarks). The look of each pose is judged by eye on the page; this
+// pins what an eye cannot be asked to notice going away: the set layout
+// reaching the page, the lap score, the split following the seats, every view
+// switching on a scene that keeps drawing, each cell's camera being a real
+// pose that has its landmark in the lens, the driver views parking every
+// cell's car at a spot of its own on level, upright road with its own car in
+// shot (and the framed views parking none), and the pinned render scale.
+const { test, expect } = require('./helpers');
+
+const frames = (page, n) => page.evaluate((k) => new Promise((resolve) => {
+  let left = k;
+  window.__scene.onAfterFrame = () => { if (--left <= 0) { window.__scene.onAfterFrame = null; resolve(); } };
+}), n);
+
+// Per cell: is the framed piece's footprint centre inside the pose's horizontal
+// lens? The renderer may only widen a cell's lens, so inside here is inside on
+// screen.
+const inLens = (page) => page.evaluate(() => {
+  const lay = window.__landmarks.layout();
+  return window.__landmarks.poses().map((q) => {
+    const p = lay.pieces[q.piece];
+    const half = Math.atan(Math.tan((q.fov / 2) * Math.PI / 180) * q.aspect);
+    const fwd = Math.atan2(q.target.x - q.eye.x, q.target.z - q.eye.z);
+    const to = Math.atan2(p.cx - q.eye.x, p.cz - q.eye.z);
+    return Math.abs(Math.atan2(Math.sin(to - fwd), Math.cos(to - fwd))) < half;
+  });
+});
+const poses = (page) => page.evaluate(() => window.__landmarks.poses());
+// Per cell: is its own parked car inside the pose's horizontal lens? A cell
+// that turns its camera onto a piece off to the side must not turn away from it.
+const carInLens = (page) => page.evaluate(() => {
+  const L = window.__landmarks;
+  const ps = L.poses();
+  const fr = window.__scene.display.trackFrames(L.trackId(), ps.map((q) => q.car.s));
+  return ps.map((q, k) => {
+    const f = fr[k];
+    const x = f.pos.x + f.lateral.x * q.car.lat, z = f.pos.z + f.lateral.z * q.car.lat;
+    const half = Math.atan(Math.tan((q.fov / 2) * Math.PI / 180) * q.aspect);
+    const fwd = Math.atan2(q.target.x - q.eye.x, q.target.z - q.eye.z);
+    const to = Math.atan2(x - q.eye.x, z - q.eye.z);
+    return Math.abs(Math.atan2(Math.sin(to - fwd), Math.cos(to - fwd))) < half;
+  });
+});
+// The driver poses' parking, against the page's own rules: per cell whether the
+// road under its car is upright and near level, and the closest two cars in
+// one lane come along the road (Infinity with one car a lane).
+const parking = (page) => page.evaluate(() => {
+  const L = window.__landmarks;
+  const { upright, level } = L.rules();
+  const cars = L.poses().map((q) => q.car);
+  const fr = window.__scene.display.trackFrames(L.trackId(), cars.map((c) => c.s));
+  const len = L.layout().length;
+  let closest = Infinity;
+  cars.forEach((a, i) => cars.slice(i + 1).forEach((b) => {
+    if (Math.sign(a.lat) !== Math.sign(b.lat)) return;
+    const d = Math.abs(a.s - b.s) % len;
+    closest = Math.min(closest, d, len - d);
+  }));
+  return { upright: fr.map((f) => f.up.y >= upright && Math.abs(f.tangent.y) <= level), closest };
+});
+const finite = (q) => [q.eye.x, q.eye.y, q.eye.z, q.target.x, q.target.y, q.target.z, q.fov]
+  .every(Number.isFinite) && q.fov > 0;
+
+// No review round: the real endpoint answers with whatever round this checkout
+// has in scratch/review, and a round opens the panel on its Review tab.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/review-round', (route) => route.fulfill({ status: 404, json: { error: 'none' } }));
+});
+
+test('landmark gallery: layout, split and every view', async ({ page }) => {
+  // It walks every view of every piece on several tracks, so it grows with the
+  // world; beside the suite's other workers it outruns the default limit.
+  test.slow();
+  // A named scale, as the gallery page passes one: the buffer is the stage's
+  // own height at that scale, whatever the adaptive rule would have done.
+  await page.goto('/?scenario=landmarks&track=tidepool&players=2&dpr=0.5');
+  await page.waitForFunction(() => window.__landmarks, null, { timeout: 30000 });
+  await page.evaluate(() => window.__landmarks.ready());
+  expect(await page.evaluate(() => window.__landmarks.lines()))
+    .toBe(await page.evaluate(() => Math.round(window.__scene.container.clientHeight * 0.5)));
+
+  const layout = await page.evaluate(() => window.__landmarks.layout());
+  expect(layout.length).toBeGreaterThan(0);
+  expect(layout.pieces.length).toBeGreaterThan(0);
+  for (const p of layout.pieces) expect(p.model).toMatch(/^set-/);
+  // Each piece's meshes, which the sight lines test against.
+  for (const p of layout.pieces) expect(p.parts.length).toBeGreaterThan(0);
+  // The beach's palms and boulders, which they test against too.
+  const scatter = await page.evaluate(() => window.__scene.display.scatterLayout());
+  expect(scatter.length).toBeGreaterThan(0);
+  for (const row of scatter) expect(row.length).toBe(4);
+  // One entry per model, every placement counted.
+  const marks = await page.evaluate(() => window.__landmarks.landmarks());
+  expect(new Set(marks.map((m) => m.model)).size).toBe(marks.length);
+  expect(marks.reduce((n, m) => n + m.count, 0)).toBe(layout.pieces.length);
+
+  // The lap score: a lap was driven, every piece has a row, and its clean
+  // seconds are seconds it spent in the lens.
+  const score = await page.evaluate(() => window.__landmarks.score());
+  expect(score.lap).toBeGreaterThan(0);
+  expect(score.pieces.map((p) => p.model)).toEqual(layout.pieces.map((p) => p.model));
+  for (const p of score.pieces) {
+    expect(p.seen).toBeLessThanOrEqual(p.lens);
+    expect(p.small + p.hidden + p.roof).toBeLessThanOrEqual(p.lens + 0.1);
+    // no road runs through a piece or over it (`npm run place:landmarks` moves one that does)
+    expect(['road', 'deck'], `${p.label} clashes`).not.toContain(p.spot);
+  }
+  // Every static part of every piece took the bake: nothing still is left
+  // drawing live-lit. The scene budget gates the same answer per track, but
+  // nothing runs it unasked.
+  expect(await page.evaluate(() => window.__scene.display.debugLiveDressing())).toEqual({});
+
+  const cells = () => page.evaluate(() => window.__scene.cellBoxes().length);
+  expect(await cells()).toBe(2);
+  await page.evaluate(() => window.__landmarks.players(4));
+  expect(await cells()).toBe(4);
+
+  for (const view of ['driver', 'glance', 'high', 'orbit', 'top', 'race', 'free']) {
+    expect(await page.evaluate((v) => window.__landmarks.view(v), view)).toBe(view);
+    await frames(page, 2);
+    // Free is one full view; every other mode keeps the seats' cells.
+    expect(await cells()).toBe(view === 'free' ? 0 : 4);
+    const got = await poses(page);
+    if (view === 'race' || view === 'free') expect(got).toEqual([]);
+    else {
+      expect(got.length).toBe(4);
+      for (const q of got) expect(finite(q)).toBe(true);
+      // Driver and glance park the cars on the approach; the framed views
+      // leave them on the grid.
+      for (const q of got) expect(!!q.car).toBe(view === 'driver' || view === 'glance');
+    }
+  }
+  // The stage takes the pointer in every view: a drag is how the camera is taken.
+  await page.evaluate(() => window.__landmarks.view('driver'));
+  expect(await page.evaluate(() => document.documentElement.classList.contains('cam-free'))).toBe(true);
+
+  // The approach and the glance have their landmark in shot, and the framed
+  // views stand somewhere else than the driver. Driver is the parked car's own
+  // chase rig, and four cells on one landmark are four drivers' approaches:
+  // no two cars parked on the same spot.
+  expect(await inLens(page)).toEqual([true, true, true, true]);
+  const driver = await poses(page);
+  for (const q of driver) expect(Number.isFinite(q.car.s) && Number.isFinite(q.car.lat)).toBe(true);
+  expect(new Set(driver.map((q) => `${q.car.s}:${q.car.lat}`)).size).toBe(4);
+  expect(driver.every((q) => q.piece === driver[0].piece)).toBe(true);
+  await page.evaluate(() => window.__landmarks.view('glance'));
+  expect(await inLens(page)).toEqual([true, true, true, true]);
+  for (const [i, q] of (await poses(page)).entries()) expect(q.fov).toBeLessThanOrEqual(driver[i].fov);
+  for (const view of ['high', 'orbit']) {
+    await page.evaluate((v) => window.__landmarks.view(v), view);
+    for (const [i, q] of (await poses(page)).entries()) expect(q.eye).not.toEqual(driver[i].eye);
+  }
+  await page.evaluate(() => window.__landmarks.spread(true));
+  await page.evaluate(() => window.__landmarks.focus(1));
+  expect(await page.evaluate(() => window.__landmarks.view('high'))).toBe('high');
+  await frames(page, 2);
+  expect(await cells()).toBe(4);
+  // Spread: each cell its own landmark, each in the driver's lens.
+  await page.evaluate(() => window.__landmarks.view('driver'));
+  const spread = await poses(page);
+  expect(new Set(spread.map((q) => q.piece)).size).toBe(Math.min(4, marks.length));
+  expect(await inLens(page)).toEqual([true, true, true, true]);
+  await page.evaluate(() => window.__landmarks.spread(false));
+  await expect(page.evaluate(() => window.__landmarks.view('nope'))).rejects.toThrow(/unknown landmark view/);
+
+  // A model stood more than once: place() frames each of its placements in
+  // turn, wraps, and a new focus starts again at the first.
+  const many = marks.findIndex((m) => m.count > 1);
+  expect(many).toBeGreaterThanOrEqual(0);
+  await page.evaluate((i) => window.__landmarks.focus(i), many);
+  const stood = marks[many].indices;
+  expect((await poses(page))[0].piece).toBe(stood[0]);
+  expect(await page.evaluate(() => window.__landmarks.place(1))).toBe(1);
+  expect((await poses(page)).map((q) => q.piece)).toEqual([stood[1], stood[1], stood[1], stood[1]]);
+  expect(await page.evaluate(() => window.__landmarks.place(-1))).toBe(stood.length - 1);
+  expect(await page.evaluate((n) => window.__landmarks.place(n), stood.length)).toBe(0);
+  await page.evaluate(() => { window.__landmarks.place(1); window.__landmarks.focus(0); });
+  expect(await page.evaluate(() => window.__landmarks.placed())).toBe(0);
+
+  // Race drives: the field leaves the grid.
+  await page.evaluate(() => window.__landmarks.view('race'));
+  const at = () => page.evaluate(() => window.__engine.getSnapshot().cars.map((c) => c.pose.pos.x + c.pose.pos.z));
+  const before = await at();
+  await frames(page, 20);
+  expect(await at()).not.toEqual(before);
+  await page.evaluate(() => window.__landmarks.view('driver'));
+
+  // Pretzel's landmarks sit past bends, where a short walk back finds no road
+  // that shows them: every one of them in the driver's lens with each cell's
+  // own car, and its cars parked apart (at least half a car gap in one lane),
+  // in 2P and 4P cells.
+  await page.evaluate(() => window.__landmarks.track('pretzel'));
+  const { carGap } = await page.evaluate(() => window.__landmarks.rules());
+  const n = await page.evaluate(() => window.__landmarks.landmarks().length);
+  expect(n).toBeGreaterThan(0);
+  for (const seats of [2, 4]) {
+    await page.evaluate((k) => window.__landmarks.players(k), seats);
+    for (let i = 0; i < n; i++) {
+      await page.evaluate((k) => window.__landmarks.focus(k), i);
+      expect(await inLens(page)).toEqual(Array(seats).fill(true));
+      expect(await carInLens(page)).toEqual(Array(seats).fill(true));
+      expect((await parking(page)).closest).toBeGreaterThanOrEqual(carGap / 2 - 1e-6);
+    }
+  }
+
+  // Powder's ski lift stands up its mountain, in no stretch's lens: every
+  // cell turns onto it, each from a spot of its own (two may stand abreast,
+  // a lane apart, where the mountain leaves few clear ones), each keeping its
+  // own car in shot.
+  await page.evaluate(() => window.__landmarks.track('powder'));
+  await page.evaluate(() => window.__landmarks.focus(0));
+  expect((await poses(page)).every((q) => q.look)).toBe(true);
+  expect(await carInLens(page)).toEqual([true, true, true, true]);
+  expect(new Set((await poses(page)).map((q) => `${q.car.s}:${q.car.lat}`)).size).toBe(4);
+
+  // Skysnake's landmarks stand by loops and steep ramps: no car parks on one.
+  await page.evaluate(() => window.__landmarks.track('skysnake'));
+  const m = await page.evaluate(() => window.__landmarks.landmarks().length);
+  for (let i = 0; i < m; i++) {
+    await page.evaluate((k) => window.__landmarks.focus(k), i);
+    expect((await parking(page)).upright).toEqual([true, true, true, true]);
+  }
+
+  // Still drawing at the end of it all.
+  expect(await page.evaluate(() => window.__scene.display.built)).toBe(true);
+  await frames(page, 3);
+});
+
+// The page names the stage's render scale (this screen's, the default) so a
+// rebuild's missed frames cannot step the picture down; a rung of the ladder is
+// that many lines on the standing stage, Auto hands the scale back to the
+// game's adaptive rule, and the choice is remembered. The tier, too, changes on
+// the standing stage: the scene is built again and the page is not.
+test('landmark gallery page: the resolution and the tier, with no reload', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeAttached({ timeout: 30000 });
+  const src = () => page.evaluate(() => new URL(document.getElementById('lm-stage').src).searchParams.get('dpr'));
+  const stage = (fn) => page.evaluate((f) => new Function('w', `return (${f})(w)`)(
+    document.getElementById('lm-stage').contentWindow), fn.toString());
+  // The panel's own scale, under the stage's height cap.
+  const sharp = await page.evaluate(async () => {
+    const { MAX_BUFFER_H } = await import('/display/Stage.js');
+    const h = document.getElementById('lm-stage').clientHeight;
+    return Math.min(window.devicePixelRatio || 1, MAX_BUFFER_H / h);
+  });
+  expect(Math.abs(Number(await src()) - sharp)).toBeLessThan(1e-3);
+  await expect(page.locator('#lm-res')).toHaveValue('sharp');
+  await stage((w) => { w.__same = true; });
+  await page.selectOption('#lm-res', '540');
+  expect(Math.abs((await stage((w) => w.__landmarks.lines())) - 540)).toBeLessThanOrEqual(1);
+  await page.click('#lm-tier');
+  await expect(page.locator('#lm-tier')).toHaveText('Tier: Lite');
+  await expect.poll(() => stage((w) => w.__scene.detail)).toBe('lite');
+  await page.click('#lm-tier');
+  await expect.poll(() => stage((w) => w.__scene.detail)).toBe('full');
+  expect(await stage((w) => w.__same)).toBe(true);   // the same document throughout
+  await page.selectOption('#lm-res', 'auto');
+  await page.reload();
+  await expect(page.locator('#lm-res')).toHaveValue('auto');
+  expect(await src()).toBeNull();
+});
+
+// The page's keys are few (the buttons do the rest), and the free camera's
+// keys reach it from either document: pressed while the page's chrome has
+// focus they are handed to the stage frame, and the arrows up and down are its
+// E and Q.
+test('landmark gallery page: the keys', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html#view=driver');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const mode = () => page.evaluate(() => document.getElementById('lm-stage').contentWindow.__landmarks.mode());
+  await page.evaluate(() => {
+    const w = document.getElementById('lm-stage').contentWindow;
+    w.__heard = [];
+    for (const type of ['keydown', 'keyup']) w.addEventListener(type, (e) => w.__heard.push(`${type} ${e.code}`));
+  });
+  const heard = () => page.evaluate(() => document.getElementById('lm-stage').contentWindow.__heard.splice(0));
+
+  await page.keyboard.press('g');
+  expect(await mode()).toBe('free');
+  await page.locator('#lm-track').focus();
+  await page.locator('#lm-track').evaluate((el) => el.blur());
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('w');
+  expect(await heard()).toEqual(['keydown KeyE', 'keyup KeyE', 'keydown KeyQ', 'keyup KeyQ', 'keydown KeyW', 'keyup KeyW']);
+
+  // The arrows no longer walk the catalogue: the track stays.
+  const track = await page.locator('#lm-track').inputValue();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#lm-track')).toHaveValue(track);
+
+  await page.keyboard.press('o');
+  expect(await mode()).toBe('orbit');
+});
+
+// The side panel's left edge drags to widen or narrow it, and the width is kept.
+test('landmark gallery page: the panel widens', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html#view=driver');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const width = () => page.locator('#lm-legend').evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const before = await width();
+  const g = await page.locator('#lm-grip').boundingBox();
+  await page.mouse.move(g.x + g.width / 2, g.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(g.x - 150, g.y + 40, { steps: 5 });
+  await page.mouse.up();
+  const wider = await width();
+  expect(wider).toBeGreaterThan(before + 100);
+  await page.reload();
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  expect(Math.abs((await width()) - wider)).toBeLessThan(3);
+});
+
+// The page opens on a race. What an eye cannot hold it to: that a pause stops
+// the sim, that going back and forth lands on the SAME race (a rewind is the
+// race dealt again and wound forward, so it is only a rewind while the race is
+// a function of its step count), that the race cameras change the eye and not
+// the race, and that a note carries the moment and what its pin points at.
+test('landmark gallery page: the race, paused, rewound and noted', async ({ page }) => {
+  await page.goto('/gallery-landmarks.html');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const L = (fn, arg) => page.evaluate(([f, a]) => {
+    const w = document.getElementById('lm-stage').contentWindow;
+    return new Function('L', 'E', 'a', `return (${f})(L, E, a)`)(w.__landmarks, w.__engine, a);
+  }, [fn.toString(), arg]);
+  const car = () => page.evaluate(() => {
+    const p = document.getElementById('lm-stage').contentWindow.__engine.getSnapshot().cars[0].pose.pos;
+    return [p.x, p.y, p.z];
+  });
+  expect(await L((l) => l.mode())).toBe('race');
+  expect(await L((l) => l.seats())).toBe(1);
+  // Enough race to go two seconds back and a frame further, in race TIME:
+  // the race steps once per drawn frame, and a software-GL runner draws few.
+  await page.waitForFunction(() => {
+    const r = document.getElementById('lm-stage').contentWindow.__landmarks.race();
+    return r.seconds > 3 && r.step > 10;
+  }, null, { timeout: 60000 });
+
+  await page.keyboard.press('Space');
+  const at = await L((l) => l.race());
+  expect(at.paused).toBe(true);
+  await expect(page.locator('#lm-pause')).toHaveText('Play');
+  const here = await car();
+  await page.waitForTimeout(200);
+  expect((await L((l) => l.race())).step).toBe(at.step);
+
+  // Back two seconds, a frame back, and forward again: the same car, to the bit.
+  await page.keyboard.press('ArrowLeft');
+  const back = await L((l) => l.race());
+  expect(at.seconds - back.seconds).toBeGreaterThan(1.9);
+  expect(at.seconds - back.seconds).toBeLessThan(2.1);
+  expect(await car()).not.toEqual(here);
+  await page.keyboard.press(',');
+  expect((await L((l) => l.race())).step).toBe(back.step - 1);
+  await L((l, e, to) => l.seek(to), at.step);
+  expect(await car()).toEqual(here);
+
+  // C is the race's cameras: the eye changes, the race does not.
+  for (const cam of ['free', 'top', 'chase']) {
+    await page.keyboard.press('c');
+    expect(await L((l) => l.race())).toMatchObject({ cam, step: at.step, paused: true });
+  }
+  expect(await L((l) => l.mode())).toBe('race');
+
+  // N: the note's picture, a pin on it, and the post it makes.
+  let posted = null;
+  await page.route('**/api/review-note', async (route) => {
+    posted = route.request().postDataJSON();
+    await route.fulfill({ json: { id: 'test', dir: 'scratch/review' } });
+  });
+  await page.keyboard.press('n');
+  await expect(page.locator('#lm-note-dialog')).toBeVisible();
+  await page.locator('#lm-note-img').click({ position: { x: 40, y: 40 } });
+  await page.locator('#lm-note-pins input').fill('this');
+  await page.locator('#lm-note-text').fill('too grey');
+  await page.locator('#lm-note-save').click();
+  await expect(page.locator('#lm-saved')).toContainText('scratch/review/test.json');
+  expect(posted.note).toBe('too grey');
+  expect(posted.meta).toMatchObject({ view: 'race', race: { cam: 'chase', step: at.step } });
+  expect(posted.pins).toHaveLength(1);
+  expect(posted.pins[0]).toMatchObject({ n: 1, text: 'this' });
+  expect('piece' in posted.pins[0]).toBe(true);
+  expect(posted.png.startsWith('data:image/png;base64,')).toBe(true);
+  expect(posted.marked.startsWith('data:image/jpeg;base64,')).toBe(true);
+});
+
+// COMPARE (B): a second stage in Lite beside the first in Full, following it.
+// What an eye cannot hold it to: that the two are ONE race (paused, the same
+// step and the same car to the bit, which only the first stage's own updates
+// give), that the first's free camera is the second's, that the list names what
+// Lite leaves out, and that turning it off unloads the second renderer.
+test('landmark gallery page: Full and Lite compared', async ({ page }) => {
+  test.slow();   // two renderers
+  await page.goto('/gallery-landmarks.html#track=powder');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const both = (fn) => page.evaluate((f) => ['lm-stage', 'lm-stage-b'].map((id) => {
+    const w = document.getElementById(id).contentWindow;
+    return new Function('L', 'w', `return (${f})(L, w)`)(w.__landmarks, w);
+  }), fn.toString());
+
+  await page.keyboard.press('b');
+  await expect(page.locator('#lm-compare')).toHaveText('Compare: on');
+  await page.waitForFunction(() => document.getElementById('lm-stage-b').contentWindow.__landmarks, null, { timeout: 30000 });
+  await expect.poll(() => both((L, w) => w.__scene.detail), { timeout: 30000 }).toEqual(['full', 'lite']);
+  await expect(page.locator('#lm-tier')).toBeDisabled();
+  // Powder leaves its outer verge out of Lite.
+  await expect(page.locator('#lm-diff button.kit-row', { hasText: 'left out' }).first()).toBeVisible({ timeout: 30000 });
+
+  await page.waitForFunction(() => document.getElementById('lm-stage').contentWindow.__landmarks.race().step > 10,
+                             null, { timeout: 60000 });
+  await page.keyboard.press('Space');
+  const car = (L, w) => {
+    const p = w.__engine.getSnapshot().cars[0].pose.pos;
+    return [L.race().step, p.x, p.y, p.z];
+  };
+  await expect.poll(async () => { const [a, b] = await both(car); return JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(async () => { const [a, b] = await both(car); return JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+
+  // Compare opens on the free camera (in a race, the race's own), and it is
+  // one camera: keys in the first stage and a drag in the lite one fly both.
+  await expect.poll(() => both((L) => L.race().cam)).toEqual(['free', 'free']);
+  await page.keyboard.down('w');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('w');
+  const eye = (L) => L.moment().free;
+  await expect.poll(async () => { const [a, b] = await both(eye); return !!a && JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+  const yaw = (await both(eye))[0].yaw;
+  const lite = await page.locator('#lm-stage-b').boundingBox();
+  await page.mouse.move(lite.x + lite.width / 2, lite.y + lite.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(lite.x + lite.width / 2 + i * 15, lite.y + lite.height / 2);
+  await page.mouse.up();
+  await expect.poll(async () => { const [a, b] = await both(eye); return a.yaw !== yaw && JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+
+  await page.keyboard.press('b');
+  await expect(page.locator('#lm-stage-b-box')).toBeHidden();
+  expect(await page.evaluate(() => document.getElementById('lm-stage-b').src)).toBe('about:blank');
+  await expect(page.locator('#lm-tier')).toBeEnabled();
+});

@@ -28,6 +28,7 @@ import { CAM, Display, RECT_STRIDE, TAG_STRIDE, assetCache } from './render/Disp
 import { PerfHud } from './render/PerfHud.js';
 import { PresentPacer } from './presentPacer.js';
 import { ITEM_IDS } from './engine/contract.js';
+import { CP_PLATFORM } from './NativeSessionModel.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
 
 // Labels are the vocabulary, shouted — derived, not re-typed.
@@ -99,16 +100,17 @@ const TAG_LIFT_EM = 0.4;
 // What a tag says: the car's name, or its seat for a car with none.
 const tagName = (c, id) => c.name || ('P' + id);
 
-const MAX_BUFFER_H = 2160;
+export const MAX_BUFFER_H = 2160;
 // How many drawn frames of the CURRENT scene the canvas must hold before a
 // hidden scene may stop drawing (see _hiddenIdle). Two, because the boot's
 // first reveal is two frames into the loop and cuts straight in, unfaded.
 const FRESH_FRAMES = 2;
 
 // DEV. `?cars=,,tk-stock-hatch-muscle,tk-jeep-b` draws roster car i
-// with concept car i instead (public/assets/concepts/, the asset gallery's
-// Concept cars). Only the GLB fetched changes: names, stats, thumbnails and
-// everything C++ decides stay the roster's. An empty entry keeps that car.
+// with concept car i instead (public/assets/concepts/,
+// scripts/gen-concept-cars.py). Only the GLB fetched changes: names, stats,
+// thumbnails and everything C++ decides stay the roster's. An empty entry
+// keeps that car.
 const CONCEPT_CARS = (new URLSearchParams(location.search).get('cars') || '').split(',');
 
 // The most `?supersample=` may ask for. A ceiling on the debug ceiling: this is
@@ -175,6 +177,10 @@ export class Stage {
     this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
     this._periodMs = 0;      // the panel's vsync period, averaged off rAF deltas (see _loop)
     this._undrawn = false;   // step everything but the draw (see setUndrawn)
+    // Draw with the renderer's own clock stopped: the chase rigs, the dust and
+    // the clouds hold while the viewer's camera still flies. The landmark
+    // gallery's paused race is a still of the moment, not a camera easing in on it.
+    this.frozen = false;
     this._freshFrames = 0;   // frames drawn since the last build or resize (see _hiddenIdle)
     this._dimSince = null;   // when #scene last went transparent, and its fade-out's length
     this._dimFadeMs = 0;
@@ -269,6 +275,9 @@ export class Stage {
     // Seven hex digits: 0x8009FFC and 0x809FFC are different masks.
     const fm = parseInt(params.get('features'), 16);
     this._features = Number.isFinite(fm) ? fm : null;
+    // ?detail=lite|full: the detail tier this platform does not ship, to film
+    // and price it in a browser (ttp_display_detail); null keeps the web's.
+    this._detailAsk = params.get('detail');
     this._superArmed = false;
     this._superReached = false;
     this._dpr = 1;           // real value comes from the _sizeCanvas below
@@ -341,6 +350,7 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    this.detail = this.display.detail(CP_PLATFORM, this._detailAsk);
     if (this._dressKeep !== null) this.display.dressKeep(this._dressKeep);
     if (this._dressSheetsOff) this.display.dressSheets(false);
     if (this._features !== null) this.display.debugFeatures(this._features);
@@ -423,6 +433,17 @@ export class Stage {
     return { w, h };
   }
 
+  // Name the buffer scale on a standing stage, as ?dpr= does at load, or hand
+  // it back to the adaptive rule with null (the landmark gallery's Res).
+  setScale(dpr) {
+    this._dprRequest = dpr > 0 ? dpr : null;
+    if (this._dprRequest == null && !this._automation) this.perf.instrument(true);
+    this._onResize();
+  }
+
+  // The drawing buffer's height in lines: where the render scale stands.
+  get bufferLines() { return this._canvas.height; }
+
   // THE PAGE WAS RESIZED UNDER US — a drag, fullscreen in or out, DevTools —
   // as opposed to _onResize performing a size the rule chose.
   //
@@ -497,7 +518,7 @@ export class Stage {
     return this._rebuild();
   }
 
-  // The biome this track is being drawn in — the race-music pool key.
+  // The biome this track is being drawn in.
   biome() { return this._biome; }
 
   // Draw every scene from here on as the ASSET GALLERY's showroom: this biome's
@@ -516,13 +537,6 @@ export class Stage {
   // a new variant on a settled field would leave the roster identical and the
   // rebuild would be skipped, which is precisely the bug the biome pick had.
   bench(model) { this._bench = model || ''; }
-  // DEV, the asset gallery's KIT FIELD: the models to stand beyond the track,
-  // by GLB name. Same latch shape as bench() — held here and pushed in
-  // _rebuild — and a SCENE input, since the field is meshed at build.
-  kitField(models) { this._kitField = Array.isArray(models) ? models : []; }
-  // Where the built field put them, in the order given. Empty until the build
-  // that stands one has finished, so callers await their rebuild first.
-  kitLayout() { return this.display ? this.display.kitLayout() : []; }
   modelVariant(model, variant) {
     this._variants = { ...(this._variants || {}), [model]: variant | 0 };
   }
@@ -582,11 +596,8 @@ export class Stage {
           // phase. Whether it qualifies is C++'s call; a refusal (a changed
           // id list) just falls through to the build below.
           const variants = this._variants || {};
-          // The KIT FIELD is a SCENE input, not a roster one: it is meshed at
-          // build, and its models are a fetch list this side owns.
-          const kit = this._kitField || [];
           const sceneSig = JSON.stringify([this._track.id, this._biome,
-                                           !!this._showcase, this._bench || '', variants, kit]);
+                                           !!this._showcase, this._bench || '', variants]);
           const rosterSig = JSON.stringify(roster);
           if (sceneSig === this._sceneSig && rosterSig === this._rosterSig) {
             continue; // nothing the renderer can see
@@ -600,7 +611,6 @@ export class Stage {
             }
             this.display.showcase(!!this._showcase); // latched; see showcase()
             this.display.bench(this._bench || '');   // …and see bench()
-            this.display.kitField(kit);              // …and see kitField()
             for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;
@@ -1176,22 +1186,26 @@ export class Stage {
     }
     this._free = f;
     if (this.display) this.display.camera(CAM.FREE);
+    // Every listener below hangs off this, so disableUserCamera can take them all back.
+    this._freeAbort = new AbortController();
+    const signal = this._freeAbort.signal;
 
     const editable = (t) => !!t && (t.isContentEditable ||
       t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
     let dragging = false, lx = 0, ly = 0;
     dom.style.cursor = 'grab';
+    this._freePointer = dom.style.pointerEvents;
     dom.style.pointerEvents = 'auto';
     dom.addEventListener('pointerdown', (e) => {
       dragging = true; lx = e.clientX; ly = e.clientY;
       dom.style.cursor = 'grabbing';
       dom.setPointerCapture(e.pointerId);
-    });
+    }, { signal });
     dom.addEventListener('pointerup', (e) => {
       dragging = false;
       dom.style.cursor = 'grab';
       try { dom.releasePointerCapture(e.pointerId); } catch (_) { /* already gone */ }
-    });
+    }, { signal });
     dom.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       f.yaw -= (e.clientX - lx) * 0.005;
@@ -1199,7 +1213,7 @@ export class Stage {
       // with an epsilon short of vertical (where the look basis degenerates).
       f.pitch = Math.max(-1.55, Math.min(1.55, f.pitch - (e.clientY - ly) * 0.005));
       lx = e.clientX; ly = e.clientY;
-    });
+    }, { signal });
     // The wheel flies forward/back along the look direction, scaled by the
     // framing distance so a notch feels the same near or far.
     dom.addEventListener('wheel', (e) => {
@@ -1208,7 +1222,7 @@ export class Stage {
       const d = this._freeDir();
       const step = Math.max(8, f.fly) * 0.0009 * -e.deltaY;
       f.eye.x += d.x * step; f.eye.y += d.y * step; f.eye.z += d.z * step;
-    }, { passive: false });
+    }, { passive: false, signal });
 
     const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
     window.addEventListener('keydown', (e) => {
@@ -1216,10 +1230,23 @@ export class Stage {
       if (editable(e.target)) return; // don't hijack keys typed into the debug panel
       f.keys.add(e.code);
       e.preventDefault();
-    });
-    window.addEventListener('keyup', (e) => f.keys.delete(e.code));
-    window.addEventListener('blur', () => f.keys.clear()); // no keyup arrives if focus leaves mid-press
+    }, { signal });
+    window.addEventListener('keyup', (e) => f.keys.delete(e.code), { signal });
+    window.addEventListener('blur', () => f.keys.clear(), { signal }); // no keyup arrives if focus leaves mid-press
     return f;
+  }
+
+  // Drop the free camera: its listeners, its cursor, and the FREE mode itself, so
+  // the next _syncCells picks whichever camera the stage's flags now name. Only the
+  // landmark gallery leaves free mode without a reload; every other caller opens it
+  // for the page's life. A later enableUserCamera starts a fresh one.
+  disableUserCamera() {
+    if (!this._free) return;
+    this._freeAbort.abort();
+    this._freeAbort = null;
+    this._free = null;
+    this.container.style.cursor = '';
+    this.container.style.pointerEvents = this._freePointer;
   }
 
   _freeDir() {
@@ -1634,7 +1661,7 @@ export class Stage {
   _renderFrame(dt, cells) {
     this.perf.setCells(cells);
     this.perf.gpuBegin();
-    this.display.frame(dt);
+    this.display.frame(this.frozen ? 0 : dt);
     this.perf.gpuEnd();
     this._freshFrames++;
     // ONLY WITH A READER. The CPU term feeds the panel and the benched log and

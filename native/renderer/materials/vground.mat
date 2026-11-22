@@ -27,6 +27,23 @@
 // structures and berms carry their colour in the vertex and bind the 1×1 white
 // as albedo with zero uvs. flipUV is off so the C++ UVs (world XZ / tile) map
 // straight through.
+//
+// ROCK WHERE THE LAND IS STEEP, decided per FACET, so its edge is the mesh's
+// own and as crisp as the rock set pieces' cut faces: the ground's vertex
+// alpha is 0 on every corner of a rock triangle and 1 on every other, exactly
+// (TtpRenderer::gateRock decides, and splits a corner a rock facet shares),
+// so the branch covers whole facets. Never an interpolated weight or a
+// noise: either blurs the edge into blobs. The structures and berms keep 1,
+// so most fragments skip the branch. Rock is strata of rockA and rockB, each topped
+// by a bench of rockL rockL.a of a stratum thick, stacked by height over the
+// plain (strata.w) on a square root, so a low face shows a few bands and a
+// tall one a few thick ones rather than a contour map, bent by a broad sine
+// lattice (strata.y u of it) and filtered over the pixel's height span so no
+// band edge shimmers in a small cell; a biome with strata.x 0 (and the lite
+// tier) has none, only rockA. Each facet is shaded by its own flat normal,
+// baked into its own corners' colour (gateRock; facet.x scales it back), so a
+// rock face reads cut, not smooth. World XZ is uv0 times the canvas tile
+// (rockA.a, kGroundTile), world Y rides suv.w.
 material {
     name : TtpVground,
     // Every receiver (ground, structures, berms) is built in world units on an
@@ -38,7 +55,7 @@ material {
         // fog's own term riding fog.x / sun.w / suv.z (ttp_fog.inc has the
         // fold): display colour, so mediump. suv.xy = the visibility-map
         // uv, whole in ONE varying so its tap is a bare .xy read (vroad's
-        // rule). highp: a half-precision uv steps by ~0.0005 near 1.0 — a
+        // rule); suv.w the world height the rock's strata stack by. highp: a half-precision uv steps by ~0.0005 near 1.0 — a
         // quarter-texel of the 512-wide bake, enough to shimmer a contrasty
         // shadow edge as the camera moves.
         { name : fog, precision : medium },
@@ -66,7 +83,16 @@ material {
         // cannot disagree. A track with no bake binds 1x1 white, which reads
         // as fully lit with no branch.
         { type : sampler2d, name : visMap },
-        { type : mat4, name : shadowFromWorld, precision : high }
+        { type : mat4, name : shadowFromWorld, precision : high },
+        // The rock (above): display-encoded colours (float4 on purpose: a
+        // float3 parameter read wrong on the box's Vulkan; rockA.a carries
+        // the canvas tile, rockB.a is spare), its banding and its facets'
+        // shade scale (facet.x; yzw spare).
+        { type : float4, name : rockA },
+        { type : float4, name : rockB },
+        { type : float4, name : rockL },
+        { type : float4, name : strata, precision : high },
+        { type : float4, name : facet }
     ]
 }
 
@@ -88,11 +114,38 @@ fragment {
         // Albedo (the canvas's bytes times the vertex tint, both display-
         // encoded) times the light, its two halves mixed through the
         // visibility here, in display space.
+        vec4 tint = getColor();
+        vec3 base = albedoAt(getUV0()) * tint.rgb;
+        // The pixel's height span, taken out here: a derivative inside a
+        // branch a quad splits is undefined.
+        highp float dh = abs(dFdx(variable_suv.w)) + abs(dFdy(variable_suv.w));
+        if (tint.a < 0.5) {
+            vec3 rc = materialParams.rockA.rgb;
+            if (materialParams.strata.x > 0.0) {
+                highp vec3 wp = vec3(getUV0() * materialParams.rockA.a, variable_suv.w).xzy;
+                // Two crossed sines of ~30 u bend the strata.
+                float n1 = sin(wp.x * 0.21 + wp.z * 0.17) + sin(wp.z * 0.23 - wp.x * 0.19);
+                highp float h = max(wp.y - materialParams.strata.w + materialParams.strata.y * n1, 0.0) + 1.0;
+                highp float t = materialParams.strata.x * sqrt(h);
+                // Two strata (A then B, each under its bench) per 2 of t,
+                // unevenly thick, every edge filtered over the pixel's
+                // height span (dx/dh is strata.x / (4 sqrt h), with room
+                // for the unevenness).
+                highp float x = fract(0.5 * (t + 0.12 * sin(3.7 * t)));
+                float k = sqrt(h) / max(0.4 * materialParams.strata.x * dh, 1e-4);
+                float w = materialParams.rockL.a;
+                rc = mix(materialParams.rockL.rgb, rc, clamp(x * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockL.rgb, clamp((x - 0.5 + w) * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockB.rgb, clamp((x - 0.5) * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockL.rgb, clamp((x - 1.0 + w) * k + 0.5, 0.0, 1.0));
+                rc = mix(rc, materialParams.rockA.rgb, clamp((x - 1.0) * k + 0.5, 0.0, 1.0));
+            }
+            base = rc * (tint.r * materialParams.facet.x);
+        }
         // The light terms arrive scaled by (1 - fog) and the fog's own term
         // rides the spare components (the vertex block), so the composite is
         // one mix and one add.
-        material.baseColor = vec4(albedoAt(getUV0()) * getColor().rgb
-                * mix(variable_fog.yzw, variable_sun.xyz, vis)
+        material.baseColor = vec4(base * mix(variable_fog.yzw, variable_sun.xyz, vis)
                 + vec3(variable_fog.x, variable_sun.w, variable_suv.z), 1.0);
     }
 }
@@ -116,6 +169,6 @@ vertex {
         vec3 F = ttpFogTerm(a);
         material.fog = vec4(F.r, getCustom0().xyz * k);
         material.sun = vec4(getCustom1().xyz * k, F.g);
-        material.suv = vec4(suv, F.b, 0.0);
+        material.suv = vec4(suv, F.b, uwp.y);
     }
 }

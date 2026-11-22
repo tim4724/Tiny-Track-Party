@@ -1551,15 +1551,17 @@ void themeThroughAbi() {
   check(ttp_theme_boost_icon("no-such-biome") == ttp_theme_boost_icon("grass"),
         "an unknown biome yields grass's accent rather than 0");
 
-  check(ttp_theme_hill_color("playroom", 3) == 0x6cbf6cu,
-        "the playroom's fourth block colour survives — a truncated hills list would lose it");
-  check(ttp_theme_hill_color("playroom", 4) == 0u, "an out-of-range hill index is 0");
+  check(ttp_theme_hill_color("playroom", 10) == 0x9a7b55u,
+        "the playroom's last room colour survives — a truncated hills list would lose it");
+  check(ttp_theme_hill_color("playroom", 11) == 0u, "an out-of-range hill index is 0");
   check(ttp_theme_hill_color("grass", -1) == 0u, "a negative hill index is 0");
 
-  // Slot order is the contract, and the bush donor must not get a slot of its
-  // own when it is already one of the trees (grass sinks the oak as its bush).
-  check(std::strcmp(ttp_theme_scenery_models("grass"), "[\"tree\",\"tree-pine\"]") == 0,
-        "grass stamps two scenery models, the bush donor sharing the oak's slot");
+  // Slot order is the contract: every tree family of the lawn in the order
+  // authored, then the bush donor (its own model, the lawn's shrub).
+  check(std::strcmp(ttp_theme_scenery_models("grass"),
+                    "[\"set-tree-oak\",\"set-tree-cherry\",\"set-tree-cherry-white\",\"set-tree-alder\","
+                    "\"set-tree-willow\",\"set-tree-apple\",\"set-lawn-shrub\"]") == 0,
+        "grass stamps its seven tree families and the shrub, in authored order");
   check(std::strcmp(ttp_theme_scenery_models("playroom"), "[]") == 0,
         "the playroom stamps no scenery models — no trees indoors");
 
@@ -1570,8 +1572,8 @@ void themeThroughAbi() {
   // sides of that gap. The playroom is the case that would catch a
   // biome-dependent answer here, since its own list is empty.
   const std::string showModels = ttp_theme_showcase_models();
-  check(showModels.find("\"tree\"") != std::string::npos
-                && showModels.find("\"cactus-tall\"") != std::string::npos
+  check(showModels.find("\"set-tree-oak\"") != std::string::npos
+                && showModels.find("\"set-cactus-saguaro\"") != std::string::npos
                 && showModels.find("\"tree-snow-c\"") != std::string::npos,
         "the showcase model list spans every biome's scenery");
   check(showModels != ttp_theme_scenery_models("playroom"),
@@ -1582,7 +1584,7 @@ void themeThroughAbi() {
   // A kind no SINGLE biome carries: the union is the point of the inventory.
   // (It was the wind-up train until the playroom's train became a kit model.)
   check(inventory.find("\"lighthouse\"") != std::string::npos
-                && inventory.find("\"alphabet blocks\"") != std::string::npos,
+                && inventory.find("\"log cabin\"") != std::string::npos,
         "…and names the kinds no single biome carries");
 }
 
@@ -1605,8 +1607,8 @@ void audioThroughAbi() {
   check(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT) != nullptr
         && std::strcmp(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT), "engine_putt") == 0,
         "TTP_CUE_ENGINE_PUTT names the engine loop");
-  check(ttp_audio_cue_id(TTP_CUE_SAND) != nullptr, "the last code names a cue");
-  check(ttp_audio_cue_id(TTP_CUE_SAND + 1) == nullptr, "and nothing past it");
+  check(ttp_audio_cue_id(TTP_CUE_RAIN) != nullptr, "the last code names a cue");
+  check(ttp_audio_cue_id(TTP_CUE_RAIN + 1) == nullptr, "and nothing past it");
   {
     Value s = parseOrNull(ttp_audio_song_json(0), "audio_song_json(0)");
     check(s.type == Value::OBJ && s.find("file") && s.find("gain") && s.find("artist"),
@@ -1729,21 +1731,106 @@ void audioThroughAbi() {
   ttp_audio_stop_voices();
   check(count(TTP_AUD_STOP_ALL) == 1, "stop_voices answers with no session bound");
 
-  // Music needs no race at all — it is picked by BIOME.
-  ttp_audio_music(TTP_AUD_MUSIC_START, "beach");
-  {
+  // Music needs no race at all — it is picked by TRACK ID: a catalogue track
+  // plays its own song, any other id a fallback one.
+  const auto startedSong = [&](const char* track) -> Value {
+    ttp_audio_music(TTP_AUD_MUSIC_START, track);
     const TtpAudioBlock* b = ttp_audio_drain();
     const TtpAudioCmd* cmds = ttp_audio_cmds(b);
     check(b->count == 1 && cmds[0].kind == TTP_AUD_MUSIC
           && cmds[0].code == TTP_AUD_MUSIC_START,
           "a music start is one command");
-    if (b->count == 1) {
-      Value song = parseOrNull(ttp_audio_song_json(cmds[0].subject), "the picked song");
-      check(song.type == Value::OBJ, "the picked song resolves through its index");
-      check(cmds[0].level > 0 && cmds[0].level < 1, "and comes with a bed level");
-    }
-  }
+    if (b->count != 1) return Value::Null();
+    check(cmds[0].level > 0 && cmds[0].level < 1, "and comes with a bed level");
+    return parseOrNull(ttp_audio_song_json(cmds[0].subject), "the picked song");
+  };
+  check(json::str_field(startedSong("driftwood"), "file") == "/assets/audio/music/spy_groove.mp3",
+        "a catalogue track plays its own song");
+  check(startedSong("gym").type == Value::OBJ, "a dev track plays a fallback song, not silence");
   ttp_audio_music(TTP_AUD_MUSIC_STOP, nullptr);
+  ttp_audio_drain();
+}
+
+// The weather and the pause, both decided off the bound session and so
+// invisible above the ABI. A track whose sky rains (Driftwood's storm) has the
+// rain bed under its race from the bind on; a dry one has none, and binding a
+// dry race (or none) after a wet one is the bed's falling edge. A paused race
+// decides nothing: the TV shells keep framing through the pause, so a voice
+// decided there would play under the overlay after the freeze had stopped it.
+void weatherThroughAbi() {
+  ttp_audio_bind(0);
+  ttp_audio_drain();
+  struct Heard { int rain = 0, rainStops = 0, voices = 0, all = 0; double level = 0; };
+  auto hear = []() {
+    Heard h;
+    const TtpAudioBlock* b = ttp_audio_drain();
+    const TtpAudioCmd* cmds = ttp_audio_cmds(b);
+    for (uint32_t i = 0; i < b->count; i++) {
+      h.all++;
+      if (cmds[i].kind == TTP_AUD_VOICE) h.voices++;
+      if (cmds[i].code != TTP_CUE_RAIN) continue;
+      if (cmds[i].kind == TTP_AUD_VOICE) { h.rain++; h.level = cmds[i].level; }
+      if (cmds[i].kind == TTP_AUD_VOICE_STOP) h.rainStops++;
+    }
+    return h;
+  };
+  const int wet = ttp_session_begin("driftwood", 7, 3, nullptr);
+  const int dry = ttp_session_begin("tidepool", 7, 3, nullptr);
+  check(wet && dry, "a wet and a dry session opened");
+  for (int h : {wet, dry}) {
+    ttp_add_human(h, "0", nullptr);
+    ttp_add_bot(h, "\"ai-1\"", 1, 0, 7, nullptr);
+  }
+  double nowMs = 0;
+  auto step = [&](int h) {
+    ttp_process_input(h, "0", 7, 0.2, 0, 0, 0);
+    ttp_update(h, 1000.0 / 60.0);
+    ttp_events_json(h);
+    nowMs += 1000.0 / 60.0;
+    ttp_audio_frame(nowMs);
+    return hear();
+  };
+
+  ttp_audio_bind(wet);
+  check(hear().rain == 1, "binding a wet race starts the bed before its first frame");
+  ttp_session_start(wet, 3);
+  int wetFrames = 0, rainFrames = 0, carVoices = 0;
+  double level = 0;
+  for (int f = 0; f < 300; f++, wetFrames++) {   // the countdown, then the race
+    const Heard h = step(wet);
+    if (h.rain) { rainFrames++; level = h.level; }
+    carVoices += h.voices - h.rain;
+  }
+  check(rainFrames == wetFrames, "the storm rains on every frame of its race, the grid included ("
+        + std::to_string(rainFrames) + " of " + std::to_string(wetFrames) + ")");
+  check(level > 0 && level <= 1, "at a level the device can play");
+  check(carVoices > 0, "with the cars voiced over it");
+
+  ttp_pause(wet);
+  ttp_audio_stop_voices();   // the freeze plan's stop-voices
+  check(hear().all == 1, "the freeze is one stop-all");
+  int paused = 0;
+  for (int f = 0; f < 30; f++) paused += step(wet).all;
+  check(paused == 0, "a paused race decides nothing (" + std::to_string(paused) + " commands)");
+  ttp_resume(wet);
+  check(step(wet).rain == 1, "and the rain comes back with the race");
+
+  ttp_audio_bind(dry);
+  const Heard bound = hear();
+  check(bound.rainStops == 1 && bound.all == 1, "binding a dry race after a wet one stops the bed");
+  ttp_session_start(dry, 3);
+  int dryRain = 0;
+  for (int f = 0; f < 300; f++) dryRain += step(dry).rain;
+  check(dryRain == 0, "and a dry sky never rains");
+
+  // Leaving a wet race (dispose-session unbinds) stops the bed with it.
+  ttp_audio_bind(wet);
+  hear();
+  ttp_audio_bind(0);
+  check(hear().rainStops == 1, "unbinding a wet race stops the bed");
+  ttp_dispose(wet);
+  ttp_dispose(dry);
+  ttp_audio_stop_voices();
   ttp_audio_drain();
 }
 
@@ -5226,7 +5313,7 @@ void raceLiveWalks() {
     // The expected effects for whatever the twin drained, routed the way the
     // walk routes them — the three lifecycle beats to their own rules, the rest
     // through the ordinary-event filter.
-    const auto expectedFor = [&](const Value& events, const char* biome, int audioReady,
+    const auto expectedFor = [&](const Value& events, int audioReady,
                                  int fastForwarding, double nowMs) {
       race::Effects all;
       for (const Value& e : events.arr) {
@@ -5235,7 +5322,7 @@ void raceLiveWalks() {
         if (type == "_countdown") {
           es = race::countdownTick(json::num_field(e, "n"));
         } else if (type == "_raceStart") {
-          es = race::raceStart(biome, audioReady != 0);
+          es = race::raceStart("tidepool", audioReady != 0);
         } else if (type == "_raceEnd") {
           race::EndRaceInput ei;
           ei.hasSeries = hasSeries;
@@ -5253,15 +5340,23 @@ void raceLiveWalks() {
       return all;
     };
 
-    int beats = 0, gos = 0;
+    int beats = 0, gos = 0, songs = 0;
     for (int f = 0; f < 120; f++) {
       ttp_update(live, 1000.0 / 60.0);
       ttp_update(twin, 1000.0 / 60.0);
       const Value drained = parseOrNull(ttp_events_json(twin), "twin events");
       const Value got = parseOrNull(
-          ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, f * 16.0),
+          ttp_race_events_live_json(live, room, 1, 0, kInterMs, f * 16.0),
           "events_live");
-      sameOps(got, expectedFor(drained, "beach", 1, 0, f * 16.0), "events_live effects");
+      sameOps(got, expectedFor(drained, 1, 0, f * 16.0), "events_live effects");
+      // The GO beat's song is the session's own track, read off the handle:
+      // no shell passes it in any more.
+      for (const Value& e : at(got, "effects").arr) {
+        if (json::str_field(e, "op") != "start-music") continue;
+        songs++;
+        check(json::str_field(e, "track") == "tidepool",
+              "start-music names the session's own track, got '" + json::str_field(e, "track") + "'");
+      }
       for (const Value& e : drained.arr) {
         if (json::str_field(e, "type") != "_countdown") continue;
         beats++;
@@ -5277,12 +5372,13 @@ void raceLiveWalks() {
     check(beats >= 2 && gos == 1,
           "the countdown beats were routed, GO among them (" + std::to_string(beats) +
               " beats, " + std::to_string(gos) + " GO)");
+    check(songs == 1, "the GO beat started the music once (" + std::to_string(songs) + ")");
     // The queue really empties: a second drain with nothing behind it. That
     // answer is a short-circuit literal, so it is held to the bytes the full
     // walk would stringify for no effects; the Android shell skips its parse on
     // exactly those bytes.
     const std::string emptyRaw =
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000);
+        ttp_race_events_live_json(live, room, 1, 0, kInterMs, 9000);
     const Value empty = parseOrNull(emptyRaw.c_str(), "events_live empty");
     check(at(empty, "effects").arr.empty(), "a drained queue answers no effects");
     Value noEffects = Value::Obj();
@@ -5315,9 +5411,9 @@ void raceLiveWalks() {
     ttp_update(twin, 1000.0 / 60.0);
     const Value drained = parseOrNull(ttp_events_json(twin), "twin end events");
     const Value ended = parseOrNull(
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 10000),
+        ttp_race_events_live_json(live, room, 1, 0, kInterMs, 10000),
         "events_live end");
-    sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
+    sameOps(ended, expectedFor(drained, 1, 0, 10000), "events_live effects at the flag");
     check(!ended.has("results"),
           "the answer carries no results rider — the rows never leave C++");
     check(opsOf(ended).find("show-results") != std::string::npos,
@@ -5898,6 +5994,7 @@ int main(int argc, char** argv) {
   fastlaneThroughAbi();
   themeThroughAbi();
   audioThroughAbi();
+  weatherThroughAbi();
   uiShippedCatalogue();
   uiProgression();
   uiCorpusThroughAbi(argv[3]);

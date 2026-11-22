@@ -298,7 +298,7 @@ Value effectVal(const race::Effect& e) {
       break;
     case race::Op::BROADCAST_COUNTDOWN: v.set("n", Value::Num(e.num)); break;
     case race::Op::REFRESH_AUTO_PAUSE: v.set("deferred", Value::Bool(e.deferred)); break;
-    case race::Op::START_MUSIC: v.set("biome", Value::Str(e.str)); break;
+    case race::Op::START_MUSIC: v.set("track", Value::Str(e.str)); break;
     case race::Op::ITEM_PICKUP:
       v.set("id", e.id.toValue());
       v.set("item", Value::Str(e.str));
@@ -801,7 +801,6 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
 // ---- the frame's event drain -------------------------------------------------
 
 const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
-                                      const char* biome,
                                       int audioReady, int fastForwarding,
                                       double intermissionMs, double nowMs) {
   const Value evs = ttp_session_drain_events(sessionHandle);
@@ -833,7 +832,8 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                       race::countdownTick(json::num_field(e, "n"), series ? &cup : nullptr),
                       {}, fx);
     } else if (type == "_raceStart") {
-      executeAndSpell(roomHandle, race::raceStart(biome ? biome : "", audioReady != 0),
+      executeAndSpell(roomHandle,
+                      race::raceStart(ttp_session_track_id(sessionHandle), audioReady != 0),
                       {}, fx);
     } else if (type == "_raceEnd") {
       race::EndRaceInput ei;

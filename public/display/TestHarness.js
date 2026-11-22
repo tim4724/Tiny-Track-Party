@@ -14,6 +14,7 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 // same chrome through the same setCarHud, and used to carry its own copy of the
 // number.
 import { HUD_TICK_MS } from './Stage.js';
+import { CP_PLATFORM } from './NativeSessionModel.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { buildQRMatrix } from '../shared/qr.js';
@@ -30,6 +31,10 @@ import { benchField, previewCupRace, intermissionMs, flourishMs } from './Native
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { trackSchematic } from './NativeSchematic.js';
+import { glbTriangles } from './glbTriangles.js';
+import { assetUrl } from '../shared/assetUrl.js';
+import { FEAT, DEBUG } from './render/Display.js';
+import { biomes } from '../shared/biomes.js';
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO
@@ -765,45 +770,6 @@ export function runDisplayScenario(opts, ctx) {
           }
           return model || '';
         },
-        // The KIT FIELD: every model the gallery hands over, standing on clear
-        // ground beyond the track (ttp_display_kit_field). This is the browser
-        // itself — not a picker beside the scene but the scene — so it answers
-        // with the LAYOUT, which is what the chrome flies its camera by and
-        // names models from. A scene rebuild, like the biome and the bench.
-        async kits(models) {
-          scene.kitField(models || []);
-          await scene.setTrack(track);
-          scene.bindSession(engine.h);
-          return scene.kitLayout();
-        },
-        // Stand in front of one model of the field, at ITS OWN size: a coin
-        // needs a step closer than a loop piece, and a row read from one fixed
-        // range is a row you cannot judge. Off the LAYOUT, so the camera cannot
-        // end up somewhere the model is not.
-        lookAtKit(spot, car) {
-          if (!spot) return;
-          if (car) {
-            // A car: the race's own chase rig behind it, trailing as it does
-            // flat out, where most of a race is driven, with the lens at that
-            // speed — so it is judged from where a player sees it. The field
-            // stands every model as its file does, and a car's nose is -z.
-            const rig = scene.display.chaseRig(spot.x, spot.y, spot.z, 0, -1, 1);
-            const dir = { x: rig.target[0] - rig.eye[0], y: rig.target[1] - rig.eye[1],
-                          z: rig.target[2] - rig.eye[2] };
-            cam.eye = { x: rig.eye[0], y: rig.eye[1], z: rig.eye[2] };
-            cam.yaw = Math.atan2(dir.x, dir.z);
-            cam.pitch = Math.asin(dir.y / Math.hypot(dir.x, dir.y, dir.z));
-            scene.display.lookFov(rig.fov);
-            return;
-          }
-          // Height counts as much as footprint here: the tall thin models
-          // (gantries, palms) are exactly the ones a footprint under-reads.
-          const reach = Math.max(spot.w, spot.d, spot.h, 1.0);
-          cam.eye = { x: spot.x, y: spot.y + reach * 0.45, z: spot.z - reach * 2.4 };
-          cam.yaw = 0;              // +z, straight down the row's near side
-          cam.pitch = -0.1;
-          scene.display.lookFov(0);
-        },
         // Which variant of a prop the SCENE is built with, which is the answer
         // the bench exists to reach: pick one here and it is what the showroom
         // (and every race, until the page reloads) draws.
@@ -823,6 +789,1988 @@ export function runDisplayScenario(opts, ctx) {
           cam.pitch = START_CAM.pitch;
           scene.display.lookFov(0);
         }
+      };
+    }
+    return;
+  }
+
+  // ---- landmark gallery (/gallery-landmarks.html) ----
+  // A catalogue track's SET PIECES, seen through the live renderer from where a
+  // player meets them. Shaped like the showroom above: the camera is this
+  // scenario's own (never holdFrame), the field is a bare session left UNRUN so
+  // the cars stay on the grid unless a view parks them, and window.__landmarks
+  // is the surface the gallery chrome drives without a reload.
+  //
+  // Every pose comes from the engine: where a piece stands is the renderer's set
+  // layout (ttp_display_set_layout), the road is the track's own frames, and the
+  // driver's eye is the race's chase rig behind the cell's own car, parked on
+  // the approach (ttp_display_car_pose) and judged against the renderer's own
+  // ground (ttp_display_ground_y). Nothing here re-reads tracks.js' placement.
+  // The split is the race's too: each seat owns a cell exactly as in a race,
+  // and a cell look (ttp_display_cell_look) swaps its camera and nothing else,
+  // so a 4P view of a landmark is what a 4P race draws around it.
+  if (scenario === 'landmarks') {
+    show('race');
+    hideResults();
+    // The display's own corner buttons sit under the gallery's landmark list and
+    // do nothing for a scene nobody joins.
+    document.getElementById('corner-btns')?.style.setProperty('display', 'none');
+    ready().then(() => setupLandmarks()).catch((e) => console.warn('[TestHarness] landmark gallery failed to start', e));
+
+    function setupLandmarks() {
+      const { scene } = ctx;
+      const display = scene.display;
+      const VIEWS = ['driver', 'glance', 'high', 'orbit', 'top', 'race', 'free'];
+      // The framed views' lens. Wider than the chase rig's, so a piece and the
+      // road beside it fit together without standing the camera far off.
+      const WIDE_FOV = 50;
+      const HIGH_PITCH = 0.6;     // ~34 degrees down onto a piece
+      const HIGH_MARGIN = 4;      // how far past the road's far edge High's eye stands
+      const ORBIT_PITCH = 0.42;
+      const ORBIT_RATE = 0.22;    // rad/s: a slow walk round, not a spin
+      // Glance's and High's tightest lens, so a small piece far off the road fills the shot
+      // without the view turning into a telescope.
+      const GLANCE_MIN_FOV = 12;
+      // The approach search (approaches()): a lane is a quarter of the road's
+      // width either side of the centreline, and a piece counts as in a cell's
+      // lens inside this share of its half-angle, across and up; inside
+      // CENTRED of it across, with its top inside TOP_MARGIN of the vertical
+      // half-angle, it is in the middle of the picture rather than at an edge
+      // (which is where the nearest spot that merely has it in the lens puts
+      // it) and a tall piece is not cut off by the top of the frame.
+      const LANE = 0.25;
+      const LENS_MARGIN = 0.7;
+      const CENTRED = 0.4;
+      const TOP_MARGIN = 0.9;
+      // A car parks only on road near level and upright: the rig's prediction
+      // (chaseRig) is for level ground, and a car parked on a loop or a steep
+      // ramp shows nothing but deck.
+      const UPRIGHT = 0.9;        // the least up.y
+      const LEVEL = 0.25;         // the most |tangent.y|
+      // A sight line is walked in this many steps, and is hidden where the
+      // ground comes within SIGHT_MARGIN of it, or where it runs into the road
+      // anywhere on the lap: within KERB_CLEAR over its edge (the kerbs, 0.2
+      // tall, the theme's, and a hair; the edge band is KERB_IN inside the
+      // deck and KERB_OUT past it) or within DECK_SKIM over the deck between,
+      // so a low line along a flat straight sees down it and one over a crest
+      // does not. The road is a slab DECK_DEPTH thick under its surface, so a
+      // line that passes UNDER a bridge still sees what is beyond it. The
+      // chase eye is under a unit over the deck, so these margins are what
+      // decides most of what a racer sees.
+      const SIGHT_SAMPLES = 40;
+      const SIGHT_MARGIN = 0.2;
+      const KERB_CLEAR = 0.25;
+      const KERB_IN = 0.2;
+      const KERB_OUT = 0.5;
+      const DECK_SKIM = 0.05;
+      const DECK_DEPTH = 0.6;
+      // How much of the parked car Glance keeps in the bottom of its shot: its
+      // body from this far above the deck up.
+      const CAR_SHOW = 0.25;
+      // How far off a turned cell's forward its car may sit, in half-lenses.
+      const CAR_KEEP = 0.8;
+      // The other drivers' approaches to one piece, as [scale, add, other
+      // lane] on the base approach's distance back: further back across the
+      // road, closer, furthest back.
+      const VARIANTS = [[1.6, 8, true], [0.6, 0, false], [2.2, 16, false]];
+      // How far apart (along the road) two parked cars in one lane must stand,
+      // so neither is parked inside the other or fills the other's view.
+      const CAR_GAP = 6;
+      // How far (along the road) from the base a variant may park where it
+      // cannot see the piece's middle: further back is another stretch of
+      // the lap, and another piece's view.
+      const VARIANT_REACH = 30;
+      // A spot is CLEAN when the piece is no speck (its body, sizeOf, at least
+      // this share of the half-lens across) and the sight line to its middle
+      // runs under no raised road: an overpass between the eye and the piece
+      // hides nothing by the sight test, yet the view is deck and piers.
+      const SIZE_MIN = 0.15;
+      // A piece whose footprint is larger than this radius (a power line across
+      // the map) is framed by the stretch round its anchor, LONG_HALF either
+      // way, not by its whole box, which would make it a thread in every view.
+      const LONG_R = 30;
+      const LONG_HALF = 12;
+      // Where no spot with the piece in the rig's own lens is clean (a small
+      // piece is a speck from every spot far enough back to have it ahead),
+      // a spot where it is no speck may turn its camera onto it instead
+      // (fitLook), if the piece's far edge sits within TURN_FIT half-lenses
+      // of the rig's forward: the car stays in the shot.
+      const TURN_FIT = 1.6;
+      // The race cameras' far plane is CAM_FAR (camera.h, 600): the top view
+      // stays under it and widens its lens instead of climbing past it.
+      const TOP_MAX_H = 480;
+
+      let track = ctx.track;
+      let seats = players;
+      let mode = 'driver';
+      // SOUND, when the page asks for it (?sfx=1: the landmark gallery): the
+      // race's own voices off the bound session and the track's song, decided by
+      // the production layer as main.js does; the page owns the context
+      // (window.__audio): its unlock, level and mute.
+      const audible = !!window.__audio && !!window.__audioDecide && new URLSearchParams(location.search).get('sfx') === '1';
+      const sfx = (cmds) => { if (audible) window.__audio.apply(cmds); };
+      let songFor = null;   // the track whose song is playing
+      let focusAt = 0;
+      let placeAt = 0;            // which placement of the focused model is framed
+      let spreadOn = false;
+      let layout = display.setLayout();
+      // The scenery trees and boulders as [x, z, r, top]: a sight line through
+      // a tree's crown is as screened as one through a set piece.
+      let scatter = display.scatterLayout();
+      let marks = listMarks(layout);
+      let engine = null;
+      let field = null, bots = null;
+      let free = null;            // the free cam's state, once free mode first opens
+      let orbitT = 0;
+      let lastHud = -Infinity;
+      let passAt = null;          // drivePast's car per 60 Hz update, per scene
+      let poses = [];             // what aim() last pushed, per cell (window.__landmarks.poses)
+      let led = false;            // another stage's camera is this one's (follow)
+      // Race mode performs its events like every live preview (raceEventPerformer).
+      const log = raceLog();
+      // THE RACE VIEW'S CLOCK. The sim takes one update per frame of the
+      // frame's own dt, as a live race does (a fixed step against the display's
+      // refresh is zero, one or two updates a frame, and the field judders),
+      // and every dt it was given is kept in `dts`. A race is then a function
+      // of that list alone: `seek` goes BACK by dealing the same race again
+      // and feeding it the same dts undrawn (a simulation only runs forward).
+      // `step` counts updates; playing on from an earlier step drops the
+      // list's tail, since new frames make a new future. `cam` is whose eye
+      // the running race is seen through (RACE_CAMS).
+      const RACE_CAMS = ['chase', 'free', 'top'];
+      // Where the race's free camera opens, in chase-rig distances behind and over the car.
+      const FREE_BACK = 2.6, FREE_UP = 1.7;
+      const race = { step: 0, dts: [], ms: 0, paused: false, cam: 'chase', winding: false, loop: null };
+      // Rebuilds are async; chained so a burst of clicks lands in order.
+      let queue = Promise.resolve();
+      const serial = (fn) => (queue = queue.then(fn, fn));
+
+      // A piece's label off its GLB name: "set-beach-huts" -> "Beach huts".
+      function labelOf(model) {
+        const s = model.replace(/^set-/, '').replace(/-/g, ' ');
+        return s.charAt(0).toUpperCase() + s.slice(1);
+      }
+      // One entry per MODEL, at its first placement, biggest first so the hero
+      // leads; the sort is stable, so equal sizes keep the authored order.
+      function listMarks(lay) {
+        const by = new Map();
+        lay.pieces.forEach((p, i) => {
+          const m = by.get(p.model);
+          if (m) { m.count++; m.indices.push(i); return; }
+          by.set(p.model, { model: p.model, label: labelOf(p.model), count: 1, index: i, indices: [i],
+                            s: p.s,
+                            size: 4 * p.hx * p.hz * Math.max(p.top - p.y, 0) });
+        });
+        return [...by.values()].sort((a, b) => b.size - a.size);
+      }
+
+      // The parked field: `seats` autopiloted player seats in their own cells,
+      // the CPU fill cell-less, on a fresh session nobody steps (race mode does).
+      function newSession() {
+        const perform = mode === 'race' && raceEventPerformer(scene, log);
+        // A wind replays a race nobody watches: its pickups and strikes stay unperformed.
+        engine = bareSession(field, track,
+                             perform ? { bots, onRaceEvent: (...a) => { if (!race.winding) perform(...a); } } : { bots });
+        race.step = 0;
+        race.ms = 0;
+        window.__engine = engine;
+        scene.bindSession(engine.h);
+        if (audible) {
+          sfx(window.__audioDecide.stopVoices());
+          sfx(window.__audioDecide.bind(engine.h));
+        }
+        scene.hold(mode !== 'race');
+        // The cells' place/lap readout off the grid, rather than empty pills.
+        for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
+      }
+      // `fresh` builds the scene again though the track and field are the same
+      // (a new detail tier: the page's own signature cannot see one).
+      async function seat(fresh) {
+        // Unbound across the rebuild: the old session is freed before the new
+        // scene lands, and a frame must not draw a handle that is gone.
+        scene.bindSession(0);
+        if (engine) { engine.dispose(); engine = null; }
+        ({ field, bots } = benchField(track.trackId, seats, 1));
+        for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+        field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
+                                          { carIndex: f.carIndex, cell: !f.ai }));
+        await scene.setTrack(track);
+        if (fresh) await scene.rebuild();
+        newSession();
+        layout = display.setLayout();
+        await loadShapes(layout);
+        scatter = display.scatterLayout();
+        marks = listMarks(layout);
+        passAt = null;
+        focusAt = Math.min(focusAt, Math.max(marks.length - 1, 0));
+        placeAt = 0;
+      }
+
+      const v3 = (a) => ({ x: a[0], y: a[1], z: a[2] });
+      const frameAt = (s) => display.trackFrames(track.trackId, [s])[0];
+      // The layout index cell k frames: the focused piece, or with SPREAD the
+      // k-th after it.
+      function indexFor(k) {
+        if (!marks.length) return -1;
+        const m = marks[(focusAt + (spreadOn ? k : 0)) % marks.length];
+        // The focused model's chosen placement (place()); a spread cell's own
+        // model at its first.
+        return k === 0 || !spreadOn ? m.indices[placeAt % m.indices.length] : m.index;
+      }
+      // What cell k frames: the piece, or for a LONG one the stretch of it
+      // round its anchor (`of` is the piece itself, for the sight lines).
+      let viewed = new Map(), viewedFor = null;
+      function pieceFor(k) {
+        const p = layout.pieces[indexFor(k)];
+        return p ? viewOf(p) : null;
+      }
+      function viewOf(p) {
+        if (Math.hypot(p.hx, p.hz) <= LONG_R) return p;
+        if (viewedFor !== layout) { viewed = new Map(); viewedFor = layout; }
+        if (!viewed.has(p)) {
+          viewed.set(p, { ...p, of: p, cx: p.x, cz: p.z,
+                          hx: Math.min(p.hx, LONG_HALF), hz: Math.min(p.hz, LONG_HALF) });
+        }
+        return viewed.get(p);
+      }
+      // What a piece stands on: its foot, or for one that brings its own
+      // ground (SET_GROUND) and is built on its summit, that summit as the
+      // renderer draws it, so the aim points are the piece and not the hill
+      // under it.
+      const feet = new WeakMap();
+      const footOf = (p) => {
+        if (!feet.has(p)) feet.set(p, Math.max(p.y, Math.min(display.groundY(p.cx, p.cz), p.top - 0.5)));
+        return feet.get(p);
+      };
+      const heightOf = (p) => Math.max(p.top - footOf(p), 0.5);
+      const centreOf = (p, at) => ({ x: p.cx, y: footOf(p) + heightOf(p) * at, z: p.cz });
+      const radiusOf = (p) => Math.max(Math.hypot(p.hx, p.hz), heightOf(p) / 2, 1);
+      // How big the piece reads: its largest mesh, not its footprint, which
+      // takes in the snowman and lamp beside an igloo; at least half the
+      // footprint, for a piece of many small parts (a flower bed).
+      const sizeOf = (p) => Math.max(radiusOf(p) / 2,
+                                     ...(p.parts || []).map(([, , hx, hz, top]) => Math.max(Math.hypot(hx, hz), (top - p.y) / 2)));
+      // How far back a framed view stands: a bounding radius inside the lens'
+      // half-angle, with a margin.
+      const reachOf = (r) => r / Math.sin((WIDE_FOV / 2) * Math.PI / 180) * 1.15;
+
+      // The road, sampled every couple of units, once per track: what a sight
+      // line can graze, run into, or pass under. Each sample stands for the
+      // stretch `reach` either side of it along its tangent (in plan, t), out
+      // to `half` (the deck's own half-width `w` and the kerbs past it) along
+      // its lateral (l, whose rise is the deck's bank).
+      let road = null, roadFor = null;
+      function roadPoints() {
+        if (roadFor !== layout) {
+          const n = Math.max(32, Math.ceil(layout.length / 2));
+          const reach = layout.length / n / 2 + 0.05;
+          road = display.trackFrames(track.trackId,
+                                     Array.from({ length: n }, (_, i) => (layout.length * i) / n))
+            .map((f) => {
+              const t = Math.hypot(f.tangent.x, f.tangent.z) || 1;
+              const l = Math.hypot(f.lateral.x, f.lateral.z) || 1;
+              const w = (f.width || 0) / 2;
+              return { x: f.pos.x, y: f.pos.y, z: f.pos.z, w, half: w + KERB_OUT, reach,
+                       tx: f.tangent.x / t, tz: f.tangent.z / t,
+                       lx: f.lateral.x / l, lz: f.lateral.z / l, ly: f.lateral.y / l };
+            });
+          roadFor = layout;
+        }
+        return road;
+      }
+      // Whether the point (x, y, z) is in road sample f's stretch of road:
+      // under its surface (to DECK_DEPTH) or just over it (DECK_SKIM over the
+      // deck, KERB_CLEAR over its edge).
+      function inRoad(f, x, y, z) {
+        const dx = x - f.x, dz = z - f.z;
+        if (Math.abs(dx * f.tx + dz * f.tz) > f.reach) return false;
+        const l = dx * f.lx + dz * f.lz;
+        const side = Math.abs(l);
+        if (side >= f.half) return false;
+        const deck = f.y + f.ly * l;
+        return y >= deck - DECK_DEPTH && y <= deck + (side < f.w - KERB_IN ? DECK_SKIM : KERB_CLEAR);
+      }
+      // Where the plan of the line from `eye` to `c` crosses piece q's
+      // footprint, as [t0, t1] along it (t0 > t1 when it misses).
+      function crossing(q, eye, c) {
+        const loc = (x, z) => [(x - q.cx) * q.ax + (z - q.cz) * q.az,
+                               (z - q.cz) * q.ax - (x - q.cx) * q.az];
+        const [u0, v0] = loc(eye.x, eye.z);
+        const [u1, v1] = loc(c.x, c.z);
+        let t0 = 0, t1 = 1;
+        for (const [o, d, h] of [[u0, u1 - u0, q.hx], [v0, v1 - v0, q.hz]]) {
+          if (Math.abs(d) < 1e-9) { if (Math.abs(o) > h) t0 = 2; continue; }
+          const ta = (-h - o) / d, tb = (h - o) / d;
+          t0 = Math.max(t0, Math.min(ta, tb));
+          t1 = Math.min(t1, Math.max(ta, tb));
+        }
+        return [t0, t1];
+      }
+      // What a sight line runs into on a set piece: each model's shape as a
+      // height map on its own axes, SHAPE_CELL square, holding the lowest and
+      // highest point of its surface over each cell (off the GLB's own
+      // triangles). A line is in the piece where it passes a cell between the
+      // two: through a mound or a wall, never under a roof or a wire, nor
+      // across the open ground inside a footprint. Per model, for the page's
+      // life.
+      const SHAPE_CELL = 0.5;
+      const shapes = new Map();
+      async function loadShapes(lay) {
+        const want = [...new Set(lay.pieces.map((p) => p.model))].filter((m) => !shapes.has(m));
+        await Promise.all(want.map(async (m) => {
+          const res = await fetch(assetUrl(`/assets/toycar/${m}.glb`));
+          if (!res.ok) throw new Error(`no ${m}.glb (${res.status})`);
+          // less its prints on the land (`drape_floor` parts), which claim no ground
+          shapes.set(m, shapeOf(glbTriangles(new Uint8Array(await res.arrayBuffer())).filter((t) => !t.print)));
+        }));
+      }
+      function shapeOf(tris) {
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        for (const t of tris) for (const [x, , z] of t) {
+          x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+        }
+        const nx = Math.max(1, Math.ceil((x1 - x0) / SHAPE_CELL)), nz = Math.max(1, Math.ceil((z1 - z0) / SHAPE_CELL));
+        const lo = new Float32Array(nx * nz).fill(Infinity), hi = new Float32Array(nx * nz).fill(-Infinity);
+        // Each triangle sampled at half a cell, so every cell it covers is hit.
+        for (const [a, b, c] of tris) {
+          const edge = Math.max(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]),
+                                Math.hypot(c[0] - b[0], c[1] - b[1], c[2] - b[2]),
+                                Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]));
+          const m = Math.max(1, Math.ceil(edge / (SHAPE_CELL / 2)));
+          for (let i = 0; i <= m; i++) {
+            for (let j = 0; i + j <= m; j++) {
+              const u = i / m, v = j / m, w = 1 - u - v;
+              const x = a[0] * w + b[0] * u + c[0] * v, y = a[1] * w + b[1] * u + c[1] * v;
+              const z = a[2] * w + b[2] * u + c[2] * v;
+              const k = Math.min(nz - 1, Math.floor((z - z0) / SHAPE_CELL)) * nx + Math.min(nx - 1, Math.floor((x - x0) / SHAPE_CELL));
+              lo[k] = Math.min(lo[k], y);
+              hi[k] = Math.max(hi[k], y);
+            }
+          }
+        }
+        return { x0, z0, nx, nz, w: x1 - x0, d: z1 - z0, lo, hi };
+      }
+      // Whether world point (x, y, z) is inside piece q's shape: the point on
+      // the piece's own axes (ax, az from its anchor, y from its foot), at the
+      // scale its footprint says it was placed at.
+      function inShape(q, x, y, z) {
+        const sh = shapes.get(q.model);
+        if (!sh) return false;
+        const sc = sh.w >= sh.d ? (2 * q.hx) / sh.w : (2 * q.hz) / sh.d;
+        const dx = x - q.x, dz = z - q.z;
+        const i = Math.floor(((dx * q.ax + dz * q.az) / sc - sh.x0) / SHAPE_CELL);
+        const k = Math.floor(((dz * q.ax - dx * q.az) / sc - sh.z0) / SHAPE_CELL);
+        if (i < 0 || k < 0 || i >= sh.nx || k >= sh.nz) return false;
+        const ly = (y - q.y) / sc;
+        return ly >= sh.lo[k * sh.nx + i] && ly <= sh.hi[k * sh.nx + i];
+      }
+      // How much of the sight line from `eye` to the point `c` on piece p is
+      // hidden: the count of its samples that are under the GROUND (the
+      // renderer's own height, hills and slopes included; the margin stops at
+      // p's own footprint, or a low piece's middle reads as buried in the lawn
+      // it stands on), in the road (inRoad), in a tree or boulder (a column
+      // its plan radius wide up to its top) or in another piece (inShape).
+      // 0 is a clear view. Round p the ground is level and bare, as the
+      // renderer leaves it under every piece it stands (buildSetPieces: the
+      // relief cut down to the piece's foot out to FLAT_PAD past its
+      // footprint, the scatter kept FLAT_PAD off it), which holds for a row
+      // the placement search moved without a build as well.
+      const FLAT_PAD = 1;
+      // Where the pieces stand for the sight lines: the layout, or while the
+      // placement search runs, its moves too.
+      let standing = null;
+      function hidden(eye, c, p) {
+        let n = 0;
+        const x0 = Math.min(eye.x, c.x), x1 = Math.max(eye.x, c.x);
+        const z0 = Math.min(eye.z, c.z), z1 = Math.max(eye.z, c.z);
+        const near = roadPoints().filter((f) => f.x > x0 - f.half && f.x < x1 + f.half
+                                              && f.z > z0 - f.half && f.z < z1 + f.half);
+        const inFoot = (x, z) => {
+          const dx = x - p.cx, dz = z - p.cz;
+          return Math.abs(dx * p.ax + dz * p.az) < p.hx + FLAT_PAD && Math.abs(dz * p.ax - dx * p.az) < p.hz + FLAT_PAD;
+        };
+        const trees = scatter.filter(([x, z, r]) => x > x0 - r && x < x1 + r && z > z0 - r && z < z1 + r && !inFoot(x, z));
+        // Over p's own footprint (the clearing's rectangle) the ground is at
+        // most its foot. That is the clearing for a piece the search moved
+        // without a build; for a piece that brings its own ground (SET_GROUND)
+        // it is that ground left out of its own sight lines, as it was while
+        // the mountain was part of the model — its aim points are the model's
+        // box and sit inside it. Other pieces' lines still meet it.
+        const ground = (x, z) => (inFoot(x, z) ? Math.min(display.groundY(x, z), p.y) : display.groundY(x, z));
+        const [into] = crossing(p, eye, c);
+        // The other pieces whose footprint the line crosses, and where.
+        const across = [];
+        for (const q of standing || layout.pieces) {
+          if (q === p || q === p.of) continue;
+          const [t0, t1] = crossing(q, eye, c);
+          if (t0 <= t1) across.push({ q, t0, t1 });
+        }
+        for (let i = 1; i < SIGHT_SAMPLES; i++) {
+          const t = i / SIGHT_SAMPLES;
+          const x = eye.x + (c.x - eye.x) * t, y = eye.y + (c.y - eye.y) * t;
+          const z = eye.z + (c.z - eye.z) * t;
+          if (ground(x, z) + (t < into ? SIGHT_MARGIN : 0) > y) { n++; continue; }
+          if (near.some((f) => inRoad(f, x, y, z))) { n++; continue; }
+          if (trees.some(([tx, tz, r, top]) => y < top && (x - tx) ** 2 + (z - tz) ** 2 < r * r)) { n++; continue; }
+          if (across.some((a) => t >= a.t0 && t <= a.t1 && inShape(a.q, x, y, z))) n++;
+        }
+        return n;
+      }
+      // Whether the sight line from `eye` to `c` passes under raised road
+      // anywhere: below the slab of a stretch of the lap above it.
+      function underDeck(eye, c) {
+        const x0 = Math.min(eye.x, c.x), x1 = Math.max(eye.x, c.x);
+        const z0 = Math.min(eye.z, c.z), z1 = Math.max(eye.z, c.z);
+        const near = roadPoints().filter((f) => f.x > x0 - f.half && f.x < x1 + f.half
+                                              && f.z > z0 - f.half && f.z < z1 + f.half);
+        for (let i = 0; i < SIGHT_SAMPLES; i++) {
+          const t = i / SIGHT_SAMPLES;
+          const x = eye.x + (c.x - eye.x) * t, y = eye.y + (c.y - eye.y) * t;
+          const z = eye.z + (c.z - eye.z) * t;
+          for (const f of near) {
+            if (y < f.y - DECK_DEPTH && (x - f.x) ** 2 + (z - f.z) ** 2 < f.half * f.half) return true;
+          }
+        }
+        return false;
+      }
+
+      // Where on piece p a sight line is aimed: its middle first (the one that
+      // must be clear), then its foot, its top, and both ends of its long side,
+      // so a piece screened all but its tip scores below one in full view.
+      function sightPoints(p) {
+        const h = heightOf(p);
+        const long = p.hx >= p.hz ? { x: p.ax * p.hx, z: p.az * p.hx } : { x: -p.az * p.hz, z: p.ax * p.hz };
+        const end = (k) => ({ x: p.cx + long.x * k, y: footOf(p) + h * 0.4, z: p.cz + long.z * k });
+        return [centreOf(p, 0.5), centreOf(p, 0.15), centreOf(p, 0.9), end(0.7), end(-0.7)];
+      }
+
+      // How a chase rig (chaseRig's answer) in a cell of this aspect sees the
+      // point `centre`: its eye, the half-lens across and up, how far off the
+      // rig's forward the point is across (`off`) and up (`rise`, for any
+      // point), its distance in plan (`far`, at least 1), and whether it is in
+      // the lens with margin (LENS_MARGIN) both ways.
+      function lensOf(rig, aspect, centre) {
+        const eye = v3(rig.eye);
+        const half = Math.atan(Math.tan((rig.fov / 2) * Math.PI / 180) * aspect);
+        const vhalf = (rig.fov / 2) * Math.PI / 180;
+        const fwd = Math.atan2(rig.target[0] - eye.x, rig.target[2] - eye.z);
+        const to = Math.atan2(centre.x - eye.x, centre.z - eye.z);
+        const off = Math.atan2(Math.sin(to - fwd), Math.cos(to - fwd));
+        const flat = (x, z) => Math.hypot(x - eye.x, z - eye.z);
+        const pitch = Math.atan2(rig.target[1] - eye.y, flat(rig.target[0], rig.target[2]));
+        const rise = (c) => Math.atan2(c.y - eye.y, flat(c.x, c.z)) - pitch;
+        const lens = Math.abs(off) < half * LENS_MARGIN && Math.abs(rise(centre)) < vhalf * LENS_MARGIN;
+        return { eye, half, vhalf, off, rise, far: Math.max(flat(centre.x, centre.z), 1), lens };
+      }
+
+      // Every place a car could park on the road short of piece p, `b` units
+      // back in either lane on level, upright road, with where its chase rig
+      // will stand (the race's rig, parked: what the posed car's own cell
+      // shows) and how well that rig sees the piece. `at` is the car's spot on
+      // the deck; `lens` says the piece's middle is inside the cell's lens
+      // with margin, across and up; `fit` is how far off the rig's forward
+      // its far edge sits, as a share of the half-lens across or up (the
+      // car is near the forward, so a camera turned from a low fit keeps both
+      // in shot); `size` is the piece's body (sizeOf) as a share of the half-lens.
+      // In the lens, or close enough to turn onto it (`turn`), `hidden` is how
+      // hidden the piece's middle is (0 clear), `vis` how many of its sight
+      // points are clear and `roof` whether the line to its middle runs under
+      // raised road. Cached per piece and cell aspect: the ground walk is the
+      // costly part and a view switch re-aims.
+      let spots = new Map(), spotsFor = null;
+      function approaches(p, aspect) {
+        if (spotsFor !== layout) { spots = new Map(); spotsFor = layout; }
+        const key = `${layout.pieces.indexOf(p.of || p)}:${aspect.toFixed(3)}`;
+        if (spots.has(key)) return spots.get(key);
+        const backs = [];
+        for (let b = 6; b <= layout.length * 0.45; b += 2) backs.push(b);
+        const frames = display.trackFrames(track.trackId, backs.map((b) => p.s - b));
+        const aims = sightPoints(p);
+        const centre = aims[0];
+        const radius = radiusOf(p);
+        const body = sizeOf(p);
+        const out = [];
+        frames.forEach((f, i) => {
+          if (f.up.y < UPRIGHT || Math.abs(f.tangent.y) > LEVEL) return;
+          const lane = (f.width || 0) * LANE;
+          for (const lat of [-lane, lane]) {
+            const at = { x: f.pos.x + f.lateral.x * lat, y: f.pos.y + f.lateral.y * lat,
+                         z: f.pos.z + f.lateral.z * lat };
+            const rig = display.chaseRig(at.x, at.y, at.z, f.tangent.x, f.tangent.z, 0);
+            const { eye, half, vhalf, off, rise, far, lens } = lensOf(rig, aspect, centre);
+            const r = Math.atan(1.2 * radius / far);
+            const spot = { b: backs[i], s: p.s - backs[i], lat, at, rig, eye, lens,
+                           fit: Math.max((Math.abs(off) + r) / half, (Math.abs(rise(centre)) + r) / vhalf),
+                           centred: lens && Math.abs(off) < half * CENTRED && rise(aims[2]) < vhalf * TOP_MARGIN,
+                           size: Math.atan(body / far) / half,
+                           hidden: Infinity, vis: 0, roof: false };
+            if (!lens && spot.fit <= TURN_FIT && spot.size >= SIZE_MIN) spot.turn = true;
+            if (lens || spot.turn) {
+              const each = aims.map((c) => hidden(eye, c, p));
+              spot.hidden = each[0];
+              spot.vis = each.filter((n) => n === 0).length;
+              spot.roof = underDeck(eye, centre);
+            }
+            out.push(spot);
+          }
+        });
+        spots.set(key, out);
+        return out;
+      }
+      // Spot a for a cell that has to turn its camera onto the piece (fitLook):
+      // a spot whose rig does not have it in the lens, with how well its eye
+      // sees the piece, which approaches() only works out inside the lens.
+      function turned(a, p) {
+        if (a.lens) return a;
+        const aims = sightPoints(p);
+        const each = aims.map((c) => hidden(a.eye, c, p));
+        return { ...a, turn: true, hidden: each[0], vis: each.filter((n) => n === 0).length,
+                 roof: underDeck(a.eye, aims[0]) };
+      }
+      // The approach a cell parks its car at. Variant 0 is the base: among
+      // the spots that see the piece's middle (CLEAN ones first, then those
+      // with it mid-picture, CENTRED), the NEAREST of the ones that see the
+      // most of it; where none in the lens is clean, a clean spot that turns
+      // onto it (TURN_FIT), then one where it is no speck under a deck, then
+      // any that sees it, turned or not; if every spot is screened, the least
+      // hidden in the lens. With several cells on one piece the others are
+      // other drivers' views of it: 1 further back in the other lane, 2
+      // closer, 3 furthest back (behind 1 where it can), each at the spot
+      // nearest its distance among those that see the middle and nearly as
+      // much as the base, else the middle (clean, then turned and clean, then
+      // any); failing that, the least hidden in the lens within VARIANT_REACH
+      // of the base. Never
+      // onto or right behind a car another variant parked: a full car gap,
+      // else half.
+      // A bend can swing a piece out of every stretch short of it: then the
+      // spots that come nearest are used with `turn` set (the cell turns its
+      // camera onto the piece and the car), each at a distance of its own and
+      // within VARIANT_REACH of the first where they can.
+      // Null when there is no room left to park.
+      function approachFor(p, aspect, variant) {
+        const all = approaches(p, aspect);
+        const taken = [];
+        const parked = (a, gap) => taken.some((t) => Math.sign(t.lat) === Math.sign(a.lat)
+                                                   && Math.abs(t.b - a.b) < gap);
+        const first = (list) => list.find((a) => !parked(a, CAR_GAP))
+                             || list.find((a) => !parked(a, CAR_GAP / 2)) || null;
+        const nearest = [...all].sort((a, b) => a.fit - b.fit);
+        const apart = (a) => !taken.some((t) => Math.abs(t.b - a.b) < CAR_GAP);
+        const turnTo = () => nearest.find((a) => apart(a) && (!taken.length || Math.abs(a.b - taken[0].b) <= VARIANT_REACH))
+                          || nearest.find(apart) || first(nearest);
+        const inLens = all.filter((a) => a.lens);
+        const clean = (a) => !a.roof && a.size >= SIZE_MIN;
+        const turnClean = all.filter((a) => a.turn && a.hidden === 0 && clean(a));
+        if (!inLens.length && !turnClean.length) {
+          let pick = null;
+          for (let k = 0; k <= variant; k++) {
+            pick = turnTo();
+            if (!pick) return null;
+            taken.push(pick);
+          }
+          return turned(pick, p);
+        }
+        const score = (a) => a.hidden - a.vis;
+        const seen = inLens.filter((a) => a.hidden === 0);
+        const seenClean = seen.filter(clean);
+        const seenBig = seen.filter((a) => a.size >= SIZE_MIN);
+        const turnSeen = all.filter((a) => a.turn && a.hidden === 0);
+        const pool = [seenClean, turnClean, seenBig, seen, turnSeen].find((l) => l.length) || seen;
+        const centred = pool.filter((a) => a.centred);
+        const tier = centred.length ? centred : pool;
+        const most = Math.max(0, ...tier.map((a) => a.vis));
+        const base = tier.find((a) => a.vis === most)
+          || inLens.reduce((m, x) => (score(x) < score(m) ? x : m));
+        if (!variant) return base;
+        taken.push(base);
+        const good = pool.filter((a) => a.vis >= base.vis - 1);
+        const near = inLens.filter((a) => Math.abs(a.b - base.b) <= VARIANT_REACH);
+        let pick = null;
+        for (let k = 1; k <= variant; k++) {
+          const [scale, add, otherLane] = VARIANTS[(k - 1) % VARIANTS.length];
+          const want = base.b * scale + add;
+          const side = Math.sign(base.lat) * (otherLane ? -1 : 1);
+          const byWant = (list) => [...list].sort((a, b) => Math.abs(a.b - want) - Math.abs(b.b - want));
+          const behind = k === 3 ? (a) => a.b > taken[1].b : () => true;
+          pick = null;
+          const lists = [good.filter((a) => Math.sign(a.lat) === side), good, pool, turnClean, seen, turnSeen];
+          for (const list of lists) {
+            pick = first(byWant(list.filter(behind))) || first(byWant(list));
+            if (pick) break;
+          }
+          pick = pick || first(byWant(near).sort((a, b) => score(a) - score(b))) || turnTo();
+          if (!pick) return null;
+          taken.push(pick);
+        }
+        return turned(pick, p);
+      }
+      // LAP VISIBILITY (window.__landmarks.score): how long a racer sees each
+      // piece, which is what a piece's place on the lap is for. One
+      // autopiloted player drives a fresh session nobody draws; over its
+      // second lap (the first starts from the grid), every LAP_SAMPLE seconds
+      // its chase rig (chaseRig, at the car's pose and speed) looks for every
+      // piece. A piece reads CLEAN when its middle (or, for one too tall for
+      // that, its foot) is in the lens, the sight line to it is clear
+      // (hidden) and runs under no raised road, the driver view's own tests,
+      // and its body is at least LAP_SIZE of the half-lens: half the parked
+      // bar (SIZE_MIN), which frames a piece as the subject where a racer
+      // only needs it in the picture. It scores the seconds it reads clean in
+      // runs of at least LAP_RUN (a glimpse is not a look) and its longest
+      // run; for the seconds it was in the lens but not clean, the first thing
+      // wrong (too small, hidden, under a deck), so a poor score says why; how
+      // big it read at best in clear sight (`peak`, a share of the half-lens);
+      // and the racer's best moment (`at`: the car's s and lane in the middle
+      // of the longest run, else where it read biggest in clear sight, else
+      // null) to photograph.
+      const LAP_SAMPLE = 0.1;
+      const LAP_SIZE = SIZE_MIN / 2;
+      const LAP_RUN = 1;
+      const LAP_STEP_MS = 1000 / 60;
+      const LAP_MAX_S = 600;       // a car that never finishes two laps is a stuck sim
+      // How far ahead along the lap the racer reads the road (the placement
+      // search keeps it in sight), and how far over the deck that is read.
+      const AHEAD = [12, 20];
+      const ROAD_SIGHT = 0.3;
+      // The lap a racer drives, recorded once per scene: per sample the car's
+      // spot on the road and its chase rig. Set pieces stand off the road, so
+      // where one stands never changes the lap.
+      let lapRec = null, lapFor = null;
+      function lapPath() {
+        if (lapFor === layout) return lapRec;
+        const { field: f, bots: b } = benchField(track.trackId, 1, 1);
+        const run = bareSession(f, track, { bots: b });
+        const me = f.find((x) => !x.ai).peerIndex;
+        const len = layout.length;
+        const path = [];
+        const every = Math.round((LAP_SAMPLE * 1000) / LAP_STEP_MS);
+        try {
+          for (let k = 1; ; k++) {
+            run.update(LAP_STEP_MS);
+            if (k % every) continue;
+            if (k * LAP_STEP_MS > LAP_MAX_S * 1000) throw new Error(`no two laps of '${track.id}' in ${LAP_MAX_S}s`);
+            const c = run.getSnapshot().cars.find((x) => x.id === me);
+            if (c.totalS < len) continue;
+            if (c.totalS >= 2 * len || c.finished) break;
+            const { pos, forward } = c.pose;
+            path.push({ s: c.totalS - len, lat: c.lat, rig: display.chaseRig(pos.x, pos.y, pos.z, forward.x, forward.z, c.spd) });
+          }
+        } finally {
+          run.dispose();
+        }
+        // The road the racer is steering for, AHEAD along the lap from each
+        // sample: the deck a little over its surface.
+        const ahead = display.trackFrames(track.trackId, path.flatMap((q) => AHEAD.map((d) => q.s + d)));
+        path.forEach((q, k) => {
+          q.ahead = AHEAD.map((_, j) => {
+            const f = ahead[k * AHEAD.length + j];
+            return { x: f.pos.x, y: f.pos.y + ROAD_SIGHT, z: f.pos.z };
+          });
+        });
+        lapRec = path;
+        lapFor = layout;
+        return path;
+      }
+      const secs = (k) => Math.round(k * LAP_SAMPLE * 10) / 10;
+      // How piece row v reads over the recorded lap: lapScore's row for it.
+      // A long piece is read whole, not the stretch round its anchor a parked
+      // view frames: what is in the picture is the mountain, not where it
+      // meets the road.
+      function readOver(path, v, aspect) {
+        const aims = [centreOf(v, 0.5), centreOf(v, 0.15)];
+        const body = sizeOf(v);
+        const clean = [];
+        let lens = 0, peak = 0, peakAt = -1;
+        const bad = { small: 0, hidden: 0, roof: 0 };
+        path.forEach(({ rig }, k) => {
+          const seen = aims.map((c) => ({ c, ...lensOf(rig, aspect, c) })).find((a) => a.lens);
+          if (!seen) { clean.push(false); return; }
+          const { c: centre, eye, half, far } = seen;
+          lens++;
+          let why = null;
+          const size = Math.atan(body / far) / half;
+          if (hidden(eye, centre, v)) why = 'hidden';
+          else if (underDeck(eye, centre)) why = 'roof';
+          else if (size > peak) { peak = size; peakAt = k; }
+          if (!why && size < LAP_SIZE) why = 'small';
+          if (why) bad[why]++;
+          clean.push(!why);
+        });
+        // The clean runs round the lap, from a sample that is not clean so a
+        // run across the line counts once.
+        const n = path.length;
+        const from = clean.indexOf(false);
+        let total = 0, longest = 0, mid = peakAt;
+        if (from < 0) { total = longest = n; } else {
+          for (let k = 0, run = 0; k <= n; k++) {
+            const j = (from + k) % n;
+            if (k < n && clean[j]) { run++; continue; }
+            if (run * LAP_SAMPLE >= LAP_RUN) total += run;
+            if (run > longest) { longest = run; mid = (j - Math.ceil(run / 2) + n) % n; }
+            run = 0;
+          }
+        }
+        const at = mid >= 0 ? { s: Math.round(path[mid].s * 10) / 10, lat: Math.round(path[mid].lat * 100) / 100 } : null;
+        return { seen: secs(total), longest: secs(longest), at, eye: mid >= 0 ? path[mid].rig.eye : null, lens: secs(lens), small: secs(bad.small),
+                 hidden: secs(bad.hidden), roof: secs(bad.roof), peak: Math.round(peak * 100) / 100 };
+      }
+      // The yaw (tracks.js degrees) that turns row p's front (+X) straight at
+      // the eye: a piece with a face (penguins) authored facing +X looks at
+      // the racer where the lap reads it best.
+      function faceYaw(p, eye) {
+        const f = frameAt(p.s);
+        const at = Math.atan2(-(eye[2] - p.cz), eye[0] - p.cx);      // +X's sense: (cos h, -sin h)
+        const road = Math.atan2(f.tangent.x, f.tangent.z);
+        return Math.round((((at - road) * 180 / Math.PI) % 360 + 360) % 360);
+      }
+      function lapScore(aspect) {
+        const path = lapPath();
+        return {
+          track: track.id, aspect, lap: secs(path.length), length: layout.length,
+          pieces: layout.pieces.map((p, i) => {
+            const { eye, ...read } = readOver(path, p, aspect);
+            return { index: i, model: p.model, label: labelOf(p.model), s: p.s, lat: p.lat, yaw: p.yaw,
+                     face: eye && faceYaw(p, eye), spot: clashOf(p, i), ...read };
+          })
+        };
+      }
+
+      // PLACEMENT SEARCH (window.__landmarks.better): for every piece a racer
+      // reads for under PLACE_GOOD seconds, a spot on its own side of the road
+      // where it reads better, scored over the recorded lap like lapScore. A
+      // candidate is the piece's own row moved rigidly (its authored yaw to
+      // the road, its lift and scale kept) to a point every PLACE_DU of the lap
+      // within its reach (HERO_REACH for the track's biggest model, the hero,
+      // which the lap is shaped round; the whole lap for the rest), at each of
+      // PLACE_GAPS past the kerb, where it stands now, or PLACE_KEEP of that,
+      // never nearer than PLACE_KEEP of it: a piece set back on the tide line
+      // or up a slope keeps most of its distance. It is kept only where the
+      // renderer lets every cell of its shape stand (spotIssue), where it
+      // never comes between the racer and the road AHEAD (blocksRoad), clear
+      // of the spots already chosen, and PLACE_SPREAD of the lap from every
+      // other placement of the same model, so companions stay spread round
+      // the lap.
+      // A piece moves only for PLACE_GAIN more clean seconds, and never to a
+      // spot that costs another piece over PLACE_HARM of its own (it stands in
+      // that one's sight line); among spots within PLACE_TIE of the best, the
+      // biggest read wins, then the nearest. PLACE_TRIES spots are tried (every one for a piece
+      // that must move, below). A piece that stands in
+      // the sea or on the shore now (a ship, a jetty) is placed by its
+      // coastline and never moves. One that CLASHES where it stands (the
+      // road, a deck, another piece or a berm where its shape stands) moves however well it
+      // reads, to the best legal spot, CLASH_GAPS further out included and
+      // across the road too (its yaw mirrored, so the side it showed the road
+      // still faces it). Worst read first. The scene is not
+      // rebuilt: terrain flattens under a piece and scatter clears round it
+      // only once one is, so a chosen spot is checked by building it.
+      const PLACE_GOOD = 2;
+      const PLACE_DU = 0.01;
+      const HERO_REACH = 0.05;
+      const PLACE_GAPS = [1.5, 3, 5, 8, 12];
+      const CLASH_GAPS = [16, 20, 25, 30];          // further out for a piece that must move
+      const PLACE_KEEP = 0.5;
+      const PLACE_SPREAD = 0.08;
+      const PLACE_GAIN = 1;
+      const PLACE_TIE = 0.3;
+      const PLACE_HARM = 0.5;
+      const PLACE_TRIES = 6;
+      // Row p stood at arclength s, `lat` off the centreline, turned `yaw`
+      // degrees to the road.
+      function movedRow(p, s, lat, yaw = p.yaw) {
+        const f = frameAt(s);
+        const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+        const h = Math.atan2(f.tangent.x, f.tangent.z) + (yaw * Math.PI) / 180;
+        const ax = Math.cos(h), az = -Math.sin(h);
+        // The footprint's centre off the anchor, on the piece's own axes.
+        const dx = p.cx - p.x, dz = p.cz - p.z;
+        const u = dx * p.ax + dz * p.az, v = -dx * p.az + dz * p.ax;
+        return { ...p, of: p, s, u: s / layout.length, lat, yaw, x, z, heading: h, ax, az,
+                 cx: x + u * ax - v * az, cz: z + u * az + v * ax };
+      }
+      // What keeps row q (layout row `skip`) from standing where it is: the
+      // first issue spotIssue finds under a cell of its shape, or ''.
+      function spotOf(q, skip) {
+        const sh = shapes.get(q.model);
+        if (!sh) return 'no shape';
+        const sc = sh.w >= sh.d ? (2 * q.hx) / sh.w : (2 * q.hz) / sh.d;
+        for (let k = 0; k < sh.nz; k++) {
+          for (let i = 0; i < sh.nx; i++) {
+            const c = k * sh.nx + i;
+            if (!(sh.hi[c] > -Infinity)) continue;
+            const lx = (sh.x0 + (i + 0.5) * SHAPE_CELL) * sc, lz = (sh.z0 + (k + 0.5) * SHAPE_CELL) * sc;
+            const issue = display.spotIssue(q.x + lx * q.ax - lz * q.az, q.z + lx * q.az + lz * q.ax,
+                                            q.y + sh.lo[c] * sc, q.y + sh.hi[c] * sc, skip);
+            if (issue) return issue;
+          }
+        }
+        return '';
+      }
+      // Whether a road deck passes over row q: a cell of its shape inside a
+      // road sample's stretch, the deck over the piece's foot. spotIssue lets
+      // a piece stand under a deck raised high enough, and one parked under
+      // its own overpass reads as hidden to a reviewer.
+      function bridged(q) {
+        const sh = shapes.get(q.model);
+        if (!sh) return false;
+        const r = Math.hypot(q.hx, q.hz);
+        const near = roadPoints().filter((f) => f.y > q.y + 1
+          && Math.hypot(f.x - q.cx, f.z - q.cz) < r + f.half + f.reach);
+        if (!near.length) return false;
+        const sc = sh.w >= sh.d ? (2 * q.hx) / sh.w : (2 * q.hz) / sh.d;
+        for (let k = 0; k < sh.nz; k++) {
+          for (let i = 0; i < sh.nx; i++) {
+            if (!(sh.hi[k * sh.nx + i] > -Infinity)) continue;
+            const lx = (sh.x0 + (i + 0.5) * SHAPE_CELL) * sc, lz = (sh.z0 + (k + 0.5) * SHAPE_CELL) * sc;
+            const x = q.x + lx * q.ax - lz * q.az, z = q.z + lx * q.az + lz * q.ax;
+            for (const f of near) {
+              const dx = x - f.x, dz = z - f.z;
+              if (Math.abs(dx * f.tx + dz * f.tz) <= f.reach && Math.abs(dx * f.lx + dz * f.lz) < f.half) return true;
+            }
+          }
+        }
+        return false;
+      }
+      // What is wrong with row q (layout row `skip`) standing where it is:
+      // spotOf's issue, 'deck' when a road passes over it, or ''.
+      const clashOf = (q, skip) => spotOf(q, skip) || (bridged(q) ? 'deck' : '');
+      // Whether row q stands between the racer and the road AHEAD anywhere
+      // on the recorded lap: a sight line from a chase eye to a point ahead
+      // runs into its shape.
+      function blocksRoad(path, q) {
+        const r = Math.hypot(q.hx, q.hz);
+        for (const { rig, ahead } of path) {
+          for (const a of ahead) {
+            const e = rig.eye;
+            // Most lines pass nowhere near: their box misses the piece's circle.
+            if (Math.max(e[0], a.x) < q.cx - r || Math.min(e[0], a.x) > q.cx + r
+                || Math.max(e[2], a.z) < q.cz - r || Math.min(e[2], a.z) > q.cz + r) continue;
+            for (let i = 1; i < SIGHT_SAMPLES; i++) {
+              const t = i / SIGHT_SAMPLES;
+              if (inShape(q, e[0] + (a.x - e[0]) * t, e[1] + (a.y - e[1]) * t, e[2] + (a.z - e[2]) * t)) return true;
+            }
+          }
+        }
+        return false;
+      }
+      // Whether two rows' footprints overlap (separating axes of two boxes).
+      function overlap(a, b) {
+        const axes = [[a.ax, a.az], [-a.az, a.ax], [b.ax, b.az], [-b.az, b.ax]];
+        const reach = (q, [x, z]) => q.hx * Math.abs(q.ax * x + q.az * z) + q.hz * Math.abs(-q.az * x + q.ax * z);
+        return axes.every(([x, z]) => Math.abs((a.cx - b.cx) * x + (a.cz - b.cz) * z) < reach(a, [x, z]) + reach(b, [x, z]) + 0.5);
+      }
+      function better(aspect) {
+        const path = lapPath();
+        const len = layout.length;
+        const hero = marks.length ? marks[0].model : null;
+        const where = layout.pieces.slice();             // where each stands once chosen
+        let reads = where.map((p) => readOver(path, p, aspect));
+        const now = reads.slice();
+        const clash = where.map((p, i) => clashOf(p, i));
+        const fixed = new Set(clash.map((c, i) => (c === 'sea' ? i : -1)));
+        const must = clash.map((c) => c !== '' && c !== 'sea');
+        const chosen = [];
+        const gap = (a, b) => { const d = Math.abs(a - b) % len; return Math.min(d, len - d); };
+        const out = [];
+        const order = where.map((_, i) => i).sort((a, b) => now[a].seen - now[b].seen || now[a].peak - now[b].peak);
+        standing = where;
+        try {
+          for (const i of order) {
+            const p = layout.pieces[i], read = now[i];
+            if ((read.seen >= PLACE_GOOD && !must[i]) || fixed.has(i)) continue;
+            const side = Math.sign(p.lat) || 1;
+            const reach = p.model === hero ? HERO_REACH * len : len / 2;
+            const kin = where.filter((q, k) => k !== i && q.model === p.model);
+            const tried = [];
+            for (let du = -reach; du <= reach; du += PLACE_DU * len) {
+              const s = (((p.s + du) % len) + len) % len;
+              if (kin.some((q) => gap(q.s, s) < PLACE_SPREAD * len)) continue;
+              const w = (frameAt(s).width || 0) / 2;
+              const keep = PLACE_KEEP * Math.abs(p.lat);
+              const gaps = [...[...PLACE_GAPS, ...(must[i] ? CLASH_GAPS : [])].map((x) => w + x), Math.abs(p.lat), keep].filter((g) => g >= keep);
+              for (const [g, sd] of gaps.flatMap((g) => (must[i] ? [[g, side], [g, -side]] : [[g, side]]))) {
+                const q = sd === side ? movedRow(p, s, sd * g) : movedRow(p, s, sd * g, 180 - p.yaw);
+                if (chosen.some((c) => overlap(c, q)) || spotOf(q, i) || bridged(q) || blocksRoad(path, q)) continue;
+                tried.push({ q, read: readOver(path, q, aspect) });
+              }
+            }
+            const dist = (t) => Math.hypot(t.q.cx - p.cx, t.q.cz - p.cz);
+            const ranked = tried.filter((t) => must[i] || t.read.seen >= reads[i].seen + PLACE_GAIN)
+              .sort((a, b) => Math.round(b.read.seen / PLACE_TIE) - Math.round(a.read.seen / PLACE_TIE)
+                || b.read.peak - a.read.peak || dist(a) - dist(b));
+            let best = null;
+            for (const t of must[i] ? ranked : ranked.slice(0, PLACE_TRIES)) {
+              where[i] = t.q;
+              const after = where.map((q, k) => (k === i ? t.read : readOver(path, q, aspect)));
+              if (after.every((r, k) => k === i || r.seen >= reads[k].seen - PLACE_HARM)) { best = t; reads = after; break; }
+              where[i] = p;
+            }
+            if (best) chosen.push(best.q);
+            out.push({ index: i, model: p.model, label: labelOf(p.model), hero: p.model === hero, clash: clash[i],
+                       from: { s: p.s, u: p.u, lat: p.lat, ...read },
+                       to: best ? { s: best.q.s, u: best.q.u, lat: best.q.lat, yaw: best.q.yaw, ...best.read } : null,
+                       candidates: tried.length });
+          }
+        } finally {
+          standing = null;
+        }
+        return { track: track.id, aspect, proposals: out.sort((a, b) => a.index - b.index) };
+      }
+
+      // The parked car's chase eye turned onto the piece, aimed to keep the
+      // piece and the top of the car in shot together; where both do not fit
+      // across, the piece gives way at its edge and the car stays inside
+      // CAR_KEEP of the half-lens (a cell is that player's view, car and
+      // all), and up and down the piece wins. Glance (`zoom`) also narrows
+      // the lens to fit them, so a small piece far off the road is a subject
+      // and the car still shows at the bottom of the shot, never wider than
+      // the rig's own; a driver keeps the rig's lens.
+      function fitLook(a, p, aspect, zoom) {
+        const ang = (q) => {
+          const dx = q.x - a.eye.x, dz = q.z - a.eye.z, flat = Math.hypot(dx, dz);
+          return { yaw: Math.atan2(dx, dz), pitch: Math.atan2(q.y - a.eye.y, flat),
+                   d: Math.hypot(flat, q.y - a.eye.y) };
+        };
+        const c = centreOf(p, 0.5);
+        const pc = ang(c);
+        const car = ang({ x: a.at.x, y: a.at.y + CAR_SHOW, z: a.at.z });
+        const r = Math.atan(1.2 * radiusOf(p) / Math.max(pc.d, 1));
+        const carYaw = Math.atan2(Math.sin(car.yaw - pc.yaw), Math.cos(car.yaw - pc.yaw));
+        const yaw0 = Math.min(-r, carYaw), yaw1 = Math.max(r, carYaw);
+        const pit0 = Math.min(pc.pitch - r, car.pitch), pit1 = Math.max(pc.pitch + r, car.pitch);
+        const tanA = (x) => Math.tan(x) / aspect;
+        const need = 2 * Math.max((pit1 - pit0) / 2, Math.atan(tanA((yaw1 - yaw0) / 2))) * 1.15;
+        const fov = zoom ? Math.min(a.rig.fov, Math.max(GLANCE_MIN_FOV, need * 180 / Math.PI)) : a.rig.fov;
+        const vhalf = (fov / 2) * Math.PI / 180;
+        const hhalf = Math.atan(Math.tan(vhalf) * aspect);
+        const keep = (mid, at, room) => Math.min(Math.max(mid, at - room), at + room);
+        const yaw = pc.yaw + keep(keep((yaw0 + yaw1) / 2, 0, Math.max(hhalf * 0.95 - r, 0)), carYaw, hhalf * CAR_KEEP);
+        const pitch = keep((pit0 + pit1) / 2, pc.pitch, Math.max(vhalf * 0.95 - r, 0));
+        const l = pc.d;
+        return { eye: a.eye, fov,
+                 target: { x: a.eye.x + Math.sin(yaw) * Math.cos(pitch) * l, y: a.eye.y + Math.sin(pitch) * l,
+                           z: a.eye.z + Math.cos(yaw) * Math.cos(pitch) * l } };
+      }
+      // From across the road from the piece; a piece on the centreline (an
+      // arch) is seen from behind.
+      function highDir(p) {
+        const f = frameAt(p.s);
+        const side = Math.abs(p.lat) < 1 ? 0 : -Math.sign(p.lat);
+        const x = side ? side * f.lateral.x : -f.tangent.x;
+        const z = side ? side * f.lateral.z : -f.tangent.z;
+        const l = Math.hypot(x, z) || 1;
+        return { x: x / l, z: z / l };
+      }
+      // Look at c from `d` away along `dir`, `pitch` above the horizon.
+      function framedAt(c, d, dir, pitch, fov) {
+        return { eye: { x: c.x + dir.x * d * Math.cos(pitch), y: c.y + d * Math.sin(pitch),
+                        z: c.z + dir.z * d * Math.cos(pitch) },
+                 target: c, fov };
+      }
+      const framedPose = (p, dir, pitch) =>
+        framedAt(centreOf(p, 0.4), reachOf(radiusOf(p)), dir, pitch, WIDE_FOV);
+      // High stands across the road from the piece, back far enough that the
+      // road's far edge lies between the eye and the piece, and fits its lens
+      // to the piece the way glance does: the piece fills the shot however far
+      // off the road it was placed, with the road in front of it.
+      function highPose(p) {
+        const dir = highDir(p);
+        if (Math.abs(p.lat) < 1) return framedPose(p, dir, HIGH_PITCH);
+        const f = frameAt(p.s);
+        const half = (f.width || 0) / 2;
+        const c = centreOf(p, 0.4);
+        const r = radiusOf(p);
+        const gap = Math.hypot(f.pos.x + dir.x * half - c.x, f.pos.z + dir.z * half - c.z);
+        const d = Math.max(reachOf(r), (gap + HIGH_MARGIN) / Math.cos(HIGH_PITCH));
+        const fit = 2 * Math.atan(1.5 * r / d) * 180 / Math.PI;
+        return framedAt(c, d, dir, HIGH_PITCH, Math.min(WIDE_FOV, Math.max(GLANCE_MIN_FOV, fit)));
+      }
+      // Orbit walks round the piece at one reach and pitch, chosen per piece:
+      // the first (the framed pose's, then higher, then closer in) from which
+      // the piece's middle is in clear sight all the way round, else the one
+      // that sees it from the most of the way, so the walk never passes
+      // behind a deck or into a hill where another would not.
+      const ORBIT_STEPS = 12;
+      let orbitFit = new Map(), orbitFor = null;
+      function orbitPose(p) {
+        if (orbitFor !== layout) { orbitFit = new Map(); orbitFor = layout; }
+        const c = centreOf(p, 0.4);
+        const reach = reachOf(radiusOf(p));
+        const d = highDir(p);
+        const a0 = Math.atan2(d.z, d.x);
+        const dirAt = (a) => ({ x: Math.cos(a), z: Math.sin(a) });
+        let fit = orbitFit.get(p);
+        if (!fit) {
+          let best = null;
+          for (const k of [1, 0.8, 0.6]) {
+            for (const pitch of [ORBIT_PITCH, ORBIT_PITCH + 0.3, ORBIT_PITCH + 0.6]) {
+              let blocked = 0;
+              for (let i = 0; i < ORBIT_STEPS; i++) {
+                const e = framedAt(c, reach * k, dirAt(a0 + (2 * Math.PI * i) / ORBIT_STEPS), pitch, WIDE_FOV).eye;
+                if (hidden(e, c, p)) blocked++;
+              }
+              if (!best || blocked < best.blocked) best = { blocked, pitch, k };
+              if (!blocked) break;
+            }
+            if (!best.blocked) break;
+          }
+          fit = best;
+          orbitFit.set(p, fit);
+        }
+        return framedAt(c, reach * fit.k * turn.zoom, dirAt(a0 + orbitT * ORBIT_RATE + turn.yaw),
+                        Math.max(TURN_PITCH[0], Math.min(TURN_PITCH[1], fit.pitch + turn.pitch)), WIDE_FOV);
+      }
+      // ORBIT IN HAND: a drag on the stage turns the walk round the piece and
+      // tilts it (the world follows the pointer), the wheel steps in and out,
+      // and the first drag stops the walk where it is. A new piece, placement
+      // or view starts it again from the fitted reach and pitch.
+      // A DRAG TAKES THE CAMERA in every other view: the free camera opens at
+      // the picture's own eye (a race goes on, or stays paused, under it) and
+      // the drag carries on as its first turn. So the stage takes the pointer
+      // in every view (`cam-free`, display.css). A stage that follows another
+      // (follow) has no orbit of its own to turn: a drag there takes the
+      // camera in the orbit too, and the gallery hands it to the other stage.
+      let taking = null;
+      scene.container.addEventListener('pointerdown', (e) => {
+        if ((mode !== 'orbit' || led) && !free && e.isTrusted) taking = { x: e.clientX, y: e.clientY };
+      });
+      scene.container.addEventListener('pointerup', () => { taking = null; });
+      scene.container.addEventListener('pointermove', (e) => {
+        if (!taking || !(e.buttons & 1)) { taking = null; return; }
+        if (Math.hypot(e.clientX - taking.x, e.clientY - taking.y) < 4) return;
+        taking = null;
+        if (mode === 'race') setRaceCam('free', true);
+        else setView('free');
+        scene.container.dispatchEvent(new PointerEvent('pointerdown', { pointerId: e.pointerId, clientX: e.clientX,
+                                                                        clientY: e.clientY }));
+      });
+      const TURN_PITCH = [0.05, 1.45];
+      const TURN_ZOOM = [0.2, 5];
+      const turn = { yaw: 0, pitch: 0, zoom: 1, held: false, drag: null };
+      const unturn = () => Object.assign(turn, { yaw: 0, pitch: 0, zoom: 1, held: false });
+      scene.container.addEventListener('pointerdown', (e) => {
+        if (mode !== 'orbit' || led) return;
+        turn.drag = { x: e.clientX, y: e.clientY };
+        turn.held = true;
+        scene.container.setPointerCapture(e.pointerId);
+      });
+      scene.container.addEventListener('pointermove', (e) => {
+        if (!turn.drag || mode !== 'orbit') return;
+        turn.yaw += (e.clientX - turn.drag.x) * 0.006;
+        turn.pitch += (e.clientY - turn.drag.y) * 0.004;
+        turn.drag = { x: e.clientX, y: e.clientY };
+      });
+      scene.container.addEventListener('pointerup', () => { turn.drag = null; });
+      scene.container.addEventListener('wheel', (e) => {
+        if (mode !== 'orbit') return;
+        e.preventDefault();
+        turn.zoom = Math.max(TURN_ZOOM[0], Math.min(TURN_ZOOM[1], turn.zoom * Math.exp(e.deltaY * 0.001)));
+      }, { passive: false });
+      // Straight down over the whole lap and every piece on it, fitted to the
+      // cell's aspect. The target leans a hair off vertical: a look straight
+      // along world up has no basis.
+      function topPose(aspect) {
+        const n = 96;
+        const fr = display.trackFrames(track.trackId,
+                                       Array.from({ length: n }, (_, i) => (layout.length * i) / n));
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        const grow = (x, z, r) => {
+          x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r);
+          z0 = Math.min(z0, z - r); z1 = Math.max(z1, z + r);
+        };
+        for (const f of fr) grow(f.pos.x, f.pos.z, (f.width || 0) / 2 + 4);
+        for (const p of layout.pieces) grow(p.cx, p.cz, Math.hypot(p.hx, p.hz));
+        const half = Math.max((z1 - z0) / 2, (x1 - x0) / 2 / (aspect || 1)) * 1.08;
+        let fov = WIDE_FOV;
+        let h = half / Math.tan((fov / 2) * Math.PI / 180);
+        if (h > TOP_MAX_H) { h = TOP_MAX_H; fov = 2 * Math.atan(half / h) * 180 / Math.PI; }
+        const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, y = layout.groundY;
+        return { eye: { x: cx, y: y + h, z: cz + h * 0.02 }, target: { x: cx, y, z: cz }, fov };
+      }
+      // The framed views' look for cell k; driver and glance go through aim().
+      function poseFor(k, aspect) {
+        if (mode === 'top') return topPose(aspect);
+        const p = pieceFor(k);
+        if (!p) return null;
+        if (mode === 'high') return highPose(p);
+        if (mode === 'orbit') return orbitPose(p);
+        return null;
+      }
+
+      // Point every cell for the current mode. Driver and glance park each
+      // cell's car on the approach (ttp_display_car_pose) so the cell is the
+      // race's own chase camera with the player's car in it: driver keeps that
+      // camera (a look only where a bend leaves the piece out of every
+      // approach), glance turns it onto the piece. Several cells on ONE piece
+      // (spread off, or more cells than pieces) are different approaches to it. The
+      // framed views put every car back on the grid and stand a look; race
+      // clears both and lets the chase rigs drive; free hands one full view
+      // to the viewer. cellBoxes() pushes the cells before any look or pose
+      // lands, and the engine only takes one for a cell it has. A stage that
+      // follows another stands nothing of its own (follow pushes the other's).
+      function aim() {
+        if (led) return;
+        display.cellLookClear();
+        display.carPoseClear();
+        poses = [];
+        if (mode === 'race' || mode === 'free') return;
+        const framed = [];
+        scene.cellBoxes().forEach((b, k) => {
+          const aspect = b.w / Math.max(b.h, 1);
+          const piece = mode === 'top' ? -1 : indexFor(k);
+          framed.push(piece);
+          if (mode === 'driver' || mode === 'glance') {
+            // The how-many-th cell on this piece: every cell is, without
+            // spread; with it, only where the cells outnumber the pieces.
+            const variant = framed.filter((i) => i === piece).length - 1;
+            const p = pieceFor(k);
+            const a = p && approachFor(p, aspect, variant);
+            if (!a) return;
+            display.carPose(k, a.s, a.lat);
+            const look = mode === 'glance' || a.turn ? fitLook(a, p, aspect, mode === 'glance') : null;
+            if (look) display.cellLook(k, look.eye, look.target, look.fov);
+            const rig = { eye: a.eye, target: v3(a.rig.target), fov: a.rig.fov };
+            poses[k] = { ...(look || rig), aspect, piece, look: !!look,
+                         car: { s: a.s, lat: a.lat }, hidden: a.hidden, vis: a.vis,
+                         roof: a.roof, size: a.size };
+            return;
+          }
+          const pose = poseFor(k, aspect);
+          if (!pose) return;
+          display.cellLook(k, pose.eye, pose.target, pose.fov);
+          poses[k] = { ...pose, aspect, piece, look: true };
+        });
+      }
+      // Free starts where the view it leaves had cell 0's eye, so a look round
+      // begins from the picture that prompted it; with none (out of a race, or
+      // a new piece while free) where High's wide framing would stand (not
+      // High's fitted lens: a step back in a 12-degree view loses the piece).
+      // Either way at the free camera's own lens.
+      // `fresh`: frame the focused piece from above it rather than carry on
+      // from the picture the view stood (a piece picked in the free view).
+      function openFree(fresh = false) {
+        const p = pieceFor(0);
+        const pose = (!fresh && poses[0]) || (p ? framedPose(p, highDir(p), HIGH_PITCH) : topPose(16 / 9));
+        const d = { x: pose.target.x - pose.eye.x, y: pose.target.y - pose.eye.y,
+                    z: pose.target.z - pose.eye.z };
+        const start = { eye: pose.eye, yaw: Math.atan2(d.x, d.z),
+                        pitch: Math.asin(d.y / Math.hypot(d.x, d.y, d.z)) };
+        document.documentElement.classList.add('cam-free');  // drags reach the canvas
+        if (!free) free = scene.enableUserCamera(start);
+        else Object.assign(free, { eye: { ...start.eye }, yaw: start.yaw, pitch: start.pitch });
+        display.lookFov(0);
+      }
+
+      function closeFree() {
+        scene.disableUserCamera();
+        display.lookFov(0);
+        free = null;
+      }
+
+      // Switch the camera. Race is a live race from the grid; leaving it puts
+      // the field back on the grid, parked. Free has no cells (a free camera and
+      // a split cannot coexist), so it shows one full view until another mode
+      // brings the seats back and drops the free camera's drag and keys. The
+      // race fog band stays on only where a player's eye is (driver, glance,
+      // race): the framed views stand off further than a racer ever looks, and
+      // the band would haze the very piece they frame.
+      function setView(m) {
+        if (!VIEWS.includes(m)) throw new Error(`unknown landmark view '${m}'`);
+        const wasRace = mode === 'race';
+        mode = m;
+        orbitT = 0;
+        unturn();
+        if (free && m !== 'free') closeFree();
+        // Orbit takes drags on the canvas too (ORBIT IN HAND).
+        document.documentElement.classList.add('cam-free');
+        scene.container.style.cursor = m === 'orbit' ? 'grab' : '';
+        scene.soloCam = m === 'free';
+        scene.setFog(m === 'driver' || m === 'glance' || m === 'race');
+        // The race HUD only in a race: elsewhere its pills and empty map box
+        // sit over the very piece a view frames.
+        scene.showHud = m === 'race';
+        if (engine && (m === 'race' || wasRace)) {
+          engine.dispose();
+          newSession();
+          Object.assign(race, { dts: [], paused: false, cam: 'chase', loop: null });
+          scene.frozen = false;
+        }
+        if (m === 'free') openFree();
+        aim();
+        return mode;
+      }
+
+      // Whose eye the running race is seen through. Chase is the race's own
+      // picture; free opens the viewer's camera over the car, further back and
+      // higher than the chase rig and looking down on it (a picture that says
+      // the camera is in hand now; `atEye`, a drag's, opens it at the chase
+      // rig instead), the race going on (or paused) under it; top looks down on the whole lap.
+      function setRaceCam(c, atEye) {
+        if (mode !== 'race' || !RACE_CAMS.includes(c)) return race.cam;
+        race.cam = c;
+        if (free) closeFree();
+        display.cellLookClear();
+        poses = [];
+        scene.soloCam = c === 'free';
+        scene.showHud = c === 'chase';
+        scene.setFog(c === 'chase');
+        if (c === 'free') {
+          const me = field.find((f) => !f.ai).peerIndex;
+          const car = engine.getSnapshot().cars.find((x) => x.id === me);
+          const { pos, forward } = car.pose;
+          const rig = display.chaseRig(pos.x, pos.y, pos.z, forward.x, forward.z, car.spd);
+          const at = v3(rig.eye);
+          const back = Math.hypot(at.x - pos.x, at.z - pos.z);
+          const f = Math.hypot(forward.x, forward.z) || 1;
+          const eye = { x: pos.x - forward.x / f * back * FREE_BACK, y: pos.y + back * FREE_UP,
+                        z: pos.z - forward.z / f * back * FREE_BACK };
+          const look = atEye ? v3(rig.target) : pos;
+          if (atEye) Object.assign(eye, at);
+          const d = { x: look.x - eye.x, y: look.y - eye.y, z: look.z - eye.z };
+          document.documentElement.classList.add('cam-free');
+          free = scene.enableUserCamera({ eye, yaw: Math.atan2(d.x, d.z),
+                                          pitch: Math.asin(d.y / Math.hypot(d.x, d.y, d.z)) });
+        } else if (c === 'top') {
+          const b = scene.cellBoxes()[0];
+          const aspect = b ? b.w / Math.max(b.h, 1) : 16 / 9;
+          const pose = topPose(aspect);
+          display.cellLook(0, pose.eye, pose.target, pose.fov);
+          poses = [{ ...pose, aspect, piece: -1, look: true }];
+        }
+        return race.cam;
+      }
+      const paintHud = () => { for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c); };
+      // The race at `to` updates from its grid. Forward is a wind from here;
+      // back is the same race dealt again and wound from the top on the kept
+      // dts (past their end, on 60 Hz ones, which join the list). Only the
+      // last seconds advance the renderer's own half, so the chase rig has
+      // settled behind the car by the frame that is drawn.
+      function seekRace(to) {
+        if (mode !== 'race' || !engine) return race.step;
+        to = Math.max(0, Math.round(to));
+        const cam = race.cam;
+        if (to < race.step) { engine.dispose(); newSession(); }
+        race.winding = true;
+        try {
+          while (race.step < to && !raceOver(engine.getSnapshot())) {
+            if (race.step === race.dts.length) race.dts.push(SEE_STEP_MS);
+            const ms = race.dts[race.step];
+            engine.update(ms);
+            race.step++;
+            race.ms += ms;
+            if (to - race.step < 120) display.advance(ms / 1000);
+          }
+        } finally { race.winding = false; }
+        if (cam !== 'free') setRaceCam(cam);
+        paintHud();
+        return race.step;
+      }
+      // The step `sec` seconds from here (a 60 Hz step each past the list's end).
+      function stepAfter(sec) {
+        let at = race.step, ms = sec * 1000;
+        for (; ms > 0; at++) ms -= at < race.dts.length ? race.dts[at] : SEE_STEP_MS;
+        for (; ms < 0 && at > 0; at--) ms += race.dts[at - 1];
+        return at;
+      }
+
+      // DRIVE PAST (window.__landmarks.drivePast): the race from a few seconds
+      // before cell 0's car is NEAREST a spot to a little after, played on a
+      // loop until a seek leaves that stretch; `false` only ends the loop. The
+      // spot is the focused placement's own, or lap position `s` on the
+      // centreline. The race is dealt again and wound to the stretch's start
+      // at 60 Hz, so it opens on the same moment every time round; `passAt` is
+      // where that 60 Hz race's car is after each update, kept per scene. The
+      // stretch ENDS on the race's clock, not on a count of updates: played,
+      // the race takes one update a frame, and a 120 Hz screen spends them
+      // twice as fast. The lap searched starts once the grid launch is over,
+      // so a spot by the start line is met a lap later, at racing speed.
+      const PASS_LEAD_S = 6, PASS_TAIL_S = 2.5, PASS_LAUNCH_S = 10;
+      function drivePast(s) {
+        if (s === false || !layout.length) { race.loop = null; return null; }
+        const piece = s == null && layout.pieces[indexFor(0)];
+        const spot = piece ? { x: piece.x, z: piece.z } : frameAt(s || 0).pos;
+        if (mode !== 'race') setView('race');
+        const me = field.find((f) => !f.ai).peerIndex;
+        const L = layout.length, hz = 1000 / SEE_STEP_MS;
+        const deal = () => { engine.dispose(); newSession(); race.dts = []; };
+        if (!passAt) {
+          deal();
+          passAt = [];
+          race.winding = true;
+          try {
+            for (;;) {
+              engine.update(SEE_STEP_MS);
+              const snap = engine.getSnapshot();
+              const car = snap.cars.find((x) => x.id === me);
+              passAt.push({ x: car.pose.pos.x, z: car.pose.pos.z, d: car.totalS });
+              if (car.totalS >= 2.2 * L || raceOver(snap) || passAt.length > 600 * hz) break;
+            }
+          } finally { race.winding = false; }
+        }
+        const first = Math.min(Math.round(PASS_LAUNCH_S * hz), passAt.length - 1);
+        let at = first, best = Infinity;
+        for (let i = first; i < passAt.length && passAt[i].d < passAt[first].d + L; i++) {
+          const d = Math.hypot(passAt[i].x - spot.x, passAt[i].z - spot.z);
+          if (d < best) { best = d; at = i; }
+        }
+        deal();
+        Object.assign(race, { paused: false,
+                              loop: { from: Math.max(0, Math.round(at - PASS_LEAD_S * hz)),
+                                      atMs: at * SEE_STEP_MS, toMs: (at + PASS_TAIL_S * hz) * SEE_STEP_MS } });
+        scene.frozen = false;
+        setRaceCam('chase');
+        seekRace(race.loop.from);
+        return race.loop;
+      }
+      // A seek out of the looped stretch ends the loop: the viewer has gone elsewhere.
+      function seekFree(to) {
+        const at = seekRace(to);
+        if (race.loop && (at < race.loop.from || race.ms > race.loop.toMs)) race.loop = null;
+        return at;
+      }
+
+      // FOLLOW (window.__landmarks.follow): another stage's moment() taken as
+      // this one's, for the gallery's tier comparison, the other tier beside
+      // this one. Its view; its race at ITS updates, so the two are one race
+      // frame for frame (dealt again where the two lists part, up to
+      // FOLLOW_PLAY updates played with their events performed, a longer way
+      // wound, as a seek is); and its
+      // camera: the free camera's eye, and every cell's look and parked car as
+      // that stage stood them. Never this stage's own fit of its own layout,
+      // which a piece the tier leaves out would move. From the first call this
+      // stage stands no camera of its own (`led`).
+      const FOLLOW_PLAY = 8;
+      function follow(m) {
+        led = true;
+        if (m.mode !== mode) setView(m.mode);
+        if (mode === 'race' && engine) {
+          if (m.cam !== race.cam) setRaceCam(m.cam);
+          race.paused = true;
+          scene.frozen = true;
+          let same = 0;
+          while (same < race.step && race.dts[same] === m.dts[same]) same++;
+          race.dts = m.dts;
+          if (same < race.step) { engine.dispose(); newSession(); }
+          if (m.step < race.step || m.step - race.step > FOLLOW_PLAY) seekRace(m.step);
+          else {
+            for (; race.step < m.step && !raceOver(engine.getSnapshot()); race.step++) {
+              const ms = race.dts[race.step];
+              engine.update(ms);
+              race.ms += ms;
+              display.advance(ms / 1000);
+            }
+            if (performance.now() - lastHud > HUD_TICK_MS) { lastHud = performance.now(); paintHud(); }
+          }
+        }
+        if (free && m.free) Object.assign(free, { eye: { ...m.free.eye }, yaw: m.free.yaw, pitch: m.free.pitch });
+        display.cellLookClear();
+        display.carPoseClear();
+        m.poses.forEach((p, k) => {
+          if (p && p.car) display.carPose(k, p.car.s, p.car.lat);
+          if (p && p.look) display.cellLook(k, p.eye, p.target, p.fov);
+        });
+        poses = m.poses;
+      }
+
+      scene.onFrame = (dt, nowMs) => {
+        // The track's song, once the page has unlocked the sound (a command
+        // before that is dropped), and again on a new track.
+        if (audible && songFor !== track.id && window.__audio.ready) {
+          songFor = track.id;
+          sfx(window.__audioDecide.startMusic(track.id));
+        }
+        if (mode === 'orbit') { if (!turn.held) orbitT += dt; aim(); return; }
+        if (mode !== 'race' || !engine || race.paused) return;
+        const ms = dt * 1000;
+        race.dts.length = race.step;
+        race.dts.push(ms);
+        engine.update(ms);
+        sfx(audible ? window.__audioDecide.frame(nowMs) : null);
+        race.step++;
+        race.ms += ms;
+        const snap = engine.getSnapshot();
+        if (nowMs - lastHud > HUD_TICK_MS) {
+          lastHud = nowMs;
+          for (const c of snap.cars) scene.setCarHud(c.id, c);
+        }
+        if (raceOver(snap)) { engine.dispose(); newSession(); race.dts = []; race.loop = null; }
+        else if (race.loop && race.ms >= race.loop.toMs) seekRace(race.loop.from);
+      };
+
+      // The poses are fitted to each cell's aspect: a resize re-fits them.
+      // Registered after the stage's own listener, so the cells have moved.
+      window.addEventListener('resize', () => aim());
+
+      // PIXEL LAP (window.__landmarks.see): what of each set piece a racer's
+      // picture really holds, counted in pixels rather than predicted. The
+      // engine paints every placement in its layout row's flat colour
+      // (TTP_DEBUG_SET_ID, the row's `id`) while the deck, the ground, the
+      // trees and the cars draw and hide it as in a race, and the autopiloted
+      // player drives a live session under the race's own chase camera.
+      // Every `every` seconds of its second lap, cell 0 is drawn and read
+      // back; per row in sight: `a` [row, pixels, height] in the race's
+      // picture, `b` the same with only the dressing drawn (so b - a is what
+      // the deck, the terrain and the cars hid) and, where b clears the bar
+      // (minPx and minH) and a does not, `road`, `ground` and `both`: the
+      // race's picture without the deck, without the terrain and without
+      // either, to say which hid it (what `both` still hides is the cars). Clouds, particles, item effects and the fog stay out of every
+      // probe frame: they drift or tint, and an id is exact or it is lost.
+      // The page's loop is stopped meanwhile and the session stepped at a
+      // fixed 60 Hz, so a second call with `stills` ([{k, row}], sample
+      // indices) replays the same lap and photographs those moments as the
+      // racer sees them, the row's unhidden outline boxed.
+      const SEE_STEP_MS = 1000 / 60;
+      const SEE_RACE = (FEAT.ALL & ~(FEAT.SKY | FEAT.EFFECTS | FEAT.FOG_VERTEX)) | DEBUG.SET_ID;
+      const SEE_ALONE = FEAT.DRESSING | DEBUG.SET_ID;
+      let seeCanvas = null;
+      // The layout row a pixel of an id frame belongs to, or undefined: an id
+      // colour is one channel full, one empty and one on an 8-step.
+      function idRow(r, gg, b, ids) {
+        const hi = Math.max(r, gg, b), lo = Math.min(r, gg, b);
+        if (hi < 253 || lo > 2) return undefined;
+        const mid = r + gg + b - hi - lo;
+        const snap = 16 + 8 * Math.round((mid - 16) / 8);
+        if (Math.abs(mid - snap) > 2 || snap < 16 || snap > 248) return undefined;
+        const q = (v) => (v === hi ? 255 : v === lo ? 0 : snap);
+        return ids.get((q(r) << 16) | (q(gg) << 8) | q(b));
+      }
+      // A REVIEW NOTE'S PICTURE (window.__landmarks.shot): the stage as it
+      // stands, drawn once more so the buffer is whole, with where and when it
+      // was taken. The same moment is kept as an id frame like the pixel
+      // lap's, so `under` can say which set piece a pin on that picture
+      // (canvas pixels) points at: most of a small box round it.
+      let shotIds = null;
+      function under(pins) {
+        if (!shotIds) return pins.map(() => null);
+        const ids = new Map(layout.pieces.map((p, i) => [p.id, i]));
+        const g = shotIds.getContext('2d');
+        const R = 4;
+        return pins.map(({ x, y }) => {
+          const x0 = Math.max(0, Math.round(x) - R), y0 = Math.max(0, Math.round(y) - R);
+          const d = g.getImageData(x0, y0, 2 * R + 1, 2 * R + 1).data;
+          const votes = new Map();
+          for (let i = 0; i < d.length; i += 4) {
+            const row = idRow(d[i], d[i + 1], d[i + 2], ids);
+            if (row !== undefined) votes.set(row, (votes.get(row) || 0) + 1);
+          }
+          const best = [...votes].sort((a, b) => b[1] - a[1])[0];
+          if (!best) return null;
+          const p = layout.pieces[best[0]];
+          return { index: best[0], model: p.model, u: p.u, lat: p.lat };
+        });
+      }
+      function shot() {
+        display.frame(0);
+        const src = display.canvas;
+        const pic = document.createElement('canvas');
+        pic.width = src.width;
+        pic.height = src.height;
+        pic.getContext('2d').drawImage(src, 0, 0);
+        const png = pic.toDataURL('image/png');
+        display.antialias(false);
+        display.debugFeatures(SEE_RACE);
+        display.frame(0);
+        if (!shotIds) shotIds = document.createElement('canvas');
+        shotIds.width = src.width;
+        shotIds.height = src.height;
+        shotIds.getContext('2d', { willReadFrequently: true }).drawImage(src, 0, 0);
+        display.debugFeatures(FEAT.ALL);
+        display.antialias(true);
+        display.frame(0);
+        const me = field.find((f) => !f.ai);
+        const car = mode === 'race' && engine ? engine.getSnapshot().cars.find((x) => x.id === me.peerIndex) : null;
+        const round = (v) => Math.round(v * 100) / 100;
+        return {
+          png, w: pic.width, h: pic.height,
+          meta: {
+            track: track.id, view: mode, seats,
+            focus: marks[focusAt] ? { model: marks[focusAt].model, placement: placeAt } : null,
+            race: mode === 'race' ? { cam: race.cam, step: race.step, seconds: round(race.ms / 1000) } : null,
+            car: car ? { lap: car.lap, u: round((car.totalS % layout.length) / layout.length), lat: round(car.lat),
+                         x: round(car.pose.pos.x), y: round(car.pose.pos.y), z: round(car.pose.pos.z) } : null,
+            camera: free ? { eye: { x: round(free.eye.x), y: round(free.eye.y), z: round(free.eye.z) },
+                             yaw: round(free.yaw), pitch: round(free.pitch) } : poses[0] || null
+          }
+        };
+      }
+      // Per layout row seen in `rect` of the drawn frame: its pixels, its
+      // tallest column of them (how tall it stands where it stands tallest:
+      // a flat pitch or a sliver along a kerb is low however wide, and a
+      // stray pixel of a lit surface sharing an id adds one), and the box
+      // between the 2nd and 98th percentile of them.
+      function readIds(rect, ids) {
+        const src = display.canvas;
+        if (!seeCanvas) seeCanvas = document.createElement('canvas');
+        if (seeCanvas.width !== src.width || seeCanvas.height !== src.height) {
+          seeCanvas.width = src.width;
+          seeCanvas.height = src.height;
+        }
+        const g = seeCanvas.getContext('2d', { willReadFrequently: true });
+        g.drawImage(src, 0, 0);
+        const { x, y, w, h } = rect;
+        const d = g.getImageData(x, y, w, h).data;
+        const found = new Map();
+        for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+          const row = idRow(d[i], d[i + 1], d[i + 2], ids);
+          if (row === undefined) continue;
+          let f = found.get(row);
+          if (!f) found.set(row, f = { n: 0, ys: new Int32Array(h), xs: new Int32Array(w) });
+          f.n++;
+          f.ys[(p / w) | 0]++;
+          f.xs[p % w]++;
+        }
+        const span = (hist, n) => {
+          let lo = 0, hi = hist.length - 1;
+          for (let c = 0; lo < hist.length && (c += hist[lo]) <= n * 0.02; lo++);
+          for (let c = 0; hi > 0 && (c += hist[hi]) <= n * 0.02; hi--);
+          return [lo, hi];
+        };
+        const out = new Map();
+        for (const [row, f] of found) {
+          const [y0, y1] = span(f.ys, f.n), [x0, x1] = span(f.xs, f.n);
+          let h = 0;
+          for (const c of f.xs) if (c > h) h = c;
+          out.set(row, { n: f.n, h, box: [x0, y0, x1, y1] });
+        }
+        return out;
+      }
+      const pack = (m) => [...m].map(([row, f]) => [row, f.n, f.h]);
+      async function seeLap(opts = {}) {
+        const every = Math.max(1, Math.round(((opts.every || 0.2) * 1000) / SEE_STEP_MS));
+        const minPx = opts.minPx || 0, minH = opts.minH || 0;
+        const reads = (f) => !!f && f.n >= minPx && f.h >= minH;
+        const stills = new Map();
+        for (const { k, row } of opts.stills || []) stills.set(k, [...(stills.get(k) || []), row]);
+        const shooting = stills.size > 0;
+        const ids = new Map(layout.pieces.map((p, i) => [p.id, i]));
+        const len = layout.length;
+        const cw = display.canvas.width, ch = display.canvas.height;
+        const r = display.cellRects(1);
+        const rect = { x: Math.round(r[0] * cw), y: Math.round(r[1] * ch),
+                       w: Math.round(r[2] * cw), h: Math.round(r[3] * ch) };
+        const me = field.find((f) => !f.ai).peerIndex;   // cell 0's car
+        const frames = [], shots = [];
+        scene.stop();
+        display.cellLookClear();
+        display.carPoseClear();
+        poses = [];
+        if (engine) engine.dispose();
+        engine = bareSession(field, track, { bots });
+        window.__engine = engine;
+        scene.bindSession(engine.h);
+        scene.hold(false);
+        display.antialias(shooting);
+        display.debugFeatures(shooting ? FEAT.ALL : SEE_RACE);
+        const dt = SEE_STEP_MS / 1000;
+        try {
+          for (let step = 1, k = 0; ; step++) {
+            if (step * SEE_STEP_MS > LAP_MAX_S * 1000) throw new Error(`no two laps of '${track.id}' in ${LAP_MAX_S}s`);
+            engine.update(SEE_STEP_MS);
+            if (step % every) { display.advance(dt); continue; }
+            const c = engine.getSnapshot().cars.find((x) => x.id === me);
+            if (c.totalS >= 2 * len || c.finished) break;
+            if (c.totalS < len) { display.advance(dt); continue; }
+            const at = { k, s: Math.round((c.totalS - len) * 10) / 10, lat: Math.round(c.lat * 100) / 100,
+                         x: Math.round(c.pose.pos.x * 10) / 10, z: Math.round(c.pose.pos.z * 10) / 10 };
+            if (k % 20 === 0) await new Promise((res) => setTimeout(res, 0));
+            k++;
+            if (shooting) {
+              if (!stills.has(at.k)) { display.advance(dt); continue; }
+              display.frame(dt);
+              const pic = document.createElement('canvas');
+              pic.width = rect.w;
+              pic.height = rect.h;
+              pic.getContext('2d').drawImage(display.canvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+              display.debugFeatures(SEE_ALONE);
+              display.frame(0);
+              const alone = readIds(rect, ids);
+              display.debugFeatures(FEAT.ALL);
+              for (const row of stills.get(at.k)) {
+                const out = document.createElement('canvas');
+                out.width = rect.w;
+                out.height = rect.h;
+                const g = out.getContext('2d');
+                g.drawImage(pic, 0, 0);
+                const f = alone.get(row);
+                if (f) {
+                  const [x0, y0, x1, y1] = f.box;
+                  g.strokeStyle = '#ff00ff';
+                  g.lineWidth = 2;
+                  g.strokeRect(x0 - 3, y0 - 3, x1 - x0 + 7, y1 - y0 + 7);
+                }
+                shots.push({ ...at, row, jpeg: out.toDataURL('image/jpeg', 0.85) });
+              }
+              continue;
+            }
+            display.frame(dt);
+            const a = readIds(rect, ids);
+            display.debugFeatures(SEE_ALONE);
+            display.frame(0);
+            const b = readIds(rect, ids);
+            const rec = { ...at, a: pack(a), b: pack(b) };
+            if ([...b].some(([row, f]) => reads(f) && !reads(a.get(row)))) {
+              display.debugFeatures(SEE_RACE & ~FEAT.ROAD);
+              display.frame(0);
+              rec.road = pack(readIds(rect, ids));
+              display.debugFeatures(SEE_RACE & ~FEAT.TERRAIN);
+              display.frame(0);
+              rec.ground = pack(readIds(rect, ids));
+              display.debugFeatures(SEE_RACE & ~FEAT.ROAD & ~FEAT.TERRAIN);
+              display.frame(0);
+              rec.both = pack(readIds(rect, ids));
+            }
+            display.debugFeatures(SEE_RACE);
+            frames.push(rec);
+          }
+        } finally {
+          display.debugFeatures(FEAT.ALL);
+          display.antialias(true);
+          engine.dispose();
+          engine = null;
+          newSession();
+          setView(mode);
+          scene.start();
+        }
+        return { track: track.id, every: (every * SEE_STEP_MS) / 1000, length: len, cell: rect,
+                 pieces: layout.pieces.map((p, i) => ({ index: i, model: p.model, label: labelOf(p.model),
+                                                        s: p.s, u: p.u, lat: p.lat, cx: p.cx, cz: p.cz })),
+                 frames, shots };
+      }
+
+      // POP LAP (window.__landmarks.pops): what APPEARS in a racer's picture
+      // between one frame and the next, counted in pixels. The same stepped
+      // lap as the pixel lap, the shipped picture (antialias off). Each
+      // sample is drawn with the far-form choices of the sample before it
+      // held (TTP_DEBUG_LOD_HOLD) and then free: `pop` is the pixels that
+      // differ, which is exactly what swapped form on that frame, with no
+      // camera motion in it. Every `refEvery`-th sample is also drawn with no
+      // far forms (`far`: how much of the picture is a far form's doing),
+      // unculled on top (`cull`: pixels a renderable's box lost) and with the
+      // fog carried past its cutoff (`fog`: world standing out there in the
+      // clear, which flips to haze as the car closes). `tops` are the `keep`
+      // biggest pops with a still of each, held | free. The cars and the
+      // effects are out of every frame: they move by themselves, and a
+      // second draw of one moment does not repeat their shadows and rubber.
+      // One player only: the choice of forms is latched per frame, not per cell.
+      const POP_WORLD = FEAT.ALL & ~(FEAT.CARS | FEAT.EFFECTS);
+      const POP_DIFF = 24;          // a channel further apart than this differs
+      function grab(rect) {
+        const src = display.canvas;
+        if (!seeCanvas) seeCanvas = document.createElement('canvas');
+        if (seeCanvas.width !== src.width || seeCanvas.height !== src.height) {
+          seeCanvas.width = src.width;
+          seeCanvas.height = src.height;
+        }
+        const g = seeCanvas.getContext('2d', { willReadFrequently: true });
+        g.drawImage(src, 0, 0);
+        return g.getImageData(rect.x, rect.y, rect.w, rect.h);
+      }
+      // The differing pixels of two grabs: how many, and the 64 px tile that
+      // holds the most of them (where the biggest change is).
+      function differ(p, q, w, h) {
+        const a = p.data, b = q.data;
+        const T = 64, tw = Math.ceil(w / T), th = Math.ceil(h / T);
+        const tiles = new Int32Array(tw * th);
+        let n = 0;
+        for (let y = 0, i = 0; y < h; y++) {
+          const row = ((y / T) | 0) * tw;
+          for (let x = 0; x < w; x++, i += 4) {
+            if (Math.abs(a[i] - b[i]) > POP_DIFF || Math.abs(a[i + 1] - b[i + 1]) > POP_DIFF
+                || Math.abs(a[i + 2] - b[i + 2]) > POP_DIFF) {
+              n++;
+              tiles[row + ((x / T) | 0)]++;
+            }
+          }
+        }
+        let best = 0;
+        for (let t = 1; t < tiles.length; t++) if (tiles[t] > tiles[best]) best = t;
+        return { n, peak: tiles[best], x: (best % tw) * T + T / 2, y: ((best / tw) | 0) * T + T / 2 };
+      }
+      async function popLap(opts = {}) {
+        const every = Math.max(1, opts.every | 0 || 2);
+        const refEvery = Math.max(1, opts.refEvery | 0 || 5);
+        const keep = opts.keep === undefined ? 12 : opts.keep | 0;
+        const len = layout.length;
+        const cw = display.canvas.width, ch = display.canvas.height;
+        if (seats !== 1) throw new Error('the pop lap is a one-player probe');
+        const r = display.cellRects(seats);
+        const rect = { x: Math.round(r[0] * cw), y: Math.round(r[1] * ch),
+                       w: Math.round(r[2] * cw), h: Math.round(r[3] * ch) };
+        const me = field.find((f) => !f.ai).peerIndex;
+        const frames = [];
+        let tops = [];
+        let lost = null;            // the sample a box lost most at: culled | unculled
+        let clear = null;           // the sample with most standing unfogged past the cutoff: shipped | fogged
+        const wanted = new Set(opts.full || []), fulls = [];   // samples to hand back whole
+        scene.stop();
+        display.cellLookClear();
+        display.carPoseClear();
+        poses = [];
+        if (engine) engine.dispose();
+        engine = bareSession(field, track, { bots });
+        window.__engine = engine;
+        scene.bindSession(engine.h);
+        scene.hold(false);
+        display.antialias(false);
+        display.debugFeatures(POP_WORLD);
+        const dt = SEE_STEP_MS / 1000;
+        // Held beside free, a window round the tile that changed most.
+        const still = (held, free, d) => {
+          const W = Math.min(420, rect.w), H = Math.min(300, rect.h);
+          const x = Math.max(0, Math.min(rect.w - W, d.x - W / 2));
+          const y = Math.max(0, Math.min(rect.h - H, d.y - H / 2));
+          const out = document.createElement('canvas');
+          out.width = 2 * W + 4;
+          out.height = H;
+          const g = out.getContext('2d');
+          const tmp = document.createElement('canvas');
+          tmp.width = rect.w;
+          tmp.height = rect.h;
+          const tg = tmp.getContext('2d');
+          tg.putImageData(held, 0, 0);
+          g.drawImage(tmp, x, y, W, H, 0, 0, W, H);
+          tg.putImageData(free, 0, 0);
+          g.drawImage(tmp, x, y, W, H, W + 4, 0, W, H);
+          return out.toDataURL('image/jpeg', 0.9);
+        };
+        try {
+          let primed = false;
+          for (let step = 1, k = 0; ; step++) {
+            if (step * SEE_STEP_MS > LAP_MAX_S * 1000) throw new Error(`no two laps of '${track.id}' in ${LAP_MAX_S}s`);
+            engine.update(SEE_STEP_MS);
+            if (step % every) { display.advance(dt); continue; }
+            const c = engine.getSnapshot().cars.find((x) => x.id === me);
+            if (c.totalS >= 2 * len || c.finished) break;
+            if (c.totalS < len - 30) { display.advance(dt); continue; }
+            if (!primed || c.totalS < len) {      // the rig settled, the forms latched
+              display.frame(dt);
+              primed = true;
+              continue;
+            }
+            if (k % 10 === 0) await new Promise((res) => setTimeout(res, 0));
+            const at = { k, s: Math.round((c.totalS - len) * 10) / 10,
+                         x: Math.round(c.pose.pos.x * 10) / 10, z: Math.round(c.pose.pos.z * 10) / 10 };
+            display.debugFeatures(POP_WORLD | DEBUG.LOD_HOLD);
+            display.frame(dt);
+            const held = grab(rect);
+            display.debugFeatures(POP_WORLD);
+            display.frame(0);
+            const free = grab(rect);
+            // A still frame drawn again is the same picture, except where
+            // something moves by the frame, not by the clock (a rig easing
+            // over a jump or under a deck, blown sand): there the two draws
+            // differ by that too, and the sample says nothing about forms
+            // (`moved`).
+            display.frame(0);
+            const moved = differ(free, grab(rect), rect.w, rect.h).n;
+            const d = moved ? { n: 0, peak: 0, x: 0, y: 0 } : differ(held, free, rect.w, rect.h);
+            const rec = { ...at, pop: d.n, peak: d.peak, px: d.x, py: d.y };
+            if (moved) rec.moved = moved;
+            if (k % refEvery === 0 && !moved) {
+              display.debugFeatures(POP_WORLD | DEBUG.NO_LOD);
+              display.frame(0);
+              const near = grab(rect);
+              rec.far = differ(free, near, rect.w, rect.h).n;
+              display.debugFeatures(POP_WORLD | DEBUG.NO_LOD | DEBUG.NO_CULL);
+              display.frame(0);
+              const open = grab(rect);
+              const cd = differ(near, open, rect.w, rect.h);
+              rec.cull = cd.n;
+              if (keep && cd.peak > (lost ? lost.peak : 0)) lost = { ...at, cull: cd.n, peak: cd.peak, jpeg: still(near, open, cd) };
+              // The sky's own content stands past the cutoff on purpose.
+              display.debugFeatures((POP_WORLD & ~FEAT.SKY) | DEBUG.NO_LOD);
+              display.frame(0);
+              const cut = grab(rect);
+              display.debugFeatures((POP_WORLD & ~FEAT.SKY) | DEBUG.NO_LOD | DEBUG.FOG_WHOLE);
+              display.frame(0);
+              const whole = grab(rect);
+              const fd = differ(cut, whole, rect.w, rect.h);
+              rec.fog = fd.n;
+              if (keep && fd.peak > (clear ? clear.peak : 0)) clear = { ...at, fog: fd.n, peak: fd.peak, jpeg: still(cut, whole, fd) };
+              display.debugFeatures(POP_WORLD);
+              display.frame(0);              // the free choice latched again
+            }
+            frames.push(rec);
+            if (wanted.has(k)) {
+              const pic = (img) => {
+                const c = document.createElement('canvas');
+                c.width = rect.w;
+                c.height = rect.h;
+                c.getContext('2d').putImageData(img, 0, 0);
+                return c.toDataURL('image/png');
+              };
+              fulls.push({ ...rec, held: pic(held), free: pic(free) });
+            }
+            if (keep && d.n && (tops.length < keep || d.peak > tops[tops.length - 1].peak)) {
+              tops.push({ ...rec, jpeg: still(held, free, d) });
+              tops.sort((p, q) => q.peak - p.peak);
+              tops = tops.slice(0, keep);
+            }
+            k++;
+          }
+        } finally {
+          display.debugFeatures(FEAT.ALL);
+          display.antialias(true);
+          engine.dispose();
+          engine = null;
+          newSession();
+          setView(mode);
+          scene.start();
+        }
+        return { track: track.id, every: (every * SEE_STEP_MS) / 1000, length: len, cell: rect,
+                 frames, tops, lost, clear, fulls };
+      }
+
+      const built = serial(async () => { await seat(); setView(mode); });
+
+      // The gallery chrome's control surface, same-origin like __showroom. The
+      // rebuilding calls (track, players) resolve once the new scene is up.
+      window.__landmarks = {
+        ready: () => built,
+        tracks: () => TRACK_LIST.map((t) => ({ id: t.id, name: t.name, cupName: t.cupName })),
+        trackId: () => track.id,
+        track: (id) => serial(async () => {
+          const next = ctx.built.get(id);
+          if (!next) throw new Error(`no catalogue track '${id}'`);
+          track = next;
+          focusAt = 0;
+          placeAt = 0;
+          await seat();
+          setView(mode);
+          return layout;
+        }),
+        layout: () => layout,
+        landmarks: () => marks.slice(),
+        // Per cell, what aim() last stood there: {eye, target, fov, aspect,
+        // piece (its layout index, -1 for the top view), look (a cell look was
+        // pushed; false is the parked car's own chase rig, as predicted)}, and
+        // in driver and glance also car {s, lat}, how hidden the piece's middle
+        // is from that eye (0 clear), how many of its five sight points are
+        // clear (vis), whether that line runs under raised road (roof) and the
+        // piece's radius as a share of the half-lens (size). Empty in race and free.
+        poses: () => poses.slice(),
+        // The parking rules a pose must keep, for the suite to hold them to.
+        rules: () => ({ carGap: CAR_GAP, upright: UPRIGHT, level: LEVEL }),
+        // The drawing buffer's height: what the render scale is drawing at.
+        lines: () => scene.bufferLines,
+        // The buffer scale by name, or null for the game's adaptive rule.
+        scale: (dpr) => scene.setScale(dpr),
+        players: (n) => serial(async () => {
+          seats = Math.max(1, Math.min(n | 0, window.MAX_PLAYERS || 4));
+          await seat();
+          setView(mode);
+          return seats;
+        }),
+        seats: () => seats,
+        // The detail tier drawn ('lite' | 'full'), changed on the standing
+        // stage: the renderer is told and the scene built again in that tier.
+        // A race comes back at the moment it stood at, through the same eye,
+        // so the two tiers can be told apart on one picture.
+        detail: (tier) => serial(async () => {
+          if (tier && tier !== scene.detail) {
+            const was = mode === 'race' ? { ...race, eye: free && { eye: { ...free.eye }, yaw: free.yaw, pitch: free.pitch } } : null;
+            scene.detail = display.detail(CP_PLATFORM, tier);
+            await seat(true);
+            setView(mode);
+            if (was) {
+              Object.assign(race, { dts: was.dts, loop: was.loop, paused: was.paused });
+              scene.frozen = was.paused;
+              seekRace(was.step);
+              setRaceCam(was.cam);
+              if (free && was.eye) Object.assign(free, was.eye);
+            }
+          }
+          return scene.detail;
+        }),
+        view: (m) => setView(m),
+        mode: () => mode,
+        // The race view's transport: its clock in updates (`max` is how far
+        // this race has been run) and seconds, pause, seek to an update or by
+        // seconds, and whose eye it is seen through. The race view's alone.
+        race: () => ({ step: race.step, max: race.dts.length, seconds: race.ms / 1000, paused: race.paused, cam: race.cam,
+                       loop: race.loop }),
+        pause(on) {
+          race.paused = on === undefined ? !race.paused : !!on;
+          scene.frozen = race.paused;
+          if (race.paused) sfx(audible ? window.__audioDecide.stopVoices() : null);
+          return race.paused;
+        },
+        seek: (step) => seekFree(step),
+        seekBy: (sec) => seekFree(stepAfter(sec)),
+        drivePast: (s) => drivePast(s),
+        // `view` ({eye, yaw, pitch}, as a note saves them) places the free cam.
+        raceCam: (c, view) => {
+          setRaceCam(c);
+          if (free && view && view.eye) Object.assign(free, { eye: { ...view.eye }, yaw: view.yaw, pitch: view.pitch });
+          return race.cam;
+        },
+        raceCams: () => RACE_CAMS.slice(),
+        // What a stage beside this one needs to show this moment (follow): the
+        // view, the race's step, camera and updates, the cells' poses and the
+        // free camera.
+        moment: () => ({ mode, cam: race.cam, step: race.step, dts: mode === 'race' ? race.dts.slice() : null,
+                         poses: poses.slice(),
+                         free: free && { eye: { ...free.eye }, yaw: free.yaw, pitch: free.pitch } }),
+        follow: (m) => follow(m),
+        // The free camera put where another stage's is ({eye, yaw, pitch}),
+        // when this one has it open: the gallery's two stages share one.
+        freeAt: (v) => { if (free && v) Object.assign(free, { eye: { ...v.eye }, yaw: v.yaw, pitch: v.pitch }); },
+        // The scenery and prop GLBs this scene stamps, as the tier in force
+        // names them (a lite build is `<model>-lite`).
+        models: () => ({ scenery: biomes().sceneryModels(scene.biome()), props: biomes().propModels(scene.biome()) }),
+        // A review note's picture and its facts, and what its pins point at.
+        shot: () => shot(),
+        under: (pins) => under(pins),
+        focus(i) {
+          const n = marks.length || 1;
+          focusAt = (((i | 0) % n) + n) % n;
+          placeAt = 0;
+          unturn();
+          if (mode === 'free' || (mode === 'race' && race.cam === 'free')) openFree(true);   // the free camera stays, over the piece
+          aim();
+          return focusAt;
+        },
+        focused: () => focusAt,
+        // Frame the focused model's k-th placement (a model stood nine times
+        // round a lap is nine places to judge), wrapping; answers which.
+        place(k) {
+          const n = marks.length ? marks[focusAt].indices.length : 1;
+          placeAt = (((k | 0) % n) + n) % n;
+          unturn();
+          if (mode === 'free' || (mode === 'race' && race.cam === 'free')) openFree(true);
+          aim();
+          return placeAt;
+        },
+        placed: () => placeAt,
+        // Park cell 0's car at (s, lat) under its own chase rig, the driver
+        // view's camera: a moment of the lap (a score's `at`) to look at.
+        park(s, lat) {
+          setView('driver');
+          display.cellLookClear();
+          display.carPoseClear();
+          display.carPose(0, s, lat);
+          const f = frameAt(s), b = scene.cellBoxes()[0];
+          const rig = display.chaseRig(f.pos.x + f.lateral.x * lat, f.pos.y + f.lateral.y * lat,
+                                       f.pos.z + f.lateral.z * lat, f.tangent.x, f.tangent.z, 0);
+          poses = [{ eye: v3(rig.eye), target: v3(rig.target), fov: rig.fov, aspect: b ? b.w / Math.max(b.h, 1) : 16 / 9,
+                     piece: -1, look: false, car: { s, lat } }];
+        },
+        // The lap visibility of every piece on the track (lapScore), for a
+        // cell of this aspect (16:9, every split's shape, by default).
+        score: (aspect) => serial(async () => lapScore(aspect || 16 / 9)),
+        // The pixel lap (seeLap): every piece's pixels in cell 0's picture
+        // over a driven lap, or with `stills` that lap's moments photographed.
+        see: (opts) => serial(async () => seeLap(opts)),
+        // The pop lap (popLap): what swaps form or is lost to its box, per frame.
+        pops: (opts) => serial(async () => popLap(opts)),
+        // Better spots for the pieces a racer barely reads (the placement
+        // search), for a cell of this aspect: per piece searched, where it
+        // stands and reads now and where it would read better (`to`, null
+        // where nothing beats it by enough or nothing may stand).
+        better: (aspect) => serial(async () => better(aspect || 16 / 9)),
+        spread(on) { spreadOn = on !== false; aim(); return spreadOn; },
+        // The scene clock's rate (1 is real time): slow motion, to judge how a
+        // set piece moves. It slows the cameras' own easing and a race too.
+        timeScale: (n) => scene.setTimeScale(n),
+        home() { focusAt = 0; return setView('driver'); }
       };
     }
     return;
@@ -1125,7 +3073,7 @@ export function runDisplayScenario(opts, ctx) {
         });
         window.__engine = engine;
         scene.bindSession(engine.h);                          // bind-session
-        if (audible) window.__audioDecide.bind(engine.h);
+        if (audible) sfx(window.__audioDecide.bind(engine.h));
         // The manifest's own count, and the same E2E override the live launch
         // reads — not a 3 retyped here.
         engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
@@ -1252,7 +3200,7 @@ export function runDisplayScenario(opts, ctx) {
         // THE SONG STARTS ON GO, not at the launch. That is where the live walk
         // puts it (race_flow's raceStart, not launchRace), so the countdown beats
         // play over silence and the music arrives with the field.
-        if (!raceMs && audible) sfx(window.__audioDecide.startMusic(scene.biome()));
+        if (!raceMs && audible) sfx(window.__audioDecide.startMusic(cup.tracks[leg]));
         raceMs += ms;
         if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) flag();
       };
@@ -1295,7 +3243,13 @@ export function runDisplayScenario(opts, ctx) {
     // session whose frames never run (holdFrame idles every card) would queue
     // beats forever — and ?scenario=bench too, since audio work would perturb the
     // reading it exists to take.
-    const audible = !inIframe && !!window.__audio && window.__audio.offline;
+    //
+    // Or when a page asks for it with ?sfx=1 on a racing frame: the music
+    // gallery plays a song under audition over the race's own sound. This
+    // scenario never starts the game's music, so the song is the only one, and
+    // that page owns the context (window.__audio): its unlock, level and pause.
+    const sfx = kind === 'racing' && new URLSearchParams(location.search).get('sfx') === '1';
+    const audible = !!window.__audio && (sfx || (!inIframe && window.__audio.offline));
 
     // Self-driving preview: every car is one of the sim's own AI racers (same personas
     // main.js hands the wasm for the live CPU fill), so the gallery shows real bot
@@ -1328,7 +3282,7 @@ export function runDisplayScenario(opts, ctx) {
     field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
                                      { carIndex: f.carIndex, cell: !f.ai }));
     scene.bindSession(engine.h); // the renderer draws this session's cars
-    if (audible) window.__audioDecide.bind(engine.h); // …and the audio hears it
+    if (audible) window.__audio.apply(window.__audioDecide.bind(engine.h)); // …and the audio hears it
 
     const live = kind === 'racing' || kind === 'bench';
 
@@ -1355,7 +3309,7 @@ export function runDisplayScenario(opts, ctx) {
       engine = newSession();
       window.__engine = engine;
       scene.bindSession(engine.h);
-      if (audible) window.__audioDecide.bind(engine.h);
+      if (audible) window.__audio.apply(window.__audioDecide.bind(engine.h));
       logDeal(log);
     }
 

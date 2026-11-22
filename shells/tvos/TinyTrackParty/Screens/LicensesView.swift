@@ -21,7 +21,7 @@ import UIKit
 /// `public/shared/credits.js` plus the live music catalogue by
 /// `shells/tvos/scripts/gen-legal.mjs` — the same two modules the web's
 /// /licenses.html renders — with the delta between what a browser ships and what
-/// an .ipa ships applied in one place. A song added to a biome pool appears here
+/// an .ipa ships applied in one place. A song given to a track appears here
 /// on the next stage with nothing edited.
 ///
 /// The rows are grouped exactly as the web page groups them (`SECTION_ORDER`),

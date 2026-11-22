@@ -210,18 +210,29 @@ has no signal, not a free frame.
 
 `ttp/audio.{h,cc}` behind `runtime/ttp_audio.h` decides which cue at what gain,
 which sustained voice at what level, the audibility curve, the scrub throttle, the
-rocket jet lifecycle and the music shuffle. The device half is browser code — see
-`public/display/CLAUDE.md`.
+rocket jet lifecycle, the race music, and the rain bed under a race whose sky
+rains (the track's theme ambient, read at bind). The device half is browser code —
+see `public/display/CLAUDE.md`.
+
+**Every catalogue track races to its own song** (`TRACK_MUSIC`, picked by ear on
+the music gallery); any other id — a dev track — draws a no-repeat fallback
+song, never silence. The GO beat's `start-music` effect carries the SESSION's
+track (`ttp_session_track_id`) and the shell hands it to `ttp_audio_music` as
+is, so no shell looks a track (or a biome) up for the music. A new catalogue
+track needs its song: `tests/audio-abi.test.js` holds the table's keys to the
+catalogue.
 
 **Nothing about a car crosses to decide a sound.** `ttp_audio_frame(nowMs)` reads
 the bound session's Game itself, so the shell hands over a clock and takes back
 commands. A cue crosses as a CODE and a voice's identity is an opaque interned
 SUBJECT, so no car id is handed back and a rocket cannot collide with a peer index.
 
-Three rules live only on the C side and are invisible above the ABI, which is why
+Four rules live only on the C side and are invisible above the ABI, which is why
 the `abi` ctest asserts each: only the BOUND session is heard (so the lobby's attract
-race is silent for free), the end-of-race fast-forward is MUTED, and a disposed
-handle takes its queued beats with it.
+race is silent for free), the end-of-race fast-forward is MUTED, a disposed
+handle takes its queued beats with it, and a PAUSED race decides nothing (the TV
+shells keep framing through a pause, so anything decided there would sound again
+under the overlay).
 
 **Two things the checks pin:** the distance metric must be
 `sqrt(dx*dx+dy*dy+dz*dz)` and never `hypot` — one ULP flips a knee of the curve
@@ -253,9 +264,9 @@ parked for a later revisit of how sharp turns announce themselves.
 `ttp/car_footprint.h` makes the car contact shadow's shape: a per-model
 FOOTPRINT rasterized from the car's own triangles, the ROUNDED RECT fitted to
 it, and the rect's closed-form evaluator the layer raster calls. Header-only
-for the `kitfield.h` reason above — the renderer consumes it and may not link
-this library — and the `carfootprint` ctest executes it on every leg,
-which matters more here than usual: the shape is something a person judges by
+because the renderer consumes it and may not link this library (`boost_shades`
+in `theme.h` is the same shape), and the `carfootprint` ctest executes it on
+every leg, which matters more here than usual: the shape is something a person judges by
 eye on a television, so the parts that are NOT taste (the frame, the
 orientation, that two outlines in one bounding box come out different, that a
 failed bake answers empty rather than blank) are the parts a check has to hold.
@@ -276,25 +287,6 @@ merged draw groups), is header-only for the same reason and gated by the
 than a list. It is **dev-only** and reached by nothing on the shipping path, and
 `showcase.cc` sits beside `theme.cc` rather than inside it precisely so a gallery
 can never move a number the shipping game draws with.
-
-**The kit field** is the other half of the same question. The showroom stages what
-the game DRAWS; the field stands what it could have drawn — every model of the
-fetched Kenney kits — on flat ground beyond the track, each at the size it would
-ship and under the same light. It is a BROWSER, and it is 3D on purpose: a sheet
-of Kenney's preview renders says what a model is, and only the field says whether
-it belongs beside what already ships.
-
-`ttp/kitfield.h` is the packing, and it is header-only because the renderer needs
-it and may not link this library (`boost_shades` in `theme.h` is the same shape).
-The renderer measures each model's footprint off its own glTF AABB, offsets the
-field past the track and the terrain grid, and answers with the layout; the chrome
-flies its camera by that rather than re-deriving where anything went. The
-`kitfield` ctest holds the properties the field is useless without.
-
-The kits are not in the tree (`npm run fetch:kits`, whose header has the why), and
-which kit model each shipped `.glb` came from is authored in
-`public/assets/toycar/SOURCES.json` because it cannot be derived — our copies have
-been renamed and edited.
 
 **The showcase theme** takes the picked biome's palette unchanged and merges in
 every other biome's vocabulary, first-appearance-wins. A biome added to `theme.cc`

@@ -30,11 +30,34 @@ npm run check:artifact            # Is the checked-in wasm current?
 npm run check:blob-cache          # Do blobs kept between RUNS survive the round
                                   # trip? No suite can see that (tests/CLAUDE.md)
 npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|3|4] [--track id]
-                                  # THE BENCH: one live race, autopiloted players at the
-                                  # back of a full grid, one readout shape on all three
-npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell over a lap,
-                                  # against tests/fixtures/scene-budget.json. Run it
+                   [--detail lite|full]   # THE BENCH: one live race, autopiloted players at
+                                  # the back of a full grid, one readout shape on all three;
+                                  # --detail overrides the platform's tier, and the header
+                                  # names the tier the engine drew
+npm run budget:scene [-- --track id]  # what each track's WORLD submits per cell over a lap, in
+                                  # each detail tier (full: web + Apple TV, lite: Android
+                                  # TV), against tests/fixtures/scene-budget.json. Run it
                                   # after adding scenery; the box is the verdict per batch
+npm run score:landmarks [-- --track id] [--board dir]
+                                  # how long a racer sees each set piece over a lap, and
+                                  # why not; --board photographs every model for review
+npm run see:landmarks [-- --track id] [--out dir] [--four]
+                                  # the same, counted in PIXELS off the real picture: every
+                                  # piece in a flat id colour (TTP_DEBUG_SET_ID) over a driven
+                                  # lap; readable s, what hides it, stills of the worst
+npm run see:pops [-- --track id] [--lines 540] [--out dir]
+                                  # what swaps form in a racer's picture per frame over a
+                                  # lap (far forms, cull boxes, the fog's cutoff), in pixels
+npm run check:floating [-- --track id] [--detail lite]
+                                  # every set piece's standing parts against the ground DRAWN
+                                  # under them where they are placed: what hangs over the land
+npm run place:landmarks [-- --track id] [--write]
+                                  # better spots for the pieces a racer barely sees;
+                                  # --write moves them in tracks.js (then rebuild, re-score)
+npm run film:laps -- --track id [--tree path] [--players 4] [--detail lite]   # cell 0's lap 2, frame-gated:
+                                  # two trees' (or tiers') films are one race
+npm run score:verge -- --track id|--all [--tree path] [--detail lite] [--map] # how much of the lap the
+                                  # world reaches the kerb, + skyline
 npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
                                   # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)
@@ -83,11 +106,14 @@ were deleted once each layer was conformance-proven; git history has them.
 `partyplug/` is a reusable party-game transport kit shared across games, served
 under `/partyplug/`. It is a **copy-fork**, so every local edit to a kit file
 must be declared in `partyplug/UPSTREAM.md` — `tests/partyplug-fork.test.js`
-fails until it is. 3D assets are the Kenney Toy Car Kit under
-`public/assets/toycar/` — `toycar` names the asset pack, not the game. The four
-cars themselves are built, not Kenney's: `scripts/toy_cars.py` in the kit's own
-construction, exported by `gen-concept-cars.py --roster` (its header lists the
-bakes that follow).
+fails until it is. The 3D models are under `public/assets/toycar/` (`toycar`
+names the asset pack, after the Kenney Toy Car Kit whose style and palette
+layout they follow, not the game) and every one is BUILT by a script, none
+downloaded: `SOURCES.json` beside them names it. The cars are
+`scripts/toy_cars.py`, exported by `gen-concept-cars.py --roster` (its header
+lists the bakes that follow); everything else is
+`scripts/blender/set_prototypes.py`; the one colour atlas is
+`scripts/gen-colormap.mjs`.
 
 Browser code is ES modules. Modules Node imports directly via dynamic `import()`
 (`shared/tracks.js`, `shared/devTracks.js`, `shared/protocol.js`,

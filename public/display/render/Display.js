@@ -48,9 +48,15 @@ export const FEAT = {
   FOG_VERTEX: 0x8000,
   ALL: 0x9FFC,
 };
-// The TTP_DEBUG_* knobs above FEAT's range are not mirrored here (the test
-// holds this table to the TTP_FEAT_* set); they ride ?features= as the raw
-// mask.
+// The TTP_DEBUG_* knobs above FEAT's range ride ?features= as the raw mask;
+// the one a harness sets by name is here, held to the header like FEAT.
+export const DEBUG = {
+  // Every set-piece placement in its layout row's flat `id` colour (see/landmarks).
+  SET_ID: 0x10000000,
+  // The pop probe's (see:pops): no far forms, the last frame's choice of them
+  // held, the cells unculled, and fog past its cutoff.
+  NO_LOD: 0x1000000, LOD_HOLD: 0x2000000, NO_CULL: 0x20000000, FOG_WHOLE: 0x40000000,
+};
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
@@ -128,7 +134,6 @@ export class Display {
     this._tagBytes = 0;
     this._pollPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
-    this._kitModels = [];    // …and its kit field; see kitField()
     // No slot→car-id list here anymore: the HUD block is indexed by slot and
     // hud() maps entries back to cars via ttp_display_slot_ids_json — the
     // built scene's OWN roster, not a copy this class authors.
@@ -150,6 +155,8 @@ export class Display {
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
+      antialias: mod.cwrap('ttp_display_antialias', null, ['number']),
+      detail: mod.cwrap('ttp_display_detail', 'string', ['string', 'string']),
       debugChasePitch: mod.cwrap('ttp_display_debug_chase_pitch', 'number', ['number']),
       debugMonsterPitch: mod.cwrap('ttp_display_debug_monster_pitch', 'number', ['number']),
       debugMonsterBack: mod.cwrap('ttp_display_debug_monster_back', 'number', ['number']),
@@ -160,8 +167,8 @@ export class Display {
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
       bench: mod.cwrap('ttp_display_bench', null, ['string']),
-      kitField: mod.cwrap('ttp_display_kit_field', null, ['number']),
-      kitLayout: mod.cwrap('ttp_display_kit_field_layout', 'string', []),
+      setLayout: mod.cwrap('ttp_display_set_layout', 'string', []),
+      scatterLayout: mod.cwrap('ttp_display_scatter_layout', 'string', []),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -176,6 +183,14 @@ export class Display {
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       lookFov: mod.cwrap('ttp_display_look_fov', null, ['number']),
       chaseRig: mod.cwrap('ttp_display_chase_rig_json', 'string', ['number', 'number', 'number', 'number', 'number', 'number']),
+      cellLook: mod.cwrap('ttp_display_cell_look', null,
+                          ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
+      cellLookClear: mod.cwrap('ttp_display_cell_look_clear', null, []),
+      carPose: mod.cwrap('ttp_display_car_pose', null, ['number', 'number', 'number']),
+      carPoseClear: mod.cwrap('ttp_display_car_pose_clear', null, []),
+      groundY: mod.cwrap('ttp_display_ground_y', 'number', ['number', 'number']),
+      spotIssue: mod.cwrap('ttp_display_spot_issue', 'string', ['number', 'number', 'number', 'number', 'number']),
+      trackFrames: mod.cwrap('ttp_track_frames_json', 'string', ['string', 'string']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
       shadows: mod.cwrap('ttp_display_shadows', null, ['number']),
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
@@ -399,21 +414,43 @@ export class Display {
   modelVariant(model, variant) { this._fn.modelVariant(model, variant | 0); }
   bench(model) { this._fn.bench(model || ''); }
 
-  // DEV. The asset gallery's KIT FIELD: the models to stand on clear ground
-  // beyond the track, as GLB names this class fetches (`kit:<kit>/<model>` for
-  // the kits the game does not ship, see assetCache). Held rather than pushed,
-  // because unlike every other latch this one is a FETCH LIST — the bytes go
-  // over as kit<i>.glb during setTrack, and the count only means anything once
-  // they have. [] is no field, which is every caller but the gallery.
-  kitField(models) { this._kitModels = Array.isArray(models) ? models : []; }
-
-  // Where the built field put them, in the same order — footprint and spot per
-  // model (ttp_display_kit_field_layout). [] until a build with a field in it.
-  kitLayout() {
-    try { return JSON.parse(this._fn.kitLayout()) || []; } catch (_) { return []; }
+  // DEV. Where the built track's set pieces stand (ttp_display_set_layout):
+  // { length, groundY, pieces: [{ model, s, lat, x, y, z, cx, cz, hx, hz, top, … }] }.
+  setLayout() {
+    try { return JSON.parse(this._fn.setLayout()); } catch (_) { return { length: 0, groundY: 0, pieces: [] }; }
+  }
+  // DEV. Where its scenery trees and boulders stand (ttp_display_scatter_layout):
+  // [[x, z, r, top], …].
+  scatterLayout() {
+    try { return JSON.parse(this._fn.scatterLayout()) || []; } catch (_) { return []; }
   }
   // The free camera's lens in degrees; 0 is the overview's.
   lookFov(deg) { this._fn.lookFov(deg); }
+  // DEV. Cell `i` looks from `eye` to `target` ({x,y,z}) instead of from its
+  // car's chase rig; fov 0 keeps the rig's. Everything else is the cell's.
+  cellLook(i, eye, target, fov) {
+    this._fn.cellLook(i, eye.x, eye.y, eye.z, target.x, target.y, target.z, fov || 0);
+  }
+  cellLookClear() { this._fn.cellLookClear(); }
+  // DEV. The car owning cell `i` is drawn parked at track arclength `s`,
+  // `lat` right of the centreline, instead of where the sim has it; its chase
+  // rig follows it there.
+  carPose(i, s, lat) { this._fn.carPose(i, s, lat); }
+  carPoseClear() { this._fn.carPoseClear(); }
+  // DEV. The built scene's ground height at world (x, z): what scatter and set
+  // pieces stand on, hills included.
+  groundY(x, z) { return this._fn.groundY(x, z); }
+  // DEV. What keeps a set piece's surface over (x, z), lo..hi high, from
+  // standing there ('' where it may; ttp_display_spot_issue). `skip` is the
+  // set layout row being moved.
+  spotIssue(x, z, lo, hi, skip = -1) { return this._fn.spotIssue(x, z, lo, hi, skip); }
+  // The built track's own frames at arclengths `sList` (they wrap):
+  // [{ s, pos, tangent, up, lateral, width }], [] on an unknown track. Keep the
+  // list short: the JSON argument is marshalled on the wasm stack.
+  trackFrames(trackId, sList) {
+    try { return JSON.parse(this._fn.trackFrames(trackId, JSON.stringify(sList)) || '[]'); }
+    catch (_) { return []; }
+  }
   // The race's chase rig settled behind a car at (x, y, z) facing (fx, fz) and
   // driving at `spd` of top speed (0 parked, 1 flat out):
   // { eye: [x, y, z], fov, target: [x, y, z] }, in world units.
@@ -462,12 +499,10 @@ export class Display {
     scModels.forEach((m, i) => want.push({ name: `scenery${i}.glb`, tag: m }));
     const prModels = this._showcase ? biomes.showcasePropModels() : biomes.propModels(biome);
     prModels.forEach((m, i) => want.push({ name: `prop${i}.glb`, tag: m }));
-    // The track's own set pieces — a function of the TRACK, so the showroom
-    // (which builds a stand-in track) takes the same path and gets none.
-    biomes.setModels(trackId).forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
-    // The KIT FIELD's models (dev; empty in play). There are hundreds of them,
-    // in the order the layout comes back in and the order the chrome names them.
-    this._kitModels.forEach((m, i) => want.push({ name: `kit${i}.glb`, tag: m }));
+    // The track's own set pieces — a function of the TRACK. The showroom builds
+    // a stand-in track with none of its own and stages every track's in a row.
+    const setModels = this._showcase ? biomes.showcaseSetModels() : biomes.setModels(trackId);
+    setModels.forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
     want.push(...this._carWants(roster));
     for (const name of PROP_MODELS) {
       want.push({ name: `${name}.glb`, tag: name });
@@ -480,7 +515,6 @@ export class Display {
       if (ghostName) want.push({ name: ghostName, tag: name, from: `${name}.glb` });
     }
     await this._fetchPlanned(want, assets);
-    this._fn.kitField(this._kitModels.length);
 
     // The textures those models reference. The URI list comes from the ENGINE,
     // off the bytes it is holding — so a model the plan skipped still
@@ -562,12 +596,22 @@ export class Display {
   async _fetchPlanned(want, assets) {
     const need = new Set(this._json(this._fn.assetPlan(JSON.stringify(want))));
     const fetched = new Map();
-    // Concurrently: one await each would turn a kit field into a minute of round
-    // trips, and the asset cache makes a repeat fetch free anyway.
+    // Concurrently: one await each is a round trip per model, and the asset
+    // cache makes a repeat fetch free anyway.
     await Promise.all(want.map(async (w) => {
       if (w.from || !w.tag || !need.has(w.name)) return;
       const bytes = await assets.glb(w.tag);
-      if (!bytes) return;
+      if (!bytes) {
+        // A model that could not be fetched EMPTIES its slot. Slots are reused
+        // from scene to scene (set3.glb is one track's rock and the next one's
+        // marble run), so providing nothing left the PREVIOUS track's model
+        // standing in the new one, at this piece's placement: a page kept open
+        // across a deploy that removed a model drew a beach headland in the
+        // playroom. An empty asset draws nothing, and is asked for again.
+        console.error(`[display] no bytes for ${w.tag} (${w.name}); the slot is emptied`);
+        this.provide(w.name, new Uint8Array(0));
+        return;
+      }
       fetched.set(w.name, bytes);
       this.provide(w.name, bytes);
     }));
@@ -783,6 +827,12 @@ export class Display {
   // HUD's timer reads what it was costing to draw. FEATURES names the bits so a
   // sweep script does not re-type them; DEBUG ONLY, nothing on a play path.
   debugFeatures(mask) { this._fn.debugFeatures(mask >>> 0); }
+  // The full-screen antialias pass (ttp_display_antialias): on in every shell
+  // that can afford it; a pixel count turns it off so edges keep their ids.
+  antialias(on) { this._fn.antialias(on ? 1 : 0); }
+  // The detail tier (ttp_display_detail): the C++ decides it from this shell's
+  // platform; `ask` ('full' | 'lite' | null) overrides. Answers the tier.
+  detail(platform, ask) { return this._fn.detail(platform, ask); }
   // Chase-cam tilt in degrees below level (negative = authored); answers the
   // authored pitch. The debug panel's "Camera angle" slider, nothing else.
   debugChasePitch(deg) { return this._fn.debugChasePitch(deg); }
@@ -818,23 +868,10 @@ export function assetCache() {
     return p;
   };
   const glb = (name) => {
-    const kit = kitPath(name);
-    if (kit) return raw(assetUrl(kit));
-    // `concept:<name>`: the asset gallery's concept cars (scripts/gen-concept-cars.py)
+    // `concept:<name>`: a concept car (scripts/gen-concept-cars.py; Stage.js `?cars=`)
     const concept = /^concept:([\w.-]+)$/.exec(name);
     if (concept) return raw(assetUrl(`/assets/concepts/${concept[1]}.glb`));
     return raw(assetUrl(`/assets/toycar/${name}.glb`));
   };
   return { raw, glb };
-}
-
-// DEV. `kit:<kit>/<model>` names a model from a Kenney kit the game does NOT
-// ship — the asset gallery's kit browser stages candidates on the showroom grid,
-// out of the local kit cache the server serves at /kits (npm run fetch:kits).
-// It is spelled as a MODEL NAME because that is all a car slot's `model` is: the
-// GLB to fetch, which never crosses the ABI, so nothing below this line — and
-// nothing in C++ — can tell a candidate from a shipped car.
-function kitPath(name) {
-  const m = /^kit:([\w-]+)\/([\w.-]+)$/.exec(name);
-  return m ? `/kits/${m[1]}/models/${m[2]}.glb` : null;
 }

@@ -36,6 +36,8 @@
 
 #include "corpus_diff.h"
 #include "corpus_record.h"
+#include "generated/track_defs.h"
+#include "ttp/detail.h"
 #include "ttp/json_parse.h"
 #include "ttp/showcase.h"
 #include "ttp/theme.h"
@@ -92,6 +94,7 @@ Value sceneryOf(const rt::ScenerySpec& s) {
   Value rockS = Value::Arr();
   rockS.push(f(s.rockS[0])); rockS.push(f(s.rockS[1]));
   o.set("rockS", rockS);
+  if (s.rockBlocks) o.set("rockBlocks", Value::Bool(true));  // absent: stones
   o.set("clutterDensity", f(s.clutterDensity));
   Value cl = Value::Arr();
   for (const rt::ClutterSpec& c : s.clutter) {
@@ -116,6 +119,22 @@ Value themeOf(const rt::Theme& t) {
   o.set("hills", colors(t.hills));
   o.set("scenery", sceneryOf(t.scenery));
   o.set("landmarks", colors(t.landmarks));
+  {
+    // The landforms the codegen carried (tracks.js `land` and SET_GROUND).
+    Value land = Value::Arr();
+    for (const rt::Landform& l : t.land) {
+      Value e = Value::Obj();
+      e.set("kind", u(l.kind)); e.set("piece", f((float) l.piece));
+      e.set("u", f(l.u)); e.set("lat", f(l.lat)); e.set("yaw", f(l.yaw));
+      e.set("x", f(l.x)); e.set("z", f(l.z)); e.set("len", f(l.len));
+      e.set("r", f(l.r)); e.set("r1", f(l.r1)); e.set("w", f(l.w)); e.set("rz", f(l.rz));
+      e.set("h", f(l.h)); e.set("h1", f(l.h1)); e.set("top", f(l.top)); e.set("shape", f(l.shape));
+      e.set("tint", u(l.tint));
+      if (l.near > 0) e.set("near", f(l.near));   // absent at its default, so older lines stand
+      land.push(e);
+    }
+    o.set("land", land);
+  }
   o.set("structure", u(t.structure));
   o.set("groundKind", u(t.groundKind));
   o.set("fogTune", f(t.fogTune));
@@ -448,5 +467,53 @@ int main(int argc, char** argv) {
   }
   std::printf("untextured models tinted: %d/%d\n", tinted, tintable);
 
-  return (passed == cases && tinted == tintable) ? 0 : 1;
+  // ---- Beyond the corpus: a track stamps the props it names ----------------
+  //
+  // The shell fetches prop<i>.glb by the BIOME (ttp_theme_prop_models), and
+  // the renderer stamps a track's scatter by slot into that list. A track that
+  // patches its props must therefore come back in the biome's slot order, or
+  // its slots name other models: Glacier drew snowmen for its snow piles.
+  int propTracks = 0, propAgree = 0;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    const char* id = TTP_TRACKS[i].id;
+    const char* biome = rt::biome_for_track(id);
+    const rt::Theme t = rt::resolve_theme(biome, id);
+    propTracks++;
+    if (t.props.models == rt::resolve_theme(biome, "").props.models) {
+      propAgree++;
+    } else {
+      std::fprintf(stderr, "FAIL props %s: its prop slots are not the %s biome's\n", id, biome);
+    }
+  }
+  std::printf("tracks stamping their biome's prop slots: %d/%d\n", propAgree, propTracks);
+
+  // ---- Beyond the corpus: a tree names a model its scenery list holds ------
+  //
+  // The renderer draws a tree by its model's slot in scenery.models, and a
+  // name the list does not hold draws slot 0. The lite tier renames the list
+  // to the lite builds, and left the trees naming the full ones: Ribbon's
+  // apples stood as oaks on the box, every cactus as the saguaro.
+  int treeTracks = 0, treeAgree = 0;
+  for (const rt::Detail d : { rt::Detail::Full, rt::Detail::Lite }) {
+    rt::detail_in_force() = d;
+    for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+      const char* id = TTP_TRACKS[i].id;
+      const rt::ScenerySpec s = rt::resolve_theme(rt::biome_for_track(id), id).scenery;
+      const auto held = [&](const std::string& m) {
+        for (const std::string& have : s.models) if (have == m) return true;
+        return false;
+      };
+      bool ok = !s.hasBush || held(s.bush.model);
+      for (const rt::TreeSpec& t : s.trees) ok = ok && held(t.model);
+      treeTracks++;
+      if (ok) treeAgree++;
+      else std::fprintf(stderr, "FAIL trees %s (%s): a tree names a model not in scenery.models\n",
+                        id, rt::detail_name(d));
+    }
+  }
+  rt::detail_in_force() = rt::Detail::Full;
+  std::printf("tracks whose trees name a scenery slot, both tiers: %d/%d\n", treeAgree, treeTracks);
+
+  return (passed == cases && tinted == tintable && propAgree == propTracks
+          && treeAgree == treeTracks) ? 0 : 1;
 }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 
 #include "ttp/audio.h"
 #include "ttp/game.h"
@@ -23,6 +24,7 @@ void newField(DisplayState& d) {
     d.follow = {};
     d.coverage = {};   // a new field starts the cycle over
     d.coverChase = {};
+    d.lens = {};
     d.steerBar.clear();
 }
 
@@ -46,6 +48,18 @@ ttp::Pose heldPose(const TtpCarInput& c) {
              { c.up.x, c.up.y, c.up.z } };
 }
 
+void setCellLook(DisplayState& d, int cell, V3 eye, V3 target, float fov) {
+    if (cell < 0 || (size_t) cell >= d.cells.size()) return;
+    if (d.cellLooks.size() <= (size_t) cell) d.cellLooks.resize((size_t) cell + 1);
+    d.cellLooks[(size_t) cell] = { true, eye, target, fov };
+}
+
+void setCarPose(DisplayState& d, int cell, double s, double lat) {
+    if (cell < 0 || (size_t) cell >= d.cells.size()) return;
+    if (d.carPoses.size() <= (size_t) cell) d.carPoses.resize((size_t) cell + 1);
+    d.carPoses[(size_t) cell] = { true, s, lat };
+}
+
 std::vector<ScalarId> parseIds(const char* json) {
     std::vector<ScalarId> out;
     if (!json) return out;
@@ -58,6 +72,67 @@ std::vector<ScalarId> parseIds(const char* json) {
     }
     return out;
 }
+
+namespace {
+
+// A battle shot's eye: the follow cam stepped, and the lobby's lens planned
+// over it (LensPlan) off where the rig will stand as its battle drives on.
+V3 coverFollow(DisplayState& d, const std::vector<const Car*>& cars, const Game* eng,
+               const TtpCarInput* outCars, const std::vector<bool>& live, float dt) {
+    std::vector<bool> filmed = live;
+    d.coverage.battleField(outCars, filmed);
+    FollowCam& f = d.follow;
+    f.update(outCars, filmed, d.framing.center, d.tagDeck, d.ground, d.loops, dt);
+    LensPlan& lens = d.lens;
+    lens.views.resize(1 + std::size(LENS_AHEAD));
+    for (LensView& v : lens.views) v.subjects.clear();
+    lens.views[0].eye = f.pos;
+    lens.views[0].aim = f.target;
+    for (const int i : f.battle) {
+        const TtpCarInput& c = outCars[i];
+        lens.views[0].subjects.push_back(V3{ c.pos.x, c.pos.y, c.pos.z } + V3{ c.up.x, c.up.y, c.up.z } * FOLLOW_AIM_UP);
+    }
+    // Only a live field runs on (a held one is a still), only past scenery, and
+    // never on a looping, where the lens stays home.
+    Centerline* cl = eng && !d.hold ? eng->centerline() : nullptr;
+    bool runs = cl && !f.battle.empty() && !d.obstacles.empty() && f.loop < 0;
+    for (const int i : f.battle) runs = runs && (size_t) i < cars.size() && cars[(size_t) i];
+    size_t n = 1;
+    if (runs) {
+        // The rig itself, run on over its battle driven on: each car along the
+        // road at its speed and its lateral. A copy, so the springs and a
+        // looping's swing are the rig's own; it keeps its pitch (`steady`).
+        FollowCam& run = lens.rig;
+        run = f;
+        run.steady = true;
+        lens.field.assign(outCars, outCars + live.size());
+        std::vector<bool> battle(live.size(), false);
+        for (const int i : f.battle) battle[(size_t) i] = true;
+        float t = 0;
+        for (const float secs : LENS_AHEAD) {
+            LensView& v = lens.views[n++];
+            for (const int i : f.battle) {
+                const Car& c = *cars[(size_t) i];
+                const double s = c.totalS + c.v * secs;
+                const Frame fr = cl->sampleAt(s);
+                const V3 p = v3(fr.pos) + v3(fr.lateral) * (float) c.lat;
+                TtpCarInput& o = lens.field[(size_t) i];
+                o.pos = { p.x, p.y, p.z };
+                o.forward = { (float) fr.tangent.x, (float) fr.tangent.y, (float) fr.tangent.z };
+                o.up = { (float) fr.up.x, (float) fr.up.y, (float) fr.up.z };
+                o.trackS = (float) s;
+                v.subjects.push_back(p + v3(fr.up) * FOLLOW_AIM_UP);
+            }
+            run.update(lens.field.data(), battle, d.framing.center, d.tagDeck, d.ground, d.loops, secs - t);
+            t = secs;
+            v.eye = run.pos;
+            v.aim = run.target;
+        }
+    }
+    return lens.apply(d.obstacles, d.tagDeck, n, f.loop >= 0, dt);
+}
+
+}  // namespace
 
 TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                           float cellAspect) {
@@ -204,6 +279,36 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         d.held.assign(outCars, outCars + cars.size());
     }
 
+    // The gallery's posed cars (ttp_display_car_pose), parked where it asked:
+    // Game's own pose rule at that spot, at rest, on the deck. Like the
+    // exhibits below, applied to `outCars` and NOT to `d.held`, so clearing the
+    // poses hands every car straight back to the sim. `posed[j]` is per SLOT,
+    // for the chase rigs further down.
+    std::vector<bool> posed(cars.size(), false);
+    if (eng) {
+        const double L = eng->length();
+        for (size_t i = 0; i < d.cells.size() && i < d.carPoses.size(); i++) {
+            if (!d.carPoses[i].on) continue;
+            for (size_t j = 0; j < d.roster.size(); j++) {
+                if (d.roster[j] != d.cells[i]) continue;
+                if (!cars[j]) break;   // no car in this scene: nothing to stand
+                const double s = ttp::wrap_s(d.carPoses[i].s, L);
+                const double lat = d.carPoses[i].lat;
+                const ttp::Pose p = ttp::carPose(*eng->centerline(), s, lat, 0, 0, cars[j]->halfLen);
+                TtpCarInput& o = outCars[j];
+                o.pos = { (float) p.pos.x, (float) p.pos.y, (float) p.pos.z };
+                o.forward = { (float) p.forward.x, (float) p.forward.y, (float) p.forward.z };
+                o.up = { (float) p.up.x, (float) p.up.y, (float) p.up.z };
+                o.trackS = (float) s;
+                o.trackLat = (float) lat;
+                o.air = o.airborne = o.airPitch = 0;
+                atRest(o);
+                posed[j] = true;
+                break;
+            }
+        }
+    }
+
     // The showroom's monster trucks. The rig is a TRANSFORM of a car and not a
     // prop — the kit chassis with its cab dropped, seating the car's own body —
     // so the only way to stand one still is to put a parked car in it, and the
@@ -244,6 +349,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         if (d.coverage.cut) {
             d.follow = {};
             d.coverChase = {};
+            d.lens = {};
         }
         const Shot shot = d.coverage.shot;
         chase = shot == Shot::CHASE;
@@ -251,7 +357,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     }
     // The follow cam and the chase work at race distances, so they take the
     // race fog band.
-    const bool follow = !raceCams && !chase && mode == CAM_FOLLOW;
+    bool follow = !raceCams && !chase && mode == CAM_FOLLOW;
     const float fogNear = !d.fog ? 0
             : raceCams || follow || chase ? d.framing.raceFogNear
             : mode == CAM_BBOX ? d.framing.bbFogNear
@@ -290,10 +396,26 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // body behind it. The finish flourish (race_flow.h) holds that frame
             // for seconds, which is how this became visible; a held car is at
             // rest, so the rig settles into its parked shot and stays there.
+            // A posed car is the picture too, at rest.
+            const bool still = fromHeld || (c && posed[(size_t) subject]);
             if (c) {
-                ttp::Pose rig = fromHeld ? heldPose(outCars[subject]) : c->pose;
+                ttp::Pose rig = still ? heldPose(outCars[subject]) : c->pose;
+                // A posed car that has just appeared or jumped is a fresh shot:
+                // the cut below snaps the rig's position, and this its lens and
+                // landing dip, which would otherwise ease in from the race (a
+                // lens a few degrees wide for a second, a dip begun off the
+                // sim car's last flight).
+                if (posed[(size_t) subject]) {
+                    const V3 gap = cam.pos - v3(rig.pos);
+                    if (!cam.init || dot(gap, gap) > CHASE_CUT_DIST * CHASE_CUT_DIST) {
+                        cam.init = false;
+                        cam.fov = BASE_FOV;
+                        cam.dipT = -1;
+                        cam.prevAir = 0;
+                    }
+                }
                 const float air = outCars[subject].air;
-                const float vh = fromHeld ? 0.0f : (float) c->vh;
+                const float vh = still ? 0.0f : (float) c->vh;
                 if (air <= 0 && cam.prevAir > 0) {
                     const float hard = (float) audio::landHardness(cam.prevVh);
                     cam.dipDepth = CAM_LAND_DIP * hard;
@@ -318,21 +440,26 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                 const V3 gap = cam.pos - v3(rig.pos);
                 if (cam.init && dot(gap, gap) > CHASE_CUT_DIST * CHASE_CUT_DIST) cam.init = false;
                 cam.update(rig,
-                           fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
+                           still ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
                            outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack,
-                           !fromHeld && c->trailing);
+                           !still && c->trailing);
             }
             TtpViewInput& v = outViews[i];
             v.car = subject;
             // …and the roll comes off the same pose, for the same reason.
             const V3 up = !c ? V3{ 0, 1, 0 }
-                    : fromHeld ? V3{ outCars[subject].up.x, outCars[subject].up.y,
+                    : still ? V3{ outCars[subject].up.x, outCars[subject].up.y,
                                      outCars[subject].up.z }
                     : v3(c->pose.up);
-            lookAtWorld(v.world, cam.pos, cam.target, up);
+            // A gallery's look replaces the camera and only the camera, level
+            // rather than rolled with a car it is no longer behind.
+            const DisplayState::CellLook* look =
+                    i < d.cellLooks.size() && d.cellLooks[i].on ? &d.cellLooks[i] : nullptr;
+            if (look) lookAtWorld(v.world, look->eye, look->target, V3{ 0, 1, 0 });
+            else lookAtWorld(v.world, cam.pos, cam.target, up);
             // The rig's own authored vertical fov, whatever the layout. A cell
             // is a SMALL SCREEN, not a crop — see the note on buildFrame.
-            v.fov = cam.fov;
+            v.fov = look && look->fov > 0 ? look->fov : cam.fov;
             v.aspect = aspect;
             v.nearZ = CAM_NEAR;
             v.farZ = CAM_FAR;
@@ -343,6 +470,26 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         const Framing& f = d.framing;
         V3 eye, target = f.center, up = { 0, 1, 0 };
         int32_t subject = -1;   // an overview follows nobody, a chase its car
+        if (covered && follow) {
+            eye = coverFollow(d, cars, eng, outCars, live, dt);
+            target = d.follow.target;
+            // A battle shot the lens has no place for at its cut is passed
+            // over at once: the lobby cuts to a clear shot rather than open
+            // on a wall. Once a shot is up, its next step cuts away from it.
+            // Never on a looping: that is one unbroken move.
+            for (int tries = 0; d.coverage.cut && d.lens.blind && d.follow.loop < 0 && tries < 3; tries++) {
+                d.coverage.blind = true;
+                d.coverage.step(0, outCars, live, d.rosterPlayers, d.loops);
+                d.follow = {};
+                d.lens = {};
+                chase = d.coverage.shot == Shot::CHASE;
+                follow = !chase;
+                if (chase) break;
+                eye = coverFollow(d, cars, eng, outCars, live, dt);
+                target = d.follow.target;
+            }
+            d.coverage.blind = follow && d.lens.blind && d.follow.loop < 0;
+        }
         if (mode == CAM_FREE) {
             eye = d.freeEye;
             target = d.freeTarget;
@@ -356,11 +503,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             target = d.coverChase.target;
             up = { c.up.x, c.up.y, c.up.z };
         } else if (follow) {
-            std::vector<bool> filmed = live;
-            if (covered) d.coverage.battleField(outCars, filmed);
-            d.follow.update(outCars, filmed, f.center, d.tagDeck, d.ground, d.loops, dt);
-            eye = d.follow.pos;
-            target = d.follow.target;
+            // The lobby's is drawn above; CAM_FOLLOW, the trailer's, as the rig has it.
+            if (!covered) {
+                d.follow.update(outCars, live, f.center, d.tagDeck, d.ground, d.loops, dt);
+                eye = d.follow.pos;
+                target = d.follow.target;
+            }
         } else if (mode == CAM_BBOX) {
             d.orbitAngle += BBOX_ORBIT_SPEED * dt;
             eye = { f.center.x + std::cos(d.orbitAngle) * f.bbAx,

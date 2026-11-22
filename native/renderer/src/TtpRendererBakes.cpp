@@ -78,6 +78,16 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
     }
     lo -= float3{ 4.0f, 8.0f, 4.0f };
     hi += float3{ 4.0f, 8.0f, 4.0f };
+    // The set pieces cast too, and they stand off the road. One poking past
+    // the box writes its depth into the map's border texels, and CLAMP_TO_EDGE
+    // then hands that border to every receiver beyond it: a shadow streaking
+    // from the piece to the edge of the ground. So the box takes them in.
+    for (const SetFoot& f : mSetFeet) {
+        const float ex = std::fabs(f.ax) * f.hx + std::fabs(f.az) * f.hz;
+        const float ez = std::fabs(f.az) * f.hx + std::fabs(f.ax) * f.hz;
+        lo = min(lo, float3{ f.x - ex - 1.0f, lo.y, f.z - ez - 1.0f });
+        hi = max(hi, float3{ f.x + ex + 1.0f, f.top + 1.0f, f.z + ez + 1.0f });
+    }
     const float3 centre = (lo + hi) * 0.5f;
     // Distance to stand the light off at: the bounding-sphere radius still
     // decides that (it has to clear the geometry from any angle), but it no
@@ -393,9 +403,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
     // per texel. Drawing the structures into the ground's map would overwrite
     // the ground texels they cover as seen from the sun — which are exactly the
     // texels of their own cast shadow — and erase the shadow a free-standing
-    // loop shaft throws on the ground. So the ground keeps a map of its own (one
-    // surface, no depth buffer), and the structures and berms share a second,
-    // DEPTH-TESTED so the surface nearest the sun wins each texel.
+    // loop shaft throws on the ground. So the ground keeps a map of its own,
+    // and the structures and berms share a second. Both are DEPTH-TESTED so
+    // the surface nearest the sun wins each texel: the ground's own two
+    // layers (the verge band lying over the grid) as much as an occluder.
     //
     // 512²: the softness lives in the ESM (whose own floor measured at 512 —
     // 256 scallops), and these maps only re-sample it.
@@ -416,7 +427,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
     };
     if (esm.map) {
         if (mVisMaterial) {
-            mVisMap = bakeVis({ &mGround }, false);
+            mVisMap = bakeVis({ &mGround }, true);
             mStructVisMap = bakeVis({ &mStructures, &mBerms }, true);
         }
         bake.mark("vis");
@@ -630,7 +641,16 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v3: the road's baked vertex light left the tail.
 // v4: the ESM left the blob; it carries the three visibility maps instead
 // (ground, structures, deck), each as width, height and R8 rows.
-constexpr uint32_t kBakeVersion = 4u;
+// v5: the ground rose to meet the road, so every ground map a v4 build
+// baked describes a surface that no longer exists. The generation retires
+// them too; the bump says so where the format is read.
+// v6: the beach's sand rose into dunes inland, so its ground maps went stale
+// the same way.
+// v7: the ground rose to meet low road too (kVergeDrop), the same again.
+// v8: a sunk sea took the beach down with it under Riptide's causeway.
+// v9: the verge band laid the land up to the kerb, and the ground's map is
+// baked depth-tested so the band over the grid wins its texels.
+constexpr uint32_t kBakeVersion = 9u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);

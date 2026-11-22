@@ -4,7 +4,8 @@
     "",
     "WHY THIS FILE EXISTS. The .mp3s beside it are ARTIFACTS, not masters: they are",
     "the incompetech downloads re-encoded to VBR (see `encode` below). The masters",
-    "are ~164 MB of 256-320 kbps CBR and are deliberately NOT in the working tree —",
+    "are 256-320 kbps CBR, about three times the shipped bytes, and are",
+    "deliberately NOT in the working tree —",
     "for an ACQUIRED asset the reproducible source is a URL plus a hash plus an",
     "encode recipe, which is this file, not the bytes. (Contrast the CUES, which are",
     "GENERATED: their source is scripts/bake-cues.mjs and the artifacts are baked",
@@ -21,10 +22,11 @@
     "(`sha256`) and that the result still sits at the loudness the catalogue trims",
     "it to (`npm run check:music-loudness`).",
     "",
-    "NO NUMBER HERE IS ALSO SOMEWHERE ELSE. Titles, durations and the LUFS trims are",
-    "public/display/audio/musicCatalogue.js (and, ported, native/libttp-runtime/ttp/",
-    "audio.cc); the biome pools and the attribution text are CREDITS.txt. This file",
-    "joins to those on `file` and re-declares none of it — CLAUDE.md manifest rule."
+    "NO NUMBER HERE IS ALSO SOMEWHERE ELSE. Titles, durations, the LUFS trims and",
+    "which track races to which song are public/display/audio/musicCatalogue.js",
+    "(and, ported, native/libttp-runtime/ttp/audio.cc); the attribution text is",
+    "CREDITS.txt. This file joins to those on `file` and re-declares none of it —",
+    "CLAUDE.md manifest rule."
   ],
   "license": {
     "holder": "Kevin MacLeod",
@@ -46,21 +48,21 @@
     ],
     "recordedWith": "ffmpeg 8.1.2 / libmp3lame",
     "note": [
-      "-q:a 7 is ~100 kbps VBR: 164 MB of catalogue becomes ~62 MB. That size is",
+      "-q:a 7 is ~100 kbps VBR, about a third of the masters' bytes. That size is",
       "paid THREE ways now, which is why it was worth lowering: the preview deploy",
       "image, every worktree clone, and — since the TV shells stopped streaming —",
       "both app bundles.",
       "WHY 7 AND NOT LOWER. Measured against the masters: q7 holds energy above",
-      "14 kHz to within 1 dB of q5, while q9 (~48 MB) is 26-30 dB down up there,",
+      "14 kHz to within 1 dB of q5, while q9 (a quarter smaller) is 26-30 dB down up there,",
       "because LAME drops its lowpass to ~15 kHz at that setting. q9 does not fail",
       "any gate in this tree — loudness, duration and sample rate all survive it —",
       "so nothing but this note stands between you and deleting the treble. The",
-      "15 MB it saves buys nothing: no bundle or store limit is anywhere near.",
+      "quarter it saves buys nothing: no bundle or store limit is anywhere near.",
       "RE-ENCODE FROM THE MASTERS, NEVER FROM THE SHIPPED FILES. That is what this",
       "script does and the reason it insists on the download. Lossy-to-lossy makes",
       "the encoder spend bits reproducing the previous encoder's artifacts: run q6",
       "over the shipped q5 set and the catalogue comes out BIGGER than it started.",
-      "-vn strips the embedded cover art four of the masters carry.",
+      "-vn strips the embedded cover art some of the masters carry.",
       "NO FILTERS, EVER. The per-song gains in musicCatalogue.js and audio.cc are",
       "AUTHORED LITERALS frozen against tests/fixtures/audio-corpus.jsonl, so an",
       "-af loudnorm here would silently invalidate the whole trim table. A plain",
@@ -72,9 +74,9 @@
       "even mux that — it is an afconvert, i.e. macOS-only, step), and MediaPlayer",
       "reads Ogg Opus only from API 29 while this app ships minSdk 24. On top of",
       "which audio.cc bakes the path INCLUDING the extension into its SONG",
-      "table and audio-corpus.jsonl froze those strings. That corpus can never be",
-      "re-recorded (its JS oracle is deleted), so changing the extension turns",
-      "audio_check and record_audio red on all four legs. Moving off MP3 means",
+      "table and audio-corpus.jsonl records those strings, so changing the extension",
+      "moves every recorded song in it: a deliberate re-record (tests/CLAUDE.md),",
+      "not an encode. Moving off MP3 means",
       "making Song::file a stem and letting each shell append its own extension —",
       "an ABI and corpus change, and a separate decision."
     ]
@@ -103,12 +105,6 @@
       "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Bit%20Shift.mp3",
       "sha256": "0d76175482b0d1742b43922624e3a3ecb8f5d43f1d6f7bb8b84abae186aeb589",
       "bytes": 6147900
-    },
-    {
-      "file": "chipper_doodle_v2.mp3",
-      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Chipper%20Doodle%20v2.mp3",
-      "sha256": "addaad1315a5b1d3dd37ff22690941b1ca2575a7769d25fc2fa6e6b95a4d364a",
-      "bytes": 6892257
     },
     {
       "file": "cloud_dancer.mp3",
@@ -147,12 +143,6 @@
       "bytes": 7116717
     },
     {
-      "file": "happy_bee.mp3",
-      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Happy%20Bee.mp3",
-      "sha256": "06f7dfd763a0bcc33fdf29ecf904c23753deaf392c8c7686902bfb943ba99576",
-      "bytes": 12082281
-    },
-    {
       "file": "happy_happy_game_show.mp3",
       "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Happy%20Happy%20Game%20Show.mp3",
       "sha256": "640d808993c49165d9e7a88ff1925312220317b75ba847b74e664e9f01a87db6",
@@ -177,16 +167,22 @@
       "bytes": 7755086
     },
     {
+      "file": "master_of_the_feast.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Master%20of%20the%20Feast.mp3",
+      "sha256": "7d8c1e5ebfd4c842718fa7c6bd81e8804cd0e743fe1496936f526dd514e65409",
+      "bytes": 7306499
+    },
+    {
       "file": "new_friendly.mp3",
       "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/New%20Friendly.mp3",
       "sha256": "218c16ae19cae3770452a7ba1c32d0976778fc5061616141a6dcbf7f96684c33",
       "bytes": 6864453
     },
     {
-      "file": "paradise_found.mp3",
-      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Paradise_Found.mp3",
-      "sha256": "7ea20dd113983ecaab67f774da1f0699114b3a6f93a386c202b977a2cb9e00a2",
-      "bytes": 3751848
+      "file": "spy_groove.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Spy%20Groove.mp3",
+      "sha256": "2e6786281b9641c2a3d71f2a8f513b73aff7c86b2c97999f5eb7a3f7948c0a17",
+      "bytes": 7354025
     },
     {
       "file": "still_pickin.mp3",
@@ -201,28 +197,10 @@
       "bytes": 3934390
     },
     {
-      "file": "tiki_bar_mixer.mp3",
-      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Tiki%20Bar%20Mixer.mp3",
-      "sha256": "9d5fc06a1cc784c9cf35c5dc5059e5d54b2a192bfecf897c5f41ade14bdc2512",
-      "bytes": 6800113
-    },
-    {
       "file": "vivacity.mp3",
       "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Vivacity.mp3",
       "sha256": "6d487ee0acf018137edc1f41ecab23e721165577382a6c8d68072e7174360fcb",
       "bytes": 7413482
-    },
-    {
-      "file": "voice_over_under.mp3",
-      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Voice%20Over%20Under.mp3",
-      "sha256": "11662d206275949f8fcd3555b8448c00c9c952cf5eb9c0698a853a23b0e78265",
-      "bytes": 6319297
-    },
-    {
-      "file": "wallpaper.mp3",
-      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3",
-      "sha256": "9fa810e5193c88f1b360537366f210f16c2588106d5292f0659e9957fa274f96",
-      "bytes": 8804339
     }
   ]
 }

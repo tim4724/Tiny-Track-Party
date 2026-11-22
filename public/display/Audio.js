@@ -34,7 +34,7 @@ import { storedPicks } from './audio/picks.js';
 
 // THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
 // description: it performs commands and decides nothing. The music catalogue —
-// the pool per biome, the per-song LUFS trim, the no-repeat shuffle — belongs to
+// each track's song, the per-song LUFS trim, the fallback shuffle — belongs to
 // the decision layer, which is C++ (libttp-runtime/ttp/audio.cc); a picked song
 // reaches this file as a descriptor on a `{music:'start', song, level}` command,
 // resolved once per race through ttp_audio_song_json.
@@ -56,6 +56,10 @@ export class RaceAudio {
     this.master = null;
     this._picks = null;
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
+    // DEV: a level trim per voice cue, empty in the game. The music gallery sets
+    // one to audition a bed's level against a race (its rain knob); what it
+    // finds is then authored in C++ (audio.h), where the level is decided.
+    this.cueTrim = new Map();
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
     this._muted = storedMuted(); // the display's mute switch, persisted in bus.js
@@ -204,6 +208,7 @@ export class RaceAudio {
     if (!this.ready) return;
     const key = cueId + ':' + id;
     let voice = this._voices.get(key);
+    level *= this.cueTrim.get(cueId) ?? 1;
     if (level <= 0.02) { this._stopVoice(cueId, id); return; }
     if (!voice) {
       const v = this._variant(cueId);
@@ -241,7 +246,7 @@ export class RaceAudio {
   // falls back to the element's own volume scaled by the master level.
   //
   // WHICH song and at WHAT level is decided in native/libttp-runtime/ttp/audio.cc
-  // (pool by biome, no-repeat shuffle, per-song LUFS trim) and arrives as a
+  // (the track's own song, per-song LUFS trim) and arrives as a
   // 'start' command.
   //
   // Not offline: the element is outside the graph, so a render would not carry it and

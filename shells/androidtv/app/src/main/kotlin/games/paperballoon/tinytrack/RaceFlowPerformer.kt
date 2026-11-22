@@ -150,7 +150,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
                 }
 
             // ---- audio ------------------------------------------------------
-            "start-music" -> game.audio.music(e.optString("biome").ifEmpty { null })
+            "start-music" -> game.audio.music(TtpJson.optStr(e, "track"))
             "stop-music" -> game.audio.music(null)
             "stop-voices" -> game.audio.stopVoices()
             "stop-car-audio" -> EngineId.from(e.opt("id"))?.let { game.audio.stopCar(it) }

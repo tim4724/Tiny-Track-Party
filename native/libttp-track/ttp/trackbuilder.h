@@ -38,6 +38,11 @@ struct SegDef {
   int widthKind;   // 0 none (track default), 1 scalar w0, 2 taper [w0,w1]
   double w0, w1;
   bool pillars;
+  // A straight's `grade: [in, out]`: the slopes (rise per length) it starts
+  // and ends at, a cubic between them in place of the ease, so a climb can
+  // run on into a crest and a landing slope without flattening in between.
+  bool graded;
+  double g0, g1;
 };
 
 struct WptDef {
@@ -55,7 +60,7 @@ struct FurnDef {   // oil / pad / box / pole descriptor
 
 struct BananaDef { double u, lat; };
 
-// A SET PIECE: one composed landmark model (scripts/gen-set-pieces.mjs) the
+// A SET PIECE: one landmark model (scripts/gen-set-prototypes.mjs) the
 // RENDERER places on this track. Not builder input — it rides here for the
 // reason `name` and `cup` do below: the catalogue is where it is authored.
 struct SetDef {
@@ -65,6 +70,43 @@ struct SetDef {
   double yaw;         // degrees about +y, from the track's own heading there
   double y;           // lift (+) or sink (-) from the ground
   double scale;       // uniform; 1 = as composed
+  int lite;           // 0: the full tier only (`lite: false`); 1: the lite tier draws it too
+};
+
+// A LANDFORM: a shape the RENDERER sums into this track's ground (public/
+// shared/tracks.js `land`, and SET_GROUND under the set pieces modelled on
+// one). Not builder input, for SetDef's reason. Lengths in world units in the
+// anchor's frame: +Z along the track's heading turned `yaw`, +X the track's
+// LEFT — a set piece's own frame, so a set piece's ground is authored in the
+// same frame as its model.
+struct LandDef {
+  int kind;           // 0 ridge (a hill when len is 0), 1 ring, 2 plain, 3 mound,
+                      // 4 fan (a set piece's ridge it lies on), 5 paint (colour only),
+                      // 6 shore (the waterline runs through the anchor: len of
+                      // shore held, r its fade back to the open shore),
+                      // 7 pond (open water on the plain, len and r its water),
+                      // 8 clear (no seeded scatter within r of its spine),
+                      // 9 street (len of road centred on u: its kerb a kerbstone),
+                      // 10 snake, 11 ladder (len of road centred on u: the
+                      // deck one of the board's snakes or ladders),
+                      // 12 shed (len of road centred on u under a roof: no
+                      // snow, its kerb a kerbstone and concrete paving)
+  int piece;          // anchored on this `set` entry (its u, lat, yaw, scale); -1: below
+  double u, lat, yaw; // the anchor when piece is -1, like a set piece's; on a
+                      // piece, yaw alone turns the form in the piece's frame
+  double x, z;        // centre offset in the anchor frame
+  double len;         // ridge / plain: length along +Z
+  double r, r1;       // ridge: radius at -Z / +Z end; ring: crest radius; plain: half-width;
+                      // mound: reach toward +X / toward -X
+  double w;           // ring: half-width of the bank; plain: its fade
+  double rz;          // mound: reach along Z
+  double h, h1;       // height at -Z / +Z end (ridge), else h
+  double top;         // ridge / ring: the flat crest, a fraction of the radius
+  double shape;       // mound: its flank exponent
+  unsigned tint;      // 0xRRGGBB over the ground it covers; 0 = none
+  double near;        // ridge / ring: how close past the kerb its flank may
+                      // stand at full height; 0 = the ground's own clearance
+  int lite;           // 0: the full tier only (`lite: false`); 1: the lite tier has it too
 };
 
 struct TrackDef {
@@ -87,6 +129,9 @@ struct TrackDef {
   const WptDef* wpts; int nWpts;
   double width;    // trackWidth = (desc.width) || ROAD_WIDTH
   double sand;     // sand strip per side, between the asphalt and the kerb; waypoint tracks only
+  // A stretch of the lap (u, from..to) that carries NO sand: a causeway over
+  // water, where the kerbs stand at the asphalt's edge. None when to <= from.
+  double sandOffFrom, sandOffTo;
   double startU;   // desc.startU ?? 0
   const FurnDef* oils; int nOils;
   const FurnDef* pads; int nPads;
@@ -94,8 +139,9 @@ struct TrackDef {
   const FurnDef* poles; int nPoles;
   const BananaDef* bananas; int nBananas;
   const FurnDef* kickers; int nKickers;   // u only: a kicker spans the road
-  // Renderer-only, like name and cup: nothing in this library reads it.
+  // Renderer-only, like name and cup: nothing in this library reads them.
   const SetDef* set; int nSet;
+  const LandDef* land; int nLand;
 };
 
 // A CUP: a curated, ordered set of tracks, and the catalogue's own arrangement.

@@ -335,11 +335,14 @@ struct TtpRenderer::TrackBin {
     std::vector<int32_t> carModels; // per slot: TtpRosterCar::carIndex
     uint32_t pal[8]; // asphalt line dash kerbA kerbB skirt shoulder sand (sRGB)
     float kerbW = 0.22f, kerbH = 0.20f;
+    bool kerbBank = false;      // the kerb as a plough's snowbank (theme.road.kerbBank)
+    uint32_t kerbSlush = 0;     //   and the slush on its road face (sRGB)
     bool edgeLines = true;
     std::vector<std::pair<float, float>> zones; // launch strips: (s, halfLen+margin)
     uint32_t sky[3];                            // zenith horizon below (sRGB)
+    float skyCurve = 0.65f;                     // theme.skyCurve
     uint32_t fog = 0x8ecae6;
-    uint32_t hillShape = 0;                     // 0 dome, 1 mesa, 2 block, 3 island
+    uint32_t hillShape = 0;                     // 0 dome, 1 mesa, 2 room, 3 island
     std::vector<uint32_t> hillColors;
     struct Box { float s, lat; };
     std::vector<Box> boxes;                     // item-box anchors
@@ -354,6 +357,7 @@ struct TtpRenderer::TrackBin {
     struct { uint32_t model; float s0, s1, sink; } scBush{};
     std::vector<uint32_t> scRocks{ 0xaaaaaa, 0xb4a898, 0x9aa2a4 };
     float scRockS[2] = { 0.3f, 0.45f };
+    bool scRockBlocks = false;
     uint32_t scModelCount = 0;
     // Trackside props (theme.props): scattered set dressing, bound as
     // prop<i>.glb by slot.
@@ -361,10 +365,12 @@ struct TtpRenderer::TrackBin {
     float prDensity = 0;
     struct PropStamp { uint32_t slot; float w, s0, s1; bool face, verge; };
     std::vector<PropStamp> prScatter;
-    // The track's set pieces (theme.set), bound as set<i>.glb by slot.
-    uint32_t setModelCount = 0;
+    // The track's set pieces (theme.set), bound as set<i>.glb by slot; the
+    // model names are there for the set layout's read-back (setLayout).
+    std::vector<std::string> setModels;
     struct SetPiece { uint32_t slot; float u, lat, yaw, y, scale; };
     std::vector<SetPiece> setPieces;
+    std::vector<ttp::rt::Landform> land;   // theme.land: the terrain's shapes
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
     std::vector<uint32_t> lmKinds;       // 0 gnome, 1 doghouse, 2 picnic
     float clDensity = 0;                 // clutter (only 'flower' ported)
@@ -381,10 +387,24 @@ struct TtpRenderer::TrackBin {
     struct Post { float x, z, radius; float3 cPos, cUp; };
     std::vector<Post> supportPosts;      // loop shafts (top cut to the deck underside)
     // `flare`: how far past halfW the slope lands on the ground (bermFlare).
-    struct BermRing { float cx, cz, lx, lz, halfW, topL, topR, flare; };
+    struct BermRing {
+        float cx, cz, lx, lz, halfW, topL, topR, flare;
+        // The ring's cross-section, left to right: the left foot on the
+        // ground (`gy`), the deck's two top edges, the right foot. The one
+        // statement of the berm's shape: the mesh (buildStructures) and the
+        // height read-back (bermY) both read it.
+        void corners(float gy, float3 out[4]) const {
+            out[0] = { cx - lx * (halfW + flare), gy, cz - lz * (halfW + flare) };
+            out[1] = { cx - lx * halfW, topL, cz - lz * halfW };
+            out[2] = { cx + lx * halfW, topR, cz + lz * halfW };
+            out[3] = { cx + lx * (halfW + flare), gy, cz + lz * (halfW + flare) };
+        }
+    };
     std::vector<std::vector<BermRing>> berms;
     std::vector<float> kickers;          // each kicker ramp's FOOT arclength
     uint32_t structureCol = 0x9aa1b4;    // theme.structure (toy concrete)
+    std::vector<uint32_t> structureStack; // theme.structureStack: stacked pillars
+    ttp::rt::PierSpec pier;              // theme.pier: how a pillar is built
     float roadWidth = 5, sand = 0, groundY = 0, length = 0;
     bool closed = true;
 
@@ -393,6 +413,7 @@ struct TtpRenderer::TrackBin {
     // per-kind ambient presets, the cloud/bird/plane defaults and the per-track
     // ambient patch are folded in there, so nothing here applies a default.
     uint32_t groundKind = 0;             // 0 lawn 1 sand 2 redrock 3 snow 4 wood
+    uint32_t groundBase = 0;             // the canvas's base colour; 0 = the kind's own
     float fogTune = 1;
     uint32_t keyCol = 0xfff1d0;
     float keyIntensity = 1.4f;
@@ -411,10 +432,14 @@ struct TtpRenderer::TrackBin {
     uint32_t shoreSeed = 0;              // shorelineFn's FNV-1a over the track id
     uint32_t hazeCount = 0, hazeTint = 0xffffff;
     float hazeOpacity = 0.16f, hazeScale = 1;
-    uint32_t ambKind = 0;                // 0 none 1 pollen 2 mote 3 sand 4 flake
+    uint32_t ambKind = 0;                // ttp::rt::AmbKind
     uint32_t ambCount = 0, ambTint = 0xffffff;
     float ambSize = 0.3f, ambOpacity = 0.85f;
     float ambFall = 1, ambWind = 0.7f, ambBob = 0, ambBand = 1;
+    ttp::rt::AmbientSpec life;           // theme.life: the cup's ambient life
+    // Per set model: whether its name holds life.near, i.e. whether the life
+    // gathers round it (mLifeAnchors).
+    std::vector<bool> setNear;
     uint32_t birdCount = 0, birdTint = 0xffffff;
     float birdSize = 2.4f, birdY = 18, birdRc = 120, birdRb = 22;
     float birdSpeed = 0.2f, birdFlap = 0.8f, birdFlapHz = 1.8f, birdDys = 1;

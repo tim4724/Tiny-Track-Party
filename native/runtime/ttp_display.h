@@ -235,7 +235,7 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * So the shell says what it WOULD hand over and the engine says what it still
  * needs. `wantJson` is, in fetch order:
  *
- *   [{"name":"scenery0.glb","tag":"tree"},
+ *   [{"name":"scenery0.glb","tag":"set-tree-oak"},
  *    {"name":"car-model2.glb","tag":"vehicle-gt"},
  *    {"name":"car-model2-ghost.glb","tag":"vehicle-gt","from":"car-model2.glb"}]
  *
@@ -324,30 +324,51 @@ TTP_ABI void ttp_display_showcase(int on);
 TTP_ABI void ttp_display_model_variant(const char* model, int variant);
 TTP_ABI void ttp_display_bench(const char* model);
 
-/* ---- the kit field (DEV) ------------------------------------------------ *
+/* ---- the set-piece layout (DEV) ----------------------------------------- *
  *
- * The other half of the gallery's question. The showroom above stages what the
- * game DRAWS; this stands what it could have drawn — every model of the Kenney
- * kits it picks from — on clear ground beyond the track, each at the size it
- * would ship and under the same light. A sheet of preview renders can say what
- * a model is; only this can say whether it belongs beside what already ships.
- *
- * The shell provides the bytes as kit0.glb … kit<count-1>.glb and passes the
- * count here; 0 builds no field. Latched, like the bench: it changes what the
- * next ttp_display_build meshes. WHICH models, and in what order, is entirely
- * the shell's — the kits are not in the tree and this layer has never heard of
- * them (see scripts/fetch-kits.mjs).
- *
- * ttp_display_kit_field_layout answers where they ended up, as a JSON array in
- * the same order — one {"d","h","w","x","y","z"} per model: its size, measured
- * off its own glTF AABB, and the spot it stands on. The height is there for the
- * same reason as the footprint — a chrome framing one model needs to know
- * whether it is a coin or a loop. A chrome that wants to fly
- * its camera to a model reads it here rather than re-deriving the packing,
- * which is the one way the two could disagree about where a model is. Valid
- * until the next build; "[]" when no field is staged. */
-TTP_ABI void ttp_display_kit_field(int count);
-TTP_ABI const char* ttp_display_kit_field_layout(void);
+ * Where the built track's SET PIECES stand, for the landmark gallery
+ * (/gallery-landmarks.html), which flies its cameras to them. Canonical JSON,
+ * {"groundY","length","pieces":[...]}, one row per PLACED piece in authored
+ * order. A piece whose GLB failed to load is skipped, so every row names its
+ * own model:
+ *   model           the GLB base name
+ *   u, s            lap fraction, and u * length
+ *   lat, yaw        authored: units off the centreline (+ right), degrees
+ *   heading         the world yaw it was placed at, radians
+ *   x, y, z         its anchor (the frame point + lat, on the ground + lift)
+ *   cx, cz          its footprint's centre
+ *   ax, az          its +X axis in plan; hx, hz its half extents along +X/+Z
+ *   top             its world top
+ *   parts           each mesh of the composition as [cx, cz, hx, hz, top]:
+ *                   a box on the piece's own axes, for how big the piece's
+ *                   largest mesh reads
+ * The footprint is the one every later placement pass keeps out of, so a chrome
+ * framing a piece reads it here rather than re-deriving the placement from the
+ * track descriptor. Valid until the next build of a different static scene;
+ * {"groundY":0,"length":0,"pieces":[]} before one. */
+TTP_ABI const char* ttp_display_set_layout(void);
+
+/* DEV. Where the built track's scenery trees and boulders stand, for the same
+ * camera's sight lines: a JSON array of [x, z, r, top] per piece, r its plan
+ * radius and top its world top. Valid like ttp_display_set_layout; [] before
+ * a build. */
+TTP_ABI const char* ttp_display_scatter_layout(void);
+
+/* The renderer's own ground height at world (x, z) for the built static
+ * scene: the surface scatter and set pieces stand on (the ground raised under
+ * the road, the hills, the clearings levelled under pieces), or the berm a raised
+ * stretch of road stands on where that is higher. The flat ground height
+ * where there is no relief, 0 before a build. For the landmark gallery's
+ * sight-line test. */
+TTP_ABI double ttp_display_ground_y(double x, double z);
+
+/* DEV. Whether a set piece may stand over world (x, z) with its surface
+ * spanning world heights lo..hi in the built scene: "" where it may, else what
+ * keeps it out ("road", "pillar", "berm", "piece" for another piece's foot,
+ * "sea"). `skip` is a ttp_display_set_layout row whose own foot does not
+ * count (the piece being moved; -1 for none). For the landmark gallery's
+ * placement search; "" before a build. */
+TTP_ABI const char* ttp_display_spot_issue(double x, double z, double lo, double hi, int skip);
 
 /* Build the scene for `trackId` from the GLBs/textures the resolved biome names
  * and the roster handed over here.
@@ -669,6 +690,33 @@ TTP_ABI void ttp_display_look(double eyeX, double eyeY, double eyeZ,
  * free camera on a car's chase rig, so what it shows is what a player sees. */
 TTP_ABI void ttp_display_look_fov(double deg);
 
+/* A per-CELL look (DEV): cell `cell` looks from the eye (ex, ey, ez) to the
+ * target (tx, ty, tz) instead of from its car's chase rig, with a vertical fov
+ * of `fov` degrees (0 keeps the rig's). Only the camera changes: the cell's
+ * rect, its aspect band, the split's widen-only lens, the race fog band and
+ * its steer bar are all the cell's as before, so a gallery can stand a split
+ * screen's cells wherever it likes and still see exactly what a race draws.
+ * A look for a cell the current cell list (ttp_display_cells) does not have is
+ * ignored, so push the cells first. The looks survive a new field or roster,
+ * so the page that set them clears them (ttp_display_cell_look_clear).
+ * Reached only by the landmark gallery. */
+TTP_ABI void ttp_display_cell_look(int cell, double ex, double ey, double ez,
+                                   double tx, double ty, double tz, double fov);
+TTP_ABI void ttp_display_cell_look_clear(void);
+
+/* A per-CELL car pose (DEV): the car owning cell `cell` is DRAWN parked at
+ * track arclength `s` (wrapped to the lap) and lateral offset `lat` (+ right),
+ * heading along the track there, at rest, instead of where the sim has it.
+ * Display only: the sim is untouched. It reaches the renderer as a sim pose
+ * would (the deck spot the wheels conform to included), so the cell's chase
+ * rig follows it like a race car, cutting to a pose that jumps. Same rules as
+ * the looks: push the cells first, a cell the list lacks is ignored, the poses
+ * survive a new field, and a cell may carry a pose and a look at once. A
+ * kicker's wedge is not modelled (the car is drawn on the deck under it); no
+ * catalogue track has one. Reached only by the landmark gallery. */
+TTP_ABI void ttp_display_car_pose(int cell, double s, double lat);
+TTP_ABI void ttp_display_car_pose_clear(void);
+
 /* The race's chase rig behind a car at (x, y, z) on level ground, nose along
  * (fx, fz) in plan, driving a straight at `spd` of a stat-1 car's top speed
  * (0 parked, 1 flat out), settled: {"eye":[x,y,z],"fov":deg,"target":[x,y,z]}
@@ -755,13 +803,26 @@ TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
  * The shell decides, because affordability is a fact about ITS device. */
 TTP_ABI void ttp_display_antialias(int on);
 
+/* THE DETAIL TIER (ttp/detail.h): "full", the world as authored, or "lite",
+ * the same world with what a racer barely sees taken off the frame. Decided
+ * HERE, not by the shell: `platform` is the shell's `pbp` value ("web",
+ * "tvos", "androidtv", as ttp_net.h takes it) and lite is the Android TV box's.
+ * `ask`, "full" or "lite", overrides the platform so a tier can be filmed and
+ * priced where it does not ship (the web's ?detail=, the box's
+ * debug.ttp.detail); null or anything else leaves the platform's.
+ *
+ * Latched like the biome: the next ttp_display_build meshes the tier (a change
+ * rebuilds the static scene). Call it after ttp_display_create. Answers the
+ * tier in force, "full" or "lite" — the decision, with or without a display. */
+TTP_ABI const char* ttp_display_detail(const char* platform, const char* ask);
+
 /* THE DRESSING ABLATION, split in two because the group's cost is.
  * `ttp_display_debug_features` hides the group whole (TTP_FEAT_DRESSING) and
  * every layer bit is spoken for, so these two take the halves apart instead.
  *
  * dress_keep is the fraction of each merged group's COPIES that is kept (1 =
  * all of them); dress_sheets is whether the one-renderable SHEETS -- boulders,
- * landmarks, windmill, clutter, smoke, signs -- are in the scene at all.
+ * landmarks, clutter, smoke, signs -- are in the scene at all.
  *
  * WHY BOTH EXIST. Measured on the reference Android box at four players, the
  * copies are 40k vertices a frame and hold ~1.1 ms that no render scale can
@@ -917,12 +978,32 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * included — the trade where the eye can resolve it:
  * TTP_FEAT_ALL | this = 0x8009FFC. */
 #define TTP_DEBUG_LOD_ALL 0x8000000
-/* 0x2000000 is unused (was TTP_DEBUG_BLOB_BILINEAR, deleted). */
+/* The pop probe's knobs (npm run see:pops). LOD_HOLD keeps every far-form
+ * and small-thing choice as the last frame left it, so the same camera drawn
+ * held and then free differs by exactly what swapped on that frame. NO_CULL
+ * turns the race cells' frustum culling off (the ambient cloud's per-cell
+ * frustum test included), so a picture that differs from the culled one names
+ * a renderable whose box does not hold what it draws. */
+#define TTP_DEBUG_LOD_HOLD 0x2000000
+#define TTP_DEBUG_NO_CULL 0x20000000
+/* SET fogs what stands past the fog's cutoff too (the sky content's exit,
+ * FOG_CUTOFF): a world surface that differs from the shipped picture stands
+ * out there unfogged, and flips as a car closes on it. */
+#define TTP_DEBUG_FOG_WHOLE 0x40000000
 /* SET draws every car shadow as an OPAQUE BLACK die-cut of its fitted rect
  * (vshadow.mat with the band at the ramp's half line): the probe for judging
  * the shadow pass's placement, depth and seams by eye, on a TV, in a race.
  * TTP_FEAT_ALL | this = 0x4009FFC. A look knob, not an ablation. */
 #define TTP_DEBUG_SHADOW_SOLID 0x4000000
+/* SET paints every set-piece PLACEMENT (its baked tiles, its `anim_` parts and
+ * its smoke) in one flat colour of its own, the `id` of its row in
+ * ttp_display_set_layout, while everything else draws as it does, so a
+ * readback counts how much of each piece a camera really sees through the
+ * deck, the terrain and the trees (npm run see:landmarks). The colour lands
+ * exact only with TTP_FEAT_FOG_VERTEX cleared and the antialias pass off.
+ * Applied when the bit flips and when the dressing is (re)built, never per
+ * frame. TTP_FEAT_ALL | this = 0x10009FFC. */
+#define TTP_DEBUG_SET_ID 0x10000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 /* DEBUG: tilt every chase rig to `deg` below level by raising or lowering the

@@ -203,7 +203,7 @@ extension GameCoordinator {
     func drainRaceEvents() {
         guard sessionHandle != 0 else { return }
         run(TTP.obj(ttp_race_events_live_json(
-            sessionHandle, net.roomHandle, display.biomeName,
+            sessionHandle, net.roomHandle,
             audio.ready ? 1 : 0, fastForwarding ? 1 : 0,
             ttp_race_intermission_ms(), nowMs())))
     }

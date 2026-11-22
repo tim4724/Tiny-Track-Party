@@ -110,8 +110,9 @@ export function lobbyFrame(roomHandle, sessionHandle, fields) {
 // place it can say so — so it goes on the QR and on the registered template
 // alike, and reaches a typed-code, nearby or rejoin arrival through the relay.
 // tvOS and Android TV are sibling shells with their own value; this one is the
-// web display's, which is why it lives here and not in the wasm.
-const CP_PLATFORM = 'web';
+// web display's, which is why it lives here and not in the wasm. The display's
+// detail tier is decided from it too (Stage.boot, ttp_display_detail).
+export const CP_PLATFORM = 'web';
 
 export function joinUrl(base, room, instance) {
   return fn.joinUrl(base, room, instance == null ? '' : instance, CP_PLATFORM);

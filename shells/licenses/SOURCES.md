@@ -20,7 +20,7 @@ one copy per licence id, shown because a viewer may as well be able to read it.
 | File | Copied from | Shown for |
 |---|---|---|
 | `CC-BY-4.0.txt` | <https://creativecommons.org/licenses/by/4.0/legalcode.txt> | every race song |
-| `CC0-1.0.txt` | <https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt> | the Kenney kits and the sound effects |
+| `CC0-1.0.txt` | <https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt> | the sound effects |
 
 Verbatim, and hard-wrapped by Creative Commons at 75 columns, which is the pitch
 both boards' monospace pages are laid out for. Nothing may reformat or truncate

@@ -92,6 +92,13 @@ const char* ttp_theme_showcase_prop_models(void) {
   return scratch().c_str();
 }
 
+const char* ttp_theme_showcase_set_models(void) {
+  ttp::Value a = ttp::Value::Arr();
+  for (const std::string& m : ttp::rt::showcase_set_models()) a.push(ttp::Value::Str(m));
+  ttp::canonical_stringify_into(a, scratch());
+  return scratch().c_str();
+}
+
 const char* ttp_showcase_inventory_json(void) {
   scratch() = ttp::rt::showcase_inventory_json();
   return scratch().c_str();

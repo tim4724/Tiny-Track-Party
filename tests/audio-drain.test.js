@@ -50,13 +50,13 @@ test('the cue table is derived from the wasm, not mirrored in JS', async () => {
   const d = await decider();
   // init() walks ttp_audio_cue_id until the codes run out. If that walk broke,
   // every cue command would decode to an undefined id and be dropped silently.
-  const cmds = d.startMusic('grass');
+  const cmds = d.startMusic('ribbon');
   assert.ok(Array.isArray(cmds), 'a decision call answers a command array');
 });
 
 test('music start carries a resolved song descriptor, not an index', async () => {
   const d = await decider();
-  const cmds = d.startMusic('grass');
+  const cmds = d.startMusic('ribbon');
   const start = cmds.find((c) => c.music === 'start');
   assert.ok(start, 'starting music emits a start command');
   // The INDEX must not leak: the shell performs `song.file`, and a number here
@@ -73,13 +73,16 @@ test('music start carries a resolved song descriptor, not an index', async () =>
 
 test('a song descriptor is read at most once and then memoized', async () => {
   const d = await decider();
-  // Same biome twice. The pool is no-repeat, so the second pick is a DIFFERENT
-  // song — what matters is that both resolve, i.e. the cache neither returns a
-  // stale descriptor for a new index nor misses forever.
-  const a = d.startMusic('grass').find((c) => c.music === 'start');
-  const b = d.startMusic('grass').find((c) => c.music === 'start');
-  assert.ok(a && b, 'both picks resolved');
-  for (const s of [a.song, b.song]) assert.equal(typeof s.file, 'string');
+  // A dev track twice: the fallback never repeats, so the second pick is a
+  // DIFFERENT song (a new index), then a track's own song twice (a cache hit).
+  // What matters is that all resolve, i.e. the cache neither returns a stale
+  // descriptor for a new index nor misses forever.
+  const picks = ['gym', 'gym', 'pretzel', 'pretzel']
+    .map((t) => d.startMusic(t).find((c) => c.music === 'start'));
+  assert.ok(picks.every(Boolean), 'every pick resolved');
+  for (const p of picks) assert.equal(typeof p.song.file, 'string');
+  assert.notEqual(picks[0].song.file, picks[1].song.file, 'the fallback did not repeat');
+  assert.equal(picks[2].song, picks[3].song, 'the same song is the same memoized descriptor');
 });
 
 test('the non-start music ops decode to a bare op with no song lookup', async () => {
@@ -140,7 +143,7 @@ test('a music start is the LAST command in its batch', async () => {
   session.startCountdown(0);
   for (let i = 0; i < 120; i++) { session.update(16.6); d.frame(1000 + i * 16.6); }
 
-  const cmds = d.startMusic('beach');
+  const cmds = d.startMusic('tidepool');
   const at = cmds.findIndex((c) => c.music === 'start');
   assert.ok(at >= 0, 'starting music emits a start command');
   assert.equal(at, cmds.length - 1,

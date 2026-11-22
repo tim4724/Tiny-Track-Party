@@ -25,9 +25,22 @@
 // its own sphere geometry and transform scale are the whole shape. `tint` is the
 // fade for both — additive contribution is colour × alpha, so scaling it down is
 // what makes the blast die away instead of shrinking away.
+//
+// 3. CLIPPED AT THE DECK. A ring that faces the camera reaches as far below its
+//    centre as above it, a radius of 2 against a centre 0.3 over the road. On
+//    the ground the road hides that half; on a BRIDGE it hung out under the
+//    deck, and from below a slab seen at a slant it even drew over the deck's
+//    own side (the disc stands nearer the eye there than the face it covers).
+//    So both shapes keep only what is on the burst's side of the deck it went
+//    off on: `ground` is that deck's normal and the mesh ORIGIN's height above
+//    it (the CPU's, since Filament's world is camera-relative), the vertex
+//    stage measures each vertex's height from that, and the fragment discards
+//    below zero. The height is affine in position, so interpolating it is
+//    exact. Left at its zero default it clips nothing.
 material {
     name : TtpVburst,
-    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    // .x the per-vertex fog factor (ttp_fog.inc), .y the height above the
+    // deck (point 3); .zw unused.
     variables : [ fog ],
     requires : [
         color,
@@ -47,7 +60,8 @@ material {
     flipUV : false,
     parameters : [
         { type : float2, name : ring },
-        { type : float4, name : tint }
+        { type : float4, name : tint },
+        { type : float4, name : ground }
     ]
 }
 
@@ -60,9 +74,11 @@ vertex {
         float r = materialParams.ring.x + material.uv0.y * materialParams.ring.y;
         highp mat4 w = getWorldFromViewMatrix();
         material.worldPosition.xyz += (w[0].xyz * cos(a) + w[1].xyz * sin(a)) * r;
-        // LAST: this stage moves worldPosition, and the fog factor has to be
-        // measured from where the vertex actually ends up.
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+        // LAST: this stage moves worldPosition, and the fog factor and the
+        // height have to be measured from where the vertex actually ends up.
+        highp vec3 fromOrigin = material.worldPosition.xyz - getWorldFromModelMatrix()[3].xyz;
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
+                materialParams.ground.w + dot(materialParams.ground.xyz, fromOrigin), 0.0, 0.0);
     }
 }
 
@@ -70,6 +86,7 @@ fragment {
     #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
+        if (variable_fog.y < 0.0) discard;   // under the deck (point 3)
         prepareMaterial(material);
         material.baseColor = getColor() * materialParams.tint;
         // Additive blending is ONE/ONE here, so the alpha has to be folded in

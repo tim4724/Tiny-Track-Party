@@ -12,7 +12,7 @@
 // what tests/credits.test.js holds us to: an entry whose license demands a
 // notice must ship one.
 //
-// Songs are NOT listed here — they derive from musicCatalogue.js RACE_MUSIC via
+// Songs are NOT listed here — they derive from musicCatalogue.js TRACK_MUSIC via
 // creditsFor(), so a change to the picks can never desync the page.
 import { assetUrl } from './assetUrl.js';
 
@@ -72,69 +72,15 @@ export function licenseInfo(id) {
 // files: root-absolute would 404 anywhere the tree is hosted under a prefix,
 // and this is the one link on the page that has to work.
 export const ASSET_CREDITS = [
+  // No Kenney model ships any more: every model is built by this repo's own
+  // scripts (public/assets/toycar/SOURCES.json). The credit stays for what
+  // inspired them: it covers no path, so it names no license either (a chip
+  // there read as "these files are Kenney's").
   {
     section: '3D models',
-    title: 'Toy Car Kit 1.2',
+    title: 'Inspired by Kenney\'s asset kits',
     author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/toy-car-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Nature Kit 2.3',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/nature-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Holiday Kit 1.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/holiday-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Pirate Kit 2.1',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/pirate-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Survival Kit 2.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/survival-kit',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Mini Forest 1.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/mini-forest',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'Mini Skate 2.0',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/mini-skate',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
-  },
-  {
-    section: '3D models',
-    title: 'City Kit (Roads) 2.2',
-    author: 'Kenney',
-    license: 'CC0 1.0',
-    url: 'https://kenney.nl/assets/city-kit-roads',
-    covers: ['public/assets/toycar/KENNEY-License.txt'],
+    url: 'https://kenney.nl/assets',
   },
   {
     section: 'Sound effects',
@@ -265,27 +211,27 @@ export const ASSET_CREDITS = [
 // long-form credit still lives in the static music/CREDITS.txt, which is what
 // the no-JS fallback points at.
 
-// Flatten a RACE_MUSIC map (audio/musicCatalogue.js) + the static entries into
+// Flatten a TRACK_MUSIC map (audio/musicCatalogue.js) + the static entries into
 // the page's shape: [{ section, entries: [{title, author, license, url,
-// notice?, obligation, required}] }], sections in SECTION_ORDER. Songs dedup by
-// title (a song may sit in several biome pools) and sort alphabetically.
+// notice?, obligation, required}] }], sections in SECTION_ORDER. An entry with
+// no `license` credits no shipped file (a courtesy), and the page shows no chip. Songs dedup by
+// title (two tracks may share one) and sort alphabetically. The fallback pool
+// points into the same map, so every song that can play is credited.
 // `obligation` and `required` are stamped from the license here, so no entry
 // carries its own claim.
-export function creditsFor(raceMusic) {
+export function creditsFor(trackMusic) {
   const byTitle = new Map();
-  for (const pool of Object.values(raceMusic)) {
-    for (const s of pool) {
-      byTitle.set(s.title, {
-        section: 'Music', title: s.title, author: s.artist,
-        license: s.license, url: s.source,
-      });
-    }
+  for (const s of Object.values(trackMusic)) {
+    byTitle.set(s.title, {
+      section: 'Music', title: s.title, author: s.artist,
+      license: s.license, url: s.source,
+    });
   }
   const music = [...byTitle.values()].sort((a, b) => a.title.localeCompare(b.title));
 
   const bySection = new Map();
   for (const e of [...music, ...ASSET_CREDITS]) {
-    const { obligation } = licenseInfo(e.license);
+    const obligation = e.license ? licenseInfo(e.license).obligation : 'courtesy';
     if (!bySection.has(e.section)) bySection.set(e.section, []);
     bySection.get(e.section).push({ ...e, obligation, required: obligation === 'attribution' });
   }

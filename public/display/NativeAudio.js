@@ -97,10 +97,11 @@ export class NativeAudioDecider {
 
   // The session whose race events make a sound. The lobby's attract demo races
   // a full field behind the menu and is never bound, which is what keeps it
-  // silent without a mute flag on this side. 0 between races.
+  // silent without a mute flag on this side. 0 between races. Binding names the
+  // race's sky too, so it can start (or stop) the rain bed.
   bind(sessionHandle) {
     fn.bind(sessionHandle | 0);
-    return EMPTY;
+    return this._drain();
   }
 
   // One frame of the continuous mix, decided off the bound session's live cars
@@ -127,8 +128,9 @@ export class NativeAudioDecider {
     return this._drain();
   }
 
-  startMusic(biome) {
-    fn.music(1, biome || '');
+  // The track's own song, or a fallback one for a track with none.
+  startMusic(trackId) {
+    fn.music(1, trackId || '');
     return this._drain();
   }
   stopMusic() { fn.music(2, null); return this._drain(); }

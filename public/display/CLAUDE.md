@@ -273,15 +273,8 @@ a pooled tag changes whose name it shows. The one READ is the sticker's size
 only when a slot's name or the surface changes.
 
 **Fetching assets is the shell's whole half of a scene build.** C++ names what it
-needs (scenery, props, cars, the kit field's models) and this side answers with
-bytes; nothing about which file that was crosses back. The asset gallery's KIT
-FIELD is the extreme case — several hundred models the game does not ship,
-fetched by `kit:<kit>/<model>` out of the local kit cache
-(`scripts/fetch-kits.mjs`) and provided as `kit<i>.glb`, all of it concurrent
-because one await each would turn a field into a minute of round trips. Which
-models, and in what order, is entirely this side's; where they stand is entirely
-the renderer's, and the layout comes back so the chrome's camera and the scene
-cannot disagree about where one is.
+needs (scenery, props, set pieces, cars) and this side answers with bytes,
+fetched concurrently; nothing about which file that was crosses back.
 
 **Which of them still NEED fetching is the engine's answer, not a memo here.**
 `ttp_display_asset_plan` takes the want list — each name paired with the kit model

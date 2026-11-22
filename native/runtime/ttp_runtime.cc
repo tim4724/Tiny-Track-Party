@@ -31,6 +31,7 @@
 #include "ttp/jsonnum.h"
 #include "ttp/race_track.h"
 #include "ttp/shot_hold.h"
+#include "ttp/theme.h"
 #include "ttp/race_track_json.h"
 #include "ttp/schematic.h"
 #include "ttp/json_parse.h"
@@ -130,6 +131,14 @@ static bool parseSeg(const Value& s, SegDef& out) {
   out.drift = numOr(s, "drift", 0);
   out.over = boolOr(s, "over", true);
   out.pillars = boolOr(s, "pillars", false);
+  out.graded = false;
+  out.g0 = 0;
+  out.g1 = 0;
+  if (const Value* g = s.find("grade")) {
+    if (g->type != Value::ARR || g->arr.size() != 2 || g->arr[0].type != Value::NUM
+        || g->arr[1].type != Value::NUM) return false;
+    out.graded = true; out.g0 = g->arr[0].num; out.g1 = g->arr[1].num;
+  }
   out.widthKind = 0;
   out.w0 = 0;
   out.w1 = 0;
@@ -203,6 +212,8 @@ static bool parse_track_def(const Value& desc, ParsedTrackDef& p) {
   const double width = numOr(desc, "width", 0);
   p.def.width = width != 0 ? width : kRoadWidthFallback;
   p.def.sand = numOr(desc, "sand", 0);
+  p.def.sandOffFrom = numOr(desc, "sandOffFrom", 0);
+  p.def.sandOffTo = numOr(desc, "sandOffTo", 0);
   p.def.startU = numOr(desc, "startU", 0);
 
   if (isSpline) {
@@ -273,6 +284,7 @@ static void audio_forget_session(int handle);
 
 struct RuntimeSession {
   int handle = 0;
+  std::string trackId;  // the catalogue/dev id it was begun on: the audio picks its song and its sky by it
   std::unique_ptr<Centerline> centerline;
   GameTrack track;
   std::string forceItem;
@@ -665,10 +677,10 @@ void audioFlush() {
 const char* const AUDIO_CUES[] = {
   "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
   "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
-  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land", "sand",
+  "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land", "sand", "rain",
 };
 const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
-static_assert(AUDIO_CUE_COUNT == TTP_CUE_SAND,
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_RAIN,
               "TTP_CUE_* must run 1..N over the table above");
 
 int32_t audioCueCode(const char* name) {
@@ -689,27 +701,16 @@ int32_t audioMusicOp(const char* name) {
   return 0;
 }
 
-// A song's flat catalogue index: pools in table order, songs in pool order.
+// A song's catalogue index: its row in TRACK_MUSIC.
 int32_t audioSongIndex(const au::Song* s) {
-  int32_t n = 0;
-  for (int i = 0; i < au::RACE_MUSIC_COUNT; i++) {
-    const au::MusicPool& p = au::RACE_MUSIC[i];
-    for (int j = 0; j < p.count; j++, n++) {
-      if (&p.songs[j] == s) return n;
-    }
+  for (int i = 0; i < au::TRACK_MUSIC_COUNT; i++) {
+    if (&au::TRACK_MUSIC[i].song == s) return i;
   }
   return -1;
 }
 
 const au::Song* audioSongAt(int index) {
-  int32_t n = 0;
-  for (int i = 0; i < au::RACE_MUSIC_COUNT; i++) {
-    const au::MusicPool& p = au::RACE_MUSIC[i];
-    for (int j = 0; j < p.count; j++, n++) {
-      if (n == index) return &p.songs[j];
-    }
-  }
-  return nullptr;
+  return index >= 0 && index < au::TRACK_MUSIC_COUNT ? &au::TRACK_MUSIC[index].song : nullptr;
 }
 
 }  // namespace
@@ -746,6 +747,13 @@ void ttp_audio_bind(int session) {
   if (b.session == session) return;
   b.session = session;
   b.pending.clear();  // whatever the last race had left to say, it is over
+  // The sky the race is run under, read once here rather than per frame: the
+  // track's own theme, the one its cup resolves to (ttp_theme_set_models'
+  // reading). A dev ?biome= override restyles the picture, not the weather.
+  RuntimeSession* rs = get(session);
+  const char* track = rs ? rs->trackId.c_str() : "";
+  b.dec.weather(rs ? ttp::rt::resolve_theme(ttp::rt::biome_for_track(track), track).ambient.kind
+                   : (uint32_t) ttp::rt::AMB_NONE, b.cmds);
 }
 
 void ttp_audio_frame(double nowMs) {
@@ -764,6 +772,11 @@ void ttp_audio_frame(double nowMs) {
   // into the next race's countdown. Flushing above still happens: the finish's
   // own cues are the race's last word, not the first frame of silence.
   if (rs->session ? rs->session->ended() : rs->eng->raceOver()) return;
+  // NOR DOES A PAUSED ONE. The freeze stops every voice, and the TV shells keep
+  // calling this through the pause, so anything decided here would start a
+  // sound again under the overlay: the rain, which no car's frozen state can
+  // hold at zero, and the engines of cars frozen at speed.
+  if (rs->session ? rs->session->paused() : rs->pausedBare) return;
   Game* eng = rs->eng;
   const au::AiIds ai = audioAiIds(*rs);
 
@@ -828,12 +841,12 @@ void ttp_audio_stop_car(const char* idJson) {
   b.dec.stopCar(parse_scalar_id(idJson), b.cmds);
 }
 
-void ttp_audio_music(int op, const char* biomeOrNull) {
+void ttp_audio_music(int op, const char* trackIdOrNull) {
   AudioBus& b = bus();
   audioFlush();
   switch (op) {
     case TTP_AUD_MUSIC_START:
-      b.dec.startMusic(biomeOrNull ? std::string(biomeOrNull) : std::string(), b.cmds);
+      b.dec.startMusic(trackIdOrNull ? std::string(trackIdOrNull) : std::string(), b.cmds);
       break;
     case TTP_AUD_MUSIC_STOP: b.dec.stopMusic(b.cmds); break;
     case TTP_AUD_MUSIC_PAUSE: b.dec.pauseMusic(b.cmds); break;
@@ -952,6 +965,7 @@ int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* 
                    + " was refused");
     return 0;
   }
+  rs->trackId = trackId;
   rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
   int h = g_next++;
   rs->handle = h;
@@ -1192,6 +1206,11 @@ extern "C++" Value ttp_session_drain_events(int h) {
   for (auto& e : rs->outQueue) arr.push(std::move(e));
   rs->outQueue.clear();
   return arr;
+}
+
+extern "C++" const char* ttp_session_track_id(int h) {
+  RuntimeSession* rs = get(h);
+  return rs ? rs->trackId.c_str() : "";
 }
 
 const char* ttp_events_json(int h) {

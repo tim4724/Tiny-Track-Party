@@ -31,10 +31,12 @@
 // as theme.h above; ctests execute both on every leg.
 #include "ttp/flat_weld.h"
 #include "ttp/glb_mesh.h"
-namespace ttp { namespace kitcolors { struct Mesh; } }
+namespace ttp { namespace kitcolors { struct Mesh; struct Model; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
+#include "ttp/obstacles.h"
 #include "ttp/name_tags.h"
+#include "ttp/set_motion.h"
 
 
 // The car contact shadow's constants, and the ONE place they are written down:
@@ -181,6 +183,14 @@ public:
         if (on != mShadowsEnabled) { mShadowsEnabled = on; dropStaticKey(); }
     }
 
+    // THE LITE DETAIL TIER (ttp_display_detail decides it): the same world
+    // with what a racer barely sees taken off the frame, each cut beside the
+    // code it changes and the list in native/renderer/CLAUDE.md ("The detail
+    // tier"). Latched like the shadows, since most of the cuts are built in.
+    void setLite(bool on) {
+        if (on != mLite) { mLite = on; dropStaticKey(); }
+    }
+
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
     // later scene is built with, and — for the asset gallery's MODEL BENCH —
@@ -196,22 +206,29 @@ public:
     void setModelVariant(const char* model, int variant);
     void setModelBench(const char* model);
 
-    // ---- the kit field (dev) ----------------------------------------------
-    // Stand `count` provided models — kit0.glb … kit<count-1>.glb — on clear
-    // ground beside the track, each seated on the surface at the size it would
-    // ship. That is the asset gallery's browser for the Kenney kits the game
-    // picks from: a sheet of preview renders can say what a model is, and only
-    // the field can say whether it belongs beside what already ships.
-    //
-    // Latched like the bench, and for the same reason — the field is meshed at
-    // buildScene. 0 builds no field, which is every caller but the gallery.
-    //
-    // kitFieldLayout() answers where they ended up: a JSON array in the same
-    // order, one {"d","h","w","x","y","z"} per model — its size, measured off
-    // its own glTF AABB, and the spot it stands on. The chrome frames a model
-    // from that, so the two cannot disagree about where one is or how big.
-    void setKitField(int count);
-    const char* kitFieldLayout() const { return mKitLayout.c_str(); }
+    // ---- the set-piece layout (dev) ---------------------------------------
+    // Where the track's set pieces ended up, for the landmark gallery's camera
+    // (the shape is ttp_display_set_layout's). The footprint is mSetFeet's
+    // own, so a camera framing a piece and the keep-outs every later pass
+    // honours cannot disagree about where it stands. Written once per static
+    // scene; kNoSetLayout before one is built, and the ABI's answer when
+    // there is no renderer at all.
+    const char* setLayout() const { return mSetLayout.c_str(); }
+    // Where buildScenery stood each tree and boulder, for the same camera's
+    // sight lines (the shape is ttp_display_scatter_layout's); "[]" before a
+    // build.
+    const char* scatterLayout() const { return mScatterLayout.c_str(); }
+    // The built static scene's ground height at (x, z): groundSurfaceY, the
+    // surface every scattered piece stands on, or the berm under raised road
+    // where one stands higher (bermY). 0 with no scene.
+    float groundY(float x, float z) const;
+    // What keeps a set piece's surface over (x, z), spanning world heights lo
+    // to hi, from standing there in the built scene: "road", "pillar", "berm",
+    // "piece" (another piece's foot; set layout row `skip` is not counted) or
+    // "sea"; "" where it may stand. For the landmark gallery's placement
+    // search, which moves pieces it has not built.
+    const char* spotIssue(float x, float z, float lo, float hi, int skip) const;
+    static constexpr const char* kNoSetLayout = "{\"groundY\":0,\"length\":0,\"pieces\":[]}";
 
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
 
@@ -313,6 +330,10 @@ public:
 
     // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
     const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
+    // The built scene's standing scenery as solid volume (ttp/obstacles.h),
+    // filled into `out` off the triangles it is drawn from. Asked once per
+    // build, inside it: the fill is too slow for a drawn frame on a TV box.
+    void fillObstacles(ttp::rt::Obstacles& out);
 
     // Slot i as the name tags see it (ttp/name_tags.h), measured off the model
     // at load: its roof over its origin as drawn — in the monster rig while
@@ -330,7 +351,7 @@ public:
     // track, its dressing, the sky, the sun bake — is a function of `key`
     // (what the shim says the scene is OF: track, biome, showcase, backend)
     // plus the inputs latched on this class (shadows, the bench, the model
-    // variants, the kit field), whose setters drop it. The FIELD — the cars and
+    // variants), whose setters drop it. The FIELD — the cars and
     // everything sized by them — is a function of the roster. A join, a leave,
     // a launch or a restart on the same track changes only the field, so it is
     // all a build of a resident key pays (rebuildField); nothing static ever
@@ -536,6 +557,14 @@ private:
         // OPT-IN for a mesh buildMesh welds (see `weld`): each of its
         // renderables gets a far form simplified to kFarTol (mLods).
         bool simplify = false;
+        // Optional per-vertex BONE, in its own buffer slot: non-empty makes
+        // the mesh SKINNED, each vertex carried whole (weight 1) by bone
+        // idx[0] of `boneCount`, posed with setBones (the set pieces' moving
+        // parts, TtpRendererMotion.cpp). The weld keys on it like any other
+        // attribute, so two parts' coincident corners stay two.
+        struct Bone { uint16_t idx[4]; uint8_t w[4]; };
+        std::vector<Bone> bones;
+        uint32_t boneCount = 0;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -555,12 +584,13 @@ private:
         // keys Vulkan's vertex-input state, and any difference is a pipeline
         // compiled on first draw.
         struct Layout {
-            bool lit = false, uv = false, baked = false;
+            bool lit = false, uv = false, baked = false, skin = false;
             uint8_t uvSlot() const { return lit ? 2 : 1; }
             // custom0's slot; custom1 is the next one.
             uint8_t customSlot() const {
                 return (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
             }
+            uint8_t skinSlot() const { return (uint8_t) (customSlot() + (baked ? 2 : 0)); }
         };
         Layout layout;
     };
@@ -581,10 +611,18 @@ private:
     // a range under 64 triangles is not worth a renderable of its own.
     static constexpr float kSheetTile = 48.0f;
     static constexpr uint32_t kSheetMinTris = 64;
-    // The live values: the constants above, or coarser on the Android GL
-    // fallback (init), where a draw costs more than the vertices it saves.
+    // The live values: the constants above, or coarser where a draw costs
+    // more than the vertices it saves: the Android GL fallback, and the lite
+    // tier (buildStatic sets them per scene).
     float mSheetTile = kSheetTile;
     uint32_t mSheetMinTris = kSheetMinTris;
+    // A set piece's bake tile (bakePlacements), split by whole part. Finer
+    // than a sheet's because a piece is dense where a sheet is sparse, so a
+    // tile drawn whole to a camera beside it costs vertices a sheet's would
+    // not; doubled with the sheet's.
+    static constexpr float kPieceTile = 8.0f;
+    float mPieceTile = kPieceTile;
+    bool mLite = false;   // setLite
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
@@ -622,6 +660,10 @@ private:
     //   rings, where the cubemap was 64 texels a face).
     filament::Material* mSkyMaterial = nullptr;   // renderer-lifetime, like vroadvis
     Mesh mSkyDome;
+    // How far inside its unit sphere the dome's nearest facet sits (the
+    // cosines of a facet's half-angles), for the sky band's fit
+    // (orientCellBillboards); the lite tier builds the dome coarser.
+    float mSkyInset = 1.0f;
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     // Cheap-matte live-lit (vlit.mat, custom Lambert): the meshes that MOVE.
     // Every static lit surface bakes its light instead (custom0, bakeLight).
@@ -732,11 +774,12 @@ private:
     // own vertices: the one it ships and a cheaper one that strays at most
     // `err` world units from it. chooseLods points it at one of them per CELL,
     // the far one wherever the nearest point of its box is far enough that
-    // `err` covers under kLodPx pixels of THAT cell, so a big cell pushes the
-    // swap out on its own and a 4-way split's small ones pull it in. Nothing
-    // else about the renderable changes: culling, material and decal fold are
-    // its own. Listed: the deck's chunks (buildRoadMesh) and every static mesh
-    // built with `simplify` (buildMesh).
+    // `err` covers under kLodPx pixels of THAT cell (counted as at most
+    // kLodLines of a frame), so a big cell pushes the swap out on its own and
+    // a 4-way split's small ones pull it in. Nothing else about the renderable
+    // changes: culling, material and decal fold are its own. Listed: the
+    // deck's chunks (buildRoadMesh) and every static mesh built with
+    // `simplify` (buildMesh).
     struct LodRange {
         utils::Entity entity;
         filament::VertexBuffer* vb = nullptr;
@@ -755,23 +798,66 @@ private:
         int ring0 = -1, ring1 = -1;
     };
     std::vector<LodRange> mLods;
+    // LITE'S SMALL-THING CUT, the far form that is nothing: a renderable of
+    // small things (a run of scatter or props, a chunk of clutter) leaves a
+    // cell's scene once `size`, the height of what it holds, covers under
+    // kCutPx pixels of THAT cell from the nearest point of its box, and comes
+    // back when it covers more. Per cell like chooseLods, so a 1P cell keeps
+    // what a 4P one drops. By scene membership: a layer bit is spoken for, and
+    // a range of nothing is still a draw. `sheet` marks a dressing SHEET,
+    // which the sheets ablation owns while it is off (applyDressSheets).
+    struct CutRange {
+        utils::Entity entity;
+        filament::math::float3 lo{ 0 }, hi{ 0 };
+        float size = 0;
+        bool sheet = false;
+        bool cut = false;
+    };
+    std::vector<CutRange> mCuts;
+    static constexpr float kCutPx = 6.0f;
+    // Registers a built renderable (lite only); size 0 takes its box's height.
+    void addCut(utils::Entity e, float size, bool sheet);
+    // Puts every cut back, or (pxPerRad 0) leaves them all in.
+    void chooseCuts(const filament::math::float3& cam, float pxPerRad);
+    void restoreCuts();
     // The ring intervals (wrapped, [a, b)) this frame's car shadows cover,
     // from placeCarShadow; cleared with the draws.
     std::vector<std::pair<int, int>> mShadowRings;
     // EVERY cell count draws the far forms past their gate, one player included
     // (the user's call for the deck, 2026-09-02; it began as a split-only
-    // trade). With the deck's tolerance a 270-line cell swaps past ~10 u, a
-    // 1080-line one past ~40 u and a 2160-line one past ~80 u. Dropping the
-    // gate altogether measured 1.2 ms more on the box's 4P heavy seconds and
-    // was shipped for an hour; the user wanted a threshold back.
+    // trade). With the deck's tolerance a 270-line cell swaps past ~10 u and a
+    // 1080-line one past ~40 u. Dropping the gate altogether measured 1.2 ms
+    // more on the box's 4P heavy seconds and was shipped for an hour; the user
+    // wanted a threshold back.
     static constexpr float kLodPx = 2.0f;   // the user asked for aggressive
+    // ...where the frame is the budget (lite). Full swaps at this many, of
+    // what the haze lets through (chooseLods): the user saw things plop in.
+    static constexpr float kLodPxFull = 0.5f;
+    // ...and the pixels are a frame's of at most kLodLines lines: a cell of a
+    // taller frame is judged as its share of a 1080-line one, so a 4K panel
+    // swaps where a 1080 one does (the user's call). Judged by its
+    // own lines, a 4K 4P cell kept the snow forests near to the fog, and with
+    // every far form forced on Avalanche 4P on the Apple TV ran 1.1 ms less
+    // GPU and lost its seconds over 16.7 ms. No frame at or under 1080 moves.
+    // Lite's cut (chooseCuts) is handed the same count.
+    static constexpr float kLodLines = 1080.0f;
     // How far a far-ribbon chord may leave the rings it spans (buildRoadMesh).
     static constexpr float kDeckLodTol = 0.08f;
     // How far a static mesh's simplified far form may stray (buildMesh).
     static constexpr float kFarTol = 0.2f;
+    // The far form holds a face over kFarFace square units and the chamfer
+    // round it wherever that spans two shades, corners further apart than
+    // kFarShade of 255 in a channel (farForm).
+    static constexpr float kFarFace = 1.0f;
+    static constexpr int kFarShade = 10;
+    // ...and, in full, every closed shape of this many triangles or fewer (a
+    // post, a rail, a ring: farForm).
+    static constexpr uint32_t kFarWhole = 64;
     // Picks every listed renderable's range for a camera at `cam` in a cell
     // with `pxPerRad` pixels per radian; 0 puts them all on their near range.
-    void chooseLods(const filament::math::float3& cam, float pxPerRad);
+    // `fogStart` and `fogDensity` are that cell's haze (density 0: none).
+    void chooseLods(const filament::math::float3& cam, float pxPerRad, float fogStart,
+            float fogDensity);
     // TTP_DEBUG_NO_LOD keeps every near range, so a sweep prices the far
     // forms as interleaved arms; TTP_DEBUG_LOD_ALL draws every far range,
     // gate or no gate, own car included: what the trade looks like where the
@@ -779,11 +865,31 @@ private:
     static constexpr uint32_t kDebugNoLod = 0x1000000;
     static constexpr uint32_t kDebugLodAll = 0x8000000;
     bool mLodOff = false, mLodAll = false;
+    // The pop probe's (ttp_display.h): LOD_HOLD leaves chooseLods' and
+    // chooseCuts' last answers standing, NO_CULL draws the cells unculled
+    // (the ambient cloud's frustum test too), FOG_WHOLE fogs past the cutoff too.
+    static constexpr uint32_t kDebugLodHold = 0x2000000;
+    static constexpr uint32_t kDebugNoCull = 0x20000000;
+    static constexpr uint32_t kDebugFogWhole = 0x40000000;
+    bool mLodHold = false, mNoCull = false, mFogWhole = false;
     // TTP_DEBUG_SHADOW_SOLID: every car shadow drawn as an opaque black
     // die-cut of its fitted rect (placeCarShadow), the probe for judging the
     // pass's placement and depth on a TV.
     static constexpr uint32_t kDebugShadowSolid = 0x4000000;
     bool mShadowSolid = false;
+    // TTP_DEBUG_SET_ID: each set-piece placement in its layout row's flat
+    // colour (setIdColor), written into the CPU copies of its meshes and
+    // uploaded when the bit flips or the dressing is rebuilt (paintSetIds),
+    // the shipped colours kept beside them to put back.
+    static constexpr uint32_t kDebugSetId = 0x10000000;
+    bool mSetIdOn = false;
+    static uint32_t setIdColor(int row);   // 0xRRGGBB
+    void paintSetIds();
+    // Which layout row each placement's instance draws (buildSetPieces), and
+    // the row the one smoke column belongs to.
+    std::unordered_map<const filament::gltfio::FilamentInstance*, int> mSetRowOf;
+    int mSmokeRow = -1;
+    std::vector<std::vector<uint32_t>> mSmokeIdSaved;
     // Ditto for the whole-lap fallback chunk.
     std::vector<DeckDecal> mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
@@ -910,24 +1016,253 @@ private:
     std::vector<GroundBand> mGroundBands;
     static constexpr float kGroundTile = 600.0f / 18.0f;
     filament::math::float3 groundColorAt(float x) const;
-    // Terrain relief: rolling hills on the ground sheet, flat under and beside
-    // the road (see setupTerrain). Amp 0 = the flat-quad biomes (sand, wood).
+    // Terrain relief: the ground rises under raised road, and rolls into
+    // hills away from it (see setupTerrain). Amp 0 = the flat-quad biomes
+    // (sand, wood), which keep the plain.
     float mTerrainAmp = 0;
     uint32_t mTerrainSeed = 0;
     float mTerrainX0 = 0, mTerrainZ0 = 0, mTerrainX1 = 0, mTerrainZ1 = 0;
-    // Flat clearings the landmark spots carve into the relief (so a windmill
-    // never stands on a slope). Registered by buildLandmarks BEFORE the ground
-    // mesh and the scatter sample the field — see the builder order.
-    struct TerrainFlat { float x, z, r; };
+    // Clearings the set pieces and landmark spots level into the relief (so a
+    // cabin never stands on a slope), each at its own height `y`: the
+    // ground already there, never a plinth raised for it. Registered BEFORE
+    // the ground mesh and the scatter sample the field — see the builder order.
+    // A rounded rectangle: half extents hx, hz along the axes (ax, az) and
+    // (-az, ax), grown by r; a landmark's round spot has zero extents. Level
+    // inside, back to the land over 8 u.
+    struct TerrainFlat { float x, z, ax, az, hx, hz, r, y; };
     std::vector<TerrainFlat> mTerrainFlats;
+    // THE VERGE HOLDS. A set piece whose footprint reaches into the raised
+    // ground's level band (within kRaiseFlatR of the road) keeps that band's
+    // height across it: the raised ground fades from the footprint's edge as
+    // it does from the road's, its nearest road edge `e0` out (roadLift). So a
+    // pitch or a street beside low road stands on the verge it meets, never
+    // cut down to a step under the deck (the ground under the piece is the
+    // verge's, not raised for the piece: no plinth). Registered before any
+    // piece is levelled (buildSetPieces).
+    struct VergeHold { float x, z, ax, az, hx, hz, e0; };
+    std::vector<VergeHold> mVergeHolds;
+    // Every grid triangle a clearing's footprint (grown by `grow`) touches
+    // keeps its corners at the clearing's level or under, through the cap
+    // (mTerrainCap): the 9 u grid's chords from a corner outside, up a bank,
+    // would otherwise climb over the footprint's edge and bury what lies flat
+    // there (a pitch's lines, a garden path). Cut only, like the clearing.
+    void capFootprint(const TrackBin& tb, const TerrainFlat& f, float grow);
+    // Both of the above take a set piece whose footprint is a FLOOR: no side
+    // longer than twice this. A longer box is a row strung along the road (a
+    // telegraph line), mostly bare land, and holding or capping its every
+    // cell would lay a strip of the plain down the verge on both sides.
+    static constexpr float kFloorHalf = 30.0f;
     void setupTerrain(const TrackBin& tb);
-    float terrainY(const TrackBin& tb, float x, float z) const;
+    // The ground's height at (x, z): with the clearings levelled in, or as the
+    // land lies before any of them (`withFlats` false) — the height a clearing
+    // is levelled TO, so a piece stands where the ground already was.
+    float terrainY(const TrackBin& tb, float x, float z, bool withFlats = true) const;
+    // `dell`, if asked: how far down a swell the point lies, 0 near the road;
+    // `bed`: how far inside a `plain` landform's floor (1 on it, 0 clear of it).
+    // `liftCap` holds the road's raised ground under it (the verge band's own road).
+    // `fine`: as the verge band lays it, down to the shelf's very edge and
+    // with the beach rises (the grid's is the default, and every lookup's).
+    float terrainField(const TrackBin& tb, float x, float z, bool withFlats,
+            float* dell = nullptr, float* bed = nullptr, float liftCap = 1e30f, bool fine = false) const;
+    // The track's landforms (TrackBin::land), resolved by setupTerrain into the
+    // world: an anchor, its local +X axis (ax, az; +Z is (-az, ax)), the form's
+    // own lengths and heights already scaled, and the box it can reach.
+    // `piece` the set piece it came with (-1: the track's own), `base` what
+    // that piece's mound or fan rises from (setupTerrain), `tint` the
+    // multiplier it lays over the ground's colour (1: none).
+    struct LandShape {
+        uint32_t kind;
+        int piece;
+        float x, z, ax, az, len, r, r1, w, rz, h, h1, top, shape;
+        float x0, z0, x1, z1;
+        float base;
+        filament::math::float3 tint;
+        float near;   // a ridge's or ring's clearance past the road's edge; 0: the default (landforms)
+    };
+    std::vector<LandShape> mLand;
+    static constexpr float kPondFloor = 3.0f;   // a pond's flat floor past its water
+    // A form with a `near` reaches full height kNearRamp past it.
+    static constexpr float kNearRamp = 3.0f;
+    float landforms(float x, float z, float edge, float lift, float hill, float* dell,
+            float* bed) const;
+    // The landforms' tints at (x, z), multiplied: what the ground's colour
+    // wears there over groundTint (a glacier's ice, a piste).
+    filament::math::float3 landTint(float x, float z) const;
+    float roadLift(const TrackBin& tb, float x, float z, float& edge) const;
+    // Per set piece that brings its own ground (SET_GROUND), how far over the
+    // plain it stands, as it was modelled on it, levelling no clearing: 0, or
+    // for a mound the land's lift at its anchor. -1 for every other piece.
+    std::vector<float> mSetOwnGround;
+    // THE BEACH'S DUNES. Sand rolls like the other biomes, but only on the
+    // LAND side of the road: inside the lap's loop (mInland, a raster of the
+    // centreline polygon), never on the beach between the road and the sea, so
+    // the sea shows from every stretch of road (a ring of dunes round the
+    // island read as a wall and hid it).
+    std::vector<uint8_t> mInland;
+    int mInlandCols = 0, mInlandRows = 0;
+    static constexpr float kInlandCell = 2.0f;
+    static constexpr int kShoreSpokes = 360;
+    // THE SHELF. The sea and the damp sand are FLAT sheets, so the ground
+    // under them is flat too, or it cuts them along its own facets (sand
+    // wedges standing out of the water, the damp band ending on a grid
+    // triangle's edge). The shelf is the ground from the damp sand's visible
+    // inner edge (mWetLine) out under the sea, at the sheet's level less
+    // kWaterLift, and it is measured as DRAWN: the true distance to the very
+    // polylines buildWater lays (shoreDist), never the polar radius, which
+    // along the side of a bay is many times the distance to the water. Every
+    // grid triangle that touches the shelf lies in it: the grid's land stays
+    // down to a cell's diagonal past it (mShelfReach) and is back to full
+    // kShoreRamp further in. The verge band's rows are fine enough to come
+    // down at the shelf's edge itself (kShelfFine), so by the road the land
+    // is drawn that much closer to the water than the grid can lay it.
+    static constexpr int kShoreSeg = 144;   // 2.5 degree spokes: buildWater's own
+    struct ShoreSpokes {
+        std::vector<float> cosA, sinA, r, swash, landK, sup, calm;
+        float outer = 0;
+        // The radius of the ring `off` past the waterline on spoke si (inside
+        // it the damp sand narrows with the beach, and both breathe with the
+        // swash).
+        float at(int si, float off) const;
+    };
+    ShoreSpokes mSpokes;
+    void buildShoreSpokes(const TrackBin& tb);
+    static constexpr float kWetEdge = -9.5f;   // the damp sand's visible inner edge (buildWater's WET)
+    std::vector<filament::math::float2> mShoreLine, mWetLine;   // one point per spoke
+    // How far inland of `line` (x, z) lies (negative: seaward), the true
+    // distance to it as drawn, no further than `reach` either way.
+    float shoreDist(const std::vector<filament::math::float2>& line, float x, float z, float reach) const;
+    float mShelfReach = 0;
+    static constexpr float kShelfFine = 0.5f, kShoreRamp = 18.0f;
+    // A beach rise (a ridge with `near` and `w`) is the sand's own swell under
+    // a piece by the road: it stands from the shelf's edge, or its `w` inside
+    // the waterline where that is further in, reaching its height kBeachRamp
+    // past that. Without it the beach by a `shore` is the plain, the road
+    // stands most of a unit over it, and what stands there is under the kerb.
+    // ONLY THE VERGE BAND DRAWS IT: its ramps are shorter than a grid cell, so
+    // the grid laid it as blocks on its own axes.
+    static constexpr float kBeachRamp = 6.0f;
+    // THE SUNK SEA. Where a `shore` lets the water in under the road (its
+    // `w`), the sea there lies kSeaSink under the plain, so the deck, whose
+    // slab bottoms out a few cm over the plain, stands clear of it on legs
+    // (buildStructures) instead of lying on it. Out to kSinkHold past the
+    // road's support the sea holds that level and it is back at the plain's
+    // by kSinkOpen, inside the beach region's border, so the flat sheet
+    // beyond the grid never shows through. The SHELF goes down with the sea
+    // (bedSink), so the sunk shore is the open shore's recipe a step lower:
+    // flat sand kWaterLift under the sheet, whose own feathered edge is the
+    // waterline, and the beach comes down to the shelf over kSinkBeach
+    // inland of it; the bed lies kSinkBed lower out under the water. The sea
+    // goes down along the shore no faster than over kSinkFade, whatever the
+    // bay's own fade, so the grid's chords and the sheet's agree on its level.
+    // It is the one place the ground goes under groundY, so the bake's floor
+    // proxy goes down with it.
+    static constexpr float kSeaSink = 0.8f, kSinkHold = 6.0f, kSinkOpen = 24.0f;
+    static constexpr float kSinkBeach = 10.0f, kSinkBed = 0.3f, kSinkFade = 18.0f;
+    // The sea sheet's height over the plain (buildWater), where nothing sinks it.
+    static constexpr float kWaterLift = 0.12f;
+    // Per spoke: the track's support and the sunk bays' weight. Empty when no
+    // shore sinks the sea.
+    std::vector<float> mShoreSup, mShoreSink;
+    // How far the sea stands under its usual level at (x, z), and how far the
+    // ground lies under the plain there. 0 off a sunk bay.
+    float seaSink(float x, float z) const;
+    float bedSink(float x, float z) const;
+    void setupBeachMask(const TrackBin& tb);
+    // The share of the land that stands at (x, z), `shelf` past the shelf's
+    // edge, and through `inland` whether that is inside the loop. 1 and 1
+    // off the beach.
+    float beachMask(float x, float z, float shelf, float& inland) const;
+    // The lowest the land lies under a clearing's footprint (sampled at most
+    // the grid's step apart), before any clearing: what it is levelled to.
+    float naturalFootY(const TrackBin& tb, const TerrainFlat& f) const;
 
-    // The corridor the terrain keeps flat around the road, and the ramp back up
-    // to full height past it. Named because the SAMPLE INDEX's search radius is
+    // The corridor the hills keep clear of the road, and the ramp back up to
+    // full height past it. Named because the SAMPLE INDEX's search radius is
     // derived from them: they used to be two literals inside terrainY.
     static constexpr float kFlatR = 4.0f;
     static constexpr float kRampR = 24.0f;
+    // THE RAISED GROUND. Under and beside the road the land comes up toward
+    // the deck. LOW road (its top up to kVergeLow over the plain) sits IN the
+    // land: the ground stands kVergeDrop under the deck's top and meets the
+    // slab inside its skirt, so nothing flat beside the road (a pitch, a bed,
+    // a stream) hides behind a step. RAISED road stands on stilts: the ground
+    // stays kRaiseDrop under its top, and the 1.3 u of pillar that leaves
+    // under the slab keeps the elevated toy-track read. Between the two the
+    // ground holds level, kVergeLow - kVergeDrop over the plain, so it never
+    // dips along a ramp. kVergeDrop stays clear of kDeckClear (the cap would
+    // bind and rag the apron) and of the berms' 0.15 u tuck under the deck
+    // (trackbuilder.cc: the ground would lie on a berm's shoulder and
+    // shimmer). Within kRaiseFlatR of the road the deck that counts is the
+    // NEAREST one (so a crest hump gets its full lift); past that, a blend of
+    // the decks nearby weighted by nearness, relaxing to the plain over
+    // kRaiseRampR. Either way held under every OTHER strand of road nearby
+    // (so no bank rises beside the lower road at a crossing or across a
+    // hairpin): see roadLift.
+    static constexpr float kVergeDrop = 0.2f;
+    static constexpr float kVergeLow = 1.2f;
+    static constexpr float kRaiseDrop = 1.64f;
+    static constexpr float kRaiseFlatR = 6.0f;
+    static constexpr float kRaiseRampR = 30.0f;
+    // How far along the lap a section must be from the nearest one to count
+    // as ANOTHER strand of road: further than any section of the same strand
+    // can be while still within kRaiseFlatR of the point.
+    static constexpr float kOtherStrandS = 24.0f;
+    // How steeply the ground may climb away from another strand of road past
+    // kRaiseFlatR (rise per unit out).
+    static constexpr float kStrandSlope = 0.5f;
+    // THE CAP, per grid vertex (buildTerrainCap): every triangle a deck
+    // crosses stays kDeckClear under that deck's top at its lower kerb edge.
+    // terrainCapAt reads it anywhere, as the lowest corner of the triangle
+    // the point lies in.
+    static constexpr float kDeckClear = 0.12f;
+    // The deck slab's depth under its top (buildRoadMesh sweeps it): what the
+    // supports stop under.
+    static constexpr float kDeckDepth = 0.34f;
+    // A street's pavement kerb (buildRoadMesh): the kerbstone's step, how wide
+    // its paving runs (to spotIssue's MARGIN past the edge and a little over:
+    // the road's own curve brings it nearer at a piece's ends), its
+    // colour (sRGB, the street pieces' cream as it lights) and how far along
+    // the road it eases in from the racing kerb.
+    static constexpr float kStreetKerbH = 0.06f;
+    static constexpr float kStreetKerbW = 1.5f;
+    static constexpr uint32_t kStreetKerb = 0xeedcc0u;
+    static constexpr float kStreetEase = 1.5f;
+    // A shed's kerb (buildRoadMesh): road under a gallery's roof, its
+    // kerbstone and concrete paving where the plough bank and the snow would
+    // lie, wide enough to carry the gallery's columns and reach the foot of
+    // its back wall (set_prototypes.py gallery_shed, cut_face).
+    static constexpr float kShedKerbH = 0.12f;
+    static constexpr float kShedKerbW = 3.0f;
+    static constexpr uint32_t kShedKerb = 0x868ba1u;
+    // The board's pieces made road (buildRoadMesh). A snake's back: the
+    // jointed toy snake's green and yellow (set_prototypes.py SNAKE), its
+    // slab side a shade under the green, and how long a green block and a
+    // yellow band run along the road. A ladder: its cream rungs, its brown
+    // rails (the board's printed ladders') and their underside, and how long
+    // a rung and the gap to the next run.
+    static constexpr uint32_t kSnakeColors[3] = { 0x6cbf6cu, 0xf2c14eu, 0x4e9a55u };
+    static constexpr float kSnakeBody = 1.9f, kSnakeBand = 0.95f;
+    static constexpr uint32_t kLadderColors[3] = { 0xfde4c7u, 0xb06041u, 0x8a4a33u };
+    static constexpr float kLadderRung = 0.5f, kLadderGap = 1.45f;
+    std::vector<float> mTerrainCap;
+    void buildTerrainCap(const TrackBin& tb);
+    float terrainCapAt(float x, float z) const;
+    // Per sample, for the raised ground: the deck's top at its low edge and
+    // its arclength weight (samples are unevenly spaced, so each speaks for
+    // its own span).
+    std::vector<float> mTsiTopY, mTsiSpan;
+    // terrainField's scratch: the samples in reach of the point it is on, with
+    // their distance past the edge (kept to save an allocation per call).
+    mutable std::vector<std::pair<uint32_t, float>> mTsiNear;
+    // terrainField's scratch too: what the forms authored `near` raised at
+    // the point it last sampled (the verge band lets the land stand that
+    // much over the grid).
+    mutable float mNearRise = 0;
+    // What the last landforms() call found of beach rises (a `near` ridge
+    // carrying a `w`): terrainField lays it under its own, tighter shore
+    // mask: mBeachTop is how high it stands over the plain there, and
+    // mBeachDrawn what that added to the land.
+    mutable float mBeachRise = 0, mBeachKeep = 0, mBeachDrawn = 0, mBeachTop = 0;
     // Bucket size for that index. Anything from "a few samples per cell" up
     // works; this keeps the neighbourhood search at 3x3 for a typical track.
     static constexpr float kIndexCell = 32.0f;
@@ -944,13 +1279,107 @@ private:
     // handed out by groundGrid() so the follow camera keeps clear of it.
     ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
+    // THE VERGE BAND (buildVergeBand): the ground beside the road, as a strip
+    // that follows it, rows kBandRow out from the kerb's outer foot on rings
+    // at most kBandStep apart (closer through a turn or over a crest). It
+    // lies over the grid, which cannot meet a road at the road's own height:
+    // the deck cap holds every 9 u triangle a deck touches under the deck's
+    // LOWEST section across it, and its chords cannot rise within a cell of
+    // the kerb. The band is fine enough to do both:
+    //  - LOW ROAD SITS IN THE LAND. Within kApronLevel of the kerb the band
+    //    stands kApronGap under the deck's top (its first row, inside the
+    //    kerb, kApronKerb over it), so only the kerb stands over the ground
+    //    and no slab side shows, then eases down to the land over kApronRun.
+    //    Its height over the plain fades that apron out from kApronFull to
+    //    kApronNone (the field's own low/raised line), so road climbing onto
+    //    its stilts rises out of the land; a cut keeps it. Wherever the deck
+    //    stands on its own pillars (within kStiltNear, fading over
+    //    kStiltFade) the band yields to the grid, so every pier shows.
+    //  - THE LAND AT THE KERB: past the apron the band is the field as its own
+    //    road raises it, within kBandOver of the grid but for a form authored
+    //    `near` (a mountain's foot), handing over to the grid from kBandBlend
+    //    and going under it (kBandTuck) where it would only copy it.
+    // Elsewhere it lies kBandLift over the grid, so the two never share a
+    // depth. It yields (sinks under the grid) by a piece's footprint, at the
+    // sea and a pond, along a street, and where another road at its height
+    // is nearer; no deck of another strand comes through it. The lookups
+    // (groundSurfaceY, the camera's GroundGrid::at) read the higher.
+    void buildVergeBand(const TrackBin& tb);
+    static constexpr int kBandRows = 10, kBandNarrow = 7;
+    static constexpr float kBandRow[kBandRows] = { -0.05f, 0.7f, 2.0f, 3.5f, 5.5f, 8.0f, 11.0f, 14.0f, 19.0f, 25.0f };
+    // Where the field stands kBandWide over the grid at row kBandNarrow, the
+    // band runs on to its last row (buildVergeBand).
+    static constexpr float kBandWide = 0.8f;
+    // How far past the apron the band may stand over the grid, but for a
+    // form authored `near` (its rise rides on top).
+    static constexpr float kBandOver = 0.4f;
+    // A row standing within kBandFlat of kBandLift over the grid shows
+    // nothing the grid does not; the band goes under at the first row from
+    // which on all do, but never before row kBandMinEnd (the apron's level).
+    static constexpr float kBandFlat = 0.2f;
+    // How far short of the kerb's inner face the band's first row stops: the
+    // chords between rings round a bend may not carry it under the deck.
+    static constexpr float kBandKerbIn = 0.17f;
+    static constexpr int kBandMinEnd = 2;
+    static constexpr float kBandStep = 4.0f, kBandTurnCos = 0.9848f;   // 10 degrees
+    static constexpr float kApronLevel = 0.7f, kApronRun = 2.5f, kApronRef = 2.0f;
+    static constexpr float kApronGap = 0.02f, kApronTuck = 0.05f, kApronKerb = 0.02f;
+    // A pillar is this ring's own when its top sits within kStiltMatch of
+    // kDeckDepth under the ring's deck, a ramp's climb to it included (the
+    // other strand of a crossing is a bridge's clearance off).
+    static constexpr float kStiltMatch = 0.6f, kStiltNear = 2.0f, kStiltFade = 2.5f;
+    static constexpr float kApronFull = kVergeLow - 0.1f, kApronNone = kVergeLow + 0.4f, kApronCut = 0.3f;
+    static constexpr float kBandBlend = 8.0f, kBandLift = 0.05f, kBandTuck = 0.12f;
+    // Another road's band takes the ground nearer it when its deck stands
+    // within kBandRival of this one's; a deck further above or below is a
+    // bridge or the road under one, and only holds the band under it.
+    static constexpr float kBandRival = 2.0f;
+    // How far the band's own ring counts as its road, along the lap.
+    static constexpr float kBandOwnS = 3.0f;
+    // 0 where the band yields to the water at (x, z), easing to 1 clear of
+    // it; `rise`, how far over the grid it may stand there by a footprint
+    // (`nearRise` more by a piece that levels nothing).
+    float bandHold(float x, float z, float nearRise, float& rise) const;
+    static constexpr float kHoldSlope = 0.25f, kHumpRun = 4.0f;
+    // The band's mesh, appended to the ground's (normals for its light).
+    std::vector<Vertex> mBandVerts;
+    std::vector<filament::math::float3> mBandNormals;
+    std::vector<uint32_t> mBandIdx;
+    // Per grid vertex, terrainField's dell and bed terms, for the ground's colour,
+    // and the landforms' tint (landTint). The band reads its tint off these
+    // too, so its colour is the grid's wherever it ends.
+    std::vector<float> mGroundDell, mGroundBed;
+    std::vector<filament::math::float3> mGroundTint;
+    // The ground colour at a grid vertex: a low-contrast tint off the shape of
+    // the land (its dells, its steep faces, a creek's floor), multiplied over
+    // the biome's texture. Never per-vertex noise: a speckle reads as a texture
+    // pattern.
+    filament::math::float3 groundTint(uint32_t groundKind, float dell, float bed, float upY) const;
+    // The rock (vground.mat): the decision in the ground's vertex alpha, and
+    // the biome's colours and banding.
+    static void gateRock(Mesh& m, uint32_t groundKind);
+    void setRockParams(filament::MaterialInstance* mi, uint32_t groundKind, float groundY) const;
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
+    // THE GRADED LAND at (x, z), what a `drape_grade` part and a `drapegrade`
+    // path lie on (a railway's bed, its train): the drawn ground's highest
+    // within kGradeOver (a bed's half width, so the bed clears the land
+    // across itself on a side slope), averaged over kGradeRun round the
+    // point: a train's length and more, so a train sees only long gradients
+    // (over 2.5 u the bed still rolled in waves a few units long, each swell
+    // of the lawn and each row of the verge band, and the train pitched over
+    // them like a rollercoaster). One smooth surface in world XZ: a line laid on it rides a crease
+    // of the 9 u grid in a vertical curve instead of kinking on it, lengths
+    // cut from one line meet at one height, and it stands under the drawn
+    // ground only by what a sharp crest loses to the average, which the
+    // bed's own bank (set_prototypes.py PARK_BANK) covers.
+    float gradeSurfaceY(const TrackBin& tb, float x, float z) const;
+    static constexpr float kGradeOver = 1.0f, kGradeRun = 6.0f;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // The lowest and highest surface points under the same probes.
     filament::math::float2 footprintSpan(const TrackBin& tb, float x, float z, float r) const;
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
-    filament::Texture* buildGroundTexture(uint32_t kind);
+    filament::Texture* buildGroundTexture(uint32_t kind, uint32_t baseColor);
     // The split-screen grid for n cells — SceneRenderer's bestGrid, so the 3D
     // cells land where the DOM HUD puts its labels. cellRect tiles with it.
     struct GridDims { uint32_t cols, rows; };
@@ -970,6 +1399,25 @@ private:
     // The fitted shoreline radius at a bearing (buildWater); the sailboat
     // anchors off the same curve. Null when the theme carries no water.
     std::function<float(float)> mShoreFn;
+    // What the shoreline is drawn from: the track's samples and the phases its
+    // shore seed gives (shoreline()), so the sea and the dunes read one curve.
+    struct Shoreline {
+        std::vector<filament::math::float2> pts;
+        float shorePh[4], crinklePh[3], swashPh[3];
+        // Where a track's `shore` landform brings the sea in to the road: at
+        // bearing `a` the waterline stands `gap` past the road's support,
+        // held for `half` of shore either side (arc length at radius `r`) and
+        // back out to the open shore over `fade`. A bay that lets the water
+        // in under the road (`sunk`) also lets the sea down (kSeaSink).
+        struct Bay { float a, r, gap, half, fade; bool sunk; };
+        std::vector<Bay> bays;
+        float support(float a) const;   // the track's reach at bearing a
+        float at(float a) const;   // the radius at bearing a
+        float sunk(float a) const;   // the sunk bays' weight at bearing a, 0..1
+        float bayWeight(const Bay& b, float a, float fade) const;
+        static float harm(const float (*h)[2], int n, const float* ph, float a);
+    };
+    static Shoreline shoreline(const TrackBin& tb);
     std::vector<Mesh> mCars; // box markers — fallback when a car has no GLB
 
     // Real car models (gltfio). mCarAssets[i] is null when car i fell back to
@@ -1213,6 +1661,7 @@ private:
         std::vector<filament::math::quatf> quats;
         std::vector<filament::math::float2> uvs;
         std::vector<filament::math::half4> custom0;
+        std::vector<Mesh::Bone> bones;
         // Frames still to survive. Counted DOWN on presented frames only: a
         // scene released while nothing is drawing (the lobby's fade, a
         // surface gone) must not have its buffers freed by a clock that keeps
@@ -1554,6 +2003,9 @@ private:
     // The sea ring + its wet-sand glaze (theme.water), fitted to the track's
     // own shoreline.
     Mesh mWater, mWet;
+    // Inland water (a `pond` landform, kind 7): a sheet with its own outline
+    // over the plain floor the landform keeps (its coping joins mStructures).
+    Mesh mPond;
     // Fliers (theme.birds / kites / paperPlane): billboard glyphs built as real
     // stroked geometry (the JS canvas sprites), plus the playroom's 3D dart.
     std::vector<Mesh> mBirds;
@@ -1579,24 +2031,166 @@ private:
     // whole verge — which every later placement pass keeps out of.
     std::vector<filament::gltfio::FilamentAsset*> mSetAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSetInstances;
-    struct SetFoot { float x, z, ax, az, hx, hz; };  // centre, +X axis, half extents
+    // Per set model: whether it has a `drape` part (isDrapeName). A part that
+    // DRAPES lies on the land as the renderer draws it -- a hose across a
+    // lawn, the foot of a post -- its baked vertices lifted by the ground
+    // under each (bakePlacements), so it needs no ground of its own. A model
+    // with one stands on the plain and levels nothing: what it brings to the
+    // land follows it instead of flattening it.
+    std::vector<bool> mSetDrapes;
+    // Per set model, the box its footprint is taken from: the asset's own,
+    // less its `drape_floor` parts. Such a part is a print draped on the land
+    // (a gravel lane, the stones along it): it claims no ground, so the verge
+    // band does not come down at it and it may run on to the kerb's foot.
+    struct SetBox { filament::math::float3 min, max; };
+    std::vector<SetBox> mSetBox;
+    static bool isPrintName(const char* name) {
+        return name && std::strncmp(name, "drape_floor", 11) == 0;
+    }
+    static bool isGradeName(const char* name) {
+        return name && std::strncmp(name, "drape_grade", 11) == 0;
+    }
+    static bool isPlaneName(const char* name) {
+        return name && std::strncmp(name, "drape_plane", 11) == 0;
+    }
+    static bool isDrapeName(const char* name) {
+        return name && std::strncmp(name, "drape", 5) == 0;
+    }
+    // A set piece's `floor` part (a play mat) is a print lying on the floor.
+    // It joins mStructures, the static receiver, so the deck's baked shadow
+    // lands on it (buildSetPieces); the merge skips it.
+    static bool isFloorName(const char* name) {
+        return name && std::strncmp(name, "floor", 5) == 0;
+    }
+    // A set piece of the playroom's ROOM (set-room-...: the train round the
+    // walls), not of the lap: it casts no shadow and claims no floor, so
+    // neither the scatter nor the sun bake's box grows to the room's size.
+    static bool isRoomPiece(const std::string& model) {
+        return model.compare(0, 9, "set-room-") == 0;
+    }
+    bool appendFloorPart(const filament::gltfio::FilamentAsset* asset, utils::Entity e);
+    void buildStructuresReceiver();
+    struct SetFoot { float x, z, ax, az, hx, hz, top; };  // centre, +X axis, half extents, world top
     std::vector<SetFoot> mSetFeet;
     bool inSetFoot(float x, float z, float margin) const;
+    // Within `margin` of the sea, or in it (false where there is none).
+    bool inSea(float x, float z, float margin) const;
+    // Within `margin` of a pond's water, or in it.
+    bool inPond(float x, float z, float margin) const;
+    // The chase camera's view up the road, one segment every 2 u of the lap
+    // (buildSightLines), and whether something standing at (x, z), plan
+    // radius r, rising to `top`, would cut one — the scatter's keep-out on
+    // the inside of bends.
+    struct SightLine { filament::math::float3 a, b; };
+    std::vector<SightLine> mSightLines;
+    static constexpr float kSightAhead = 18.0f;
+    void buildSightLines(const TrackBin& tb);
+    bool blocksRoadAhead(float x, float z, float r, float top) const;
+    std::string mSetLayout = kNoSetLayout;
+    std::string mScatterLayout = "[]";
     // The grass BERMS under raised deck reach a few units past the kerb, and
     // the scatters ground a piece on the terrain beneath them, so one standing
     // on a berm's flank is half inside it. inBerm is that keep-out; bermEdge
     // is how far out the berm beside a centreline point reaches (0 = none).
     bool inBerm(const TrackBin& tb, float x, float z, float margin) const;
     float bermEdge(const TrackBin& tb, float x, float z) const;
+    // The berms' own surface height at (x, z), read off the strips
+    // buildStructures stitches between consecutive rings; -1e30 off every berm.
+    float bermY(const TrackBin& tb, float x, float z) const;
     // The "spin" node of every placed prop that has one — turned about its own
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;
+    // THE SET PIECES' MOVING PARTS (TtpRendererMotion.cpp; the `anim_` grammar
+    // is ttp/set_motion.h's). Each part is baked unlit, its light frozen at the
+    // rest pose, drawn through a MergedGroup in mMergedDress (so teardown, the
+    // feature tags and the GL priorities are the baked runs'), and posed each
+    // frame by one transform: rest * the verbs' closed form of the scene clock
+    // and the cars. In FULL that transform is the part's BONE of its
+    // placement's one skinned draw (SetSkin); in lite each part is a mesh of
+    // its own and the transform its renderable's.
+    struct SetMover {
+        utils::Entity ent;                  // lite: the part's own renderable
+        int skin = -1;                      // full: into mSetSkins...
+        uint32_t bone = 0;                  // ...and its bone there
+        // The frame its vertices were baked in, from world: the identity in
+        // lite (the node's own), the inverse of `rest` in full (world).
+        filament::math::mat4f toBake;
+        filament::math::mat4f rest;         // the node's world transform at rest
+        float drape = 0;                    // how far the `drape` verb lifted `rest` (its riders' too)
+        filament::math::mat3f restInv;      // its rotation's inverse, scale removed
+        float scale = 1;                    // its uniform world scale
+        float phase = 0;
+        int path = -1;                      // into mSetPaths
+        int parent = -1;                    // the mover it rides, built before it
+        filament::math::mat4f onParent;     // its rest in the parent's rest frame
+        // The path its far-form box sweeps (its own, or the traveller it
+        // rides; -1 in place), and the point its poses turn about: that
+        // traveller's pivot at rest, or the outermost part's it rides.
+        int lodPath = -1;
+        filament::math::float3 lodOrigin{ 0 };
+        float lift = 0;                     // how high its verbs (and its ride's) raise it
+        // A traveller's (or its rider's) box is where it IS, not its loop's
+        // sweep (stepSetMovers): `reach` round the current pivot of the
+        // traveller it rides (`lodRoot`, itself for a traveller), and in lite
+        // its own far-form box in mLods (`lod`). A loop as wide as the map
+        // would otherwise never cull nor take its far form.
+        float reach = 0;
+        int lodRoot = -1;
+        int lod = -1;
+        ttp::rt::SetMotion motion;
+        // A `flutter` part's cloth frame; in full its cuts are the skin's
+        // bones `bone` .. `bone + motion.flutterJoints`.
+        ttp::rt::SetFlutterFrame cloth;
+    };
+    // THE SKIN: a placement's moving parts as ONE draw in full, a bone a part,
+    // so a knot of penguins is one draw and each still waddles on its own.
+    // `bones` is each part's pose this frame (stepSetMovers), handed over with
+    // setBones. Filament culls a skinned draw on the box it is given, so the
+    // box holds every pose of the parts that move in place (`still`, set at
+    // build) and, frame by frame, where each traveller is now (`lod` is the
+    // skin's far form, measured to the same box).
+    struct SetSkin {
+        utils::Entity ent;                  // the draw; null if its build failed
+        std::vector<filament::math::mat4f> bones;
+        filament::math::float3 stillLo{ 1e30f }, stillHi{ -1e30f };
+        filament::math::float3 nowLo, nowHi;   // this frame's box (stepSetMovers' scratch)
+        bool travels = false;
+        int lod = -1;
+    };
+    std::vector<SetSkin> mSetSkins;
+    // Filament's bones per renderable; a placement with more opens another.
+    static constexpr size_t kSkinBones = 255;
+    struct SetPath {                        // a closed polyline in world space
+        std::vector<filament::math::float3> pts;
+        std::vector<float> at;              // arclength at each point; at.back() = the loop
+    };
+    std::vector<SetMover> mSetMovers;
+    std::vector<SetPath> mSetPaths;
+    std::vector<ttp::rt::SetMotionCar> mSetMotionCars;   // per-frame scratch
+    std::vector<filament::math::mat4f> mSetMoverNow;      // per-frame: each mover's world
+    // The outermost `anim_` node over `ent` in a set piece (the nearest with
+    // `outermost` false), or null.
+    utils::Entity setAnimRoot(const filament::gltfio::FilamentAsset* asset,
+            utils::Entity ent, bool outermost = true) const;
+    void keepTravellersOutOfBake(const filament::gltfio::FilamentAsset* asset,
+            filament::gltfio::FilamentInstance* inst);
+    void buildSetMovers();
+    void stepSetMovers(const std::vector<filament::math::float3>& carPosW);
+    // The smoke puffs over a chimney at `origin` (a set piece's `anim_smoke`,
+    // or the procedural cabin's), `scale` times a chimney's (a stack's `s=`).
+    // With a `period` it is a gun's: one burst every so many seconds, out along `dir`.
+    void buildSmokePuffs(const filament::math::float3& origin, float scale = 1.0f, float period = 0.0f,
+            const filament::math::float3& dir = { 1, 0, 0 });
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
-    Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
-    // Chimney smoke (cabin): three soft puffs rising on a staggered loop.
+    // Chimney or camp-fire smoke: a column of soft puffs rising on a staggered loop.
     std::vector<Mesh> mSmoke;
     filament::math::float3 mSmokeOrigin{};
+    float mSmokeScale = 1.0f;
+    float mSmokePeriod = 0.0f;   // > 0: a burst every so many seconds, out along mSmokeDir
+    filament::math::float3 mSmokeDir{ 1, 0, 0 };
+    bool mSmokeDrape = false;    // its piece lies on the land: buildSetMovers lifts the origin onto it
+    float mSmokeFootY = 0.0f;    // that placement's foot
     // Per-model variant picks and the bench, indexed by the .cpp's ModelId
     // (rocket, gnome, train, starfish). Sized by hand because that enum lives
     // beside the builders it names; a static_assert in the .cpp holds the two
@@ -1617,18 +2211,7 @@ private:
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
     int mModelVariant[4] = { 1, 1, 1, 4 };
     int mBenchModel = -1;
-    // The kit field: one asset per model (no instancing — every one of them is
-    // a different model, which is the point), and the layout the chrome reads
-    // back. Empty unless the gallery latched it on.
-    int mKitFieldCount = 0;
-    std::vector<filament::gltfio::FilamentAsset*> mKitAssets;
-    std::string mKitLayout = "[]";
-    // What ground the field ended up covering, so the horizon ring can leave it
-    // alone (see buildStatic). Inverted — max < min — when there is no
-    // field, which is every build but the gallery's.
-    float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
-    filament::math::mat4f mWindmillBase{};
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
     std::vector<filament::math::float4> mShadowSpots; // x, z, radius, height (0: no disc)
@@ -1638,6 +2221,9 @@ private:
     float mBalloonY = 44, mBalloonSize = 6; // theme.balloon orbit height + scale
     float mBalloonExt = 0; // the unit mesh's reach from its origin (read at build)
     float mHillSf = 1; // hill-ring push-out factor (balloon orbit radius scales with it)
+    // The playroom's walls, (x0, z0, x1, z1); empty (x1 <= x0) on every other
+    // biome. The paper dart circles inside it.
+    filament::math::float4 mRoom{ 0, 0, -1, -1 };
     filament::gltfio::FilamentAsset* mConeAsset = nullptr;
     std::vector<filament::gltfio::FilamentInstance*> mConeInstances;
     // Kickable-cone state — TrackProps._stepCones verbatim (cosmetic; the sim
@@ -1710,6 +2296,7 @@ private:
         filament::math::float3 ball{};  // the fireball, which TRAILS a hit car
         float t = -1;                   // <0 idle; else seconds since impact
         int32_t car = -1;               // >=0: rode this car in; the ball follows it
+        filament::math::float4 ground{};  // the ring's deck plane (vburst `ground`)
     };
     Burst mBursts[2];
     Mesh mBurstMeshes[2]; // shockwave rings
@@ -1743,6 +2330,18 @@ private:
     float mAmbTime = 0;
     float mAmbBandH = 0;        // the `bandH` uniform, set once at build
     float mAmbFall = 0, mAmbWind = 0;   // the `fall` and `wind` uniforms, set at build
+    // Rain's `streak` uniform: how many of its widths a sprite is drawn out
+    // along its fall (0: a round sprite). The per-cell cull bounds a sprite
+    // by its long half.
+    static constexpr float kRainStreak = 24.0f;
+    float mAmbStreak = 0;
+    // Rain's wind blows at each cell's camera (vpoint.mat): per cell, the x/z
+    // drift it has carried the cloud so far (.xy) and the wind it rides now
+    // (.zw), handed to that cell's view as material global 1. INTEGRATED,
+    // a frame's heading at a time from mAmbDriftAt, never heading * wind *
+    // t, which would throw the whole field across the box on every turn.
+    std::vector<filament::math::float4> mAmbDrift;
+    float mAmbDriftAt = 0;
     // Per-cell subset of the cloud: each cell draws only the sprites that can
     // reach ITS frustum, as indices into the same vertex buffer in ascending
     // order (cullAmbientCells). One index buffer per ring slot, written once a
@@ -1755,16 +2354,46 @@ private:
     uint32_t mAmbCullCap = 0;   // indices each slot buffer holds
     uint32_t mAmbCullFrames = 0;
     bool mAmbSubset = false;    // the renderable is on a subset range right now
-    // Flake floor (FLAKE kind only): a coarse max-height grid of terrain + road
-    // ribbon over the whole track, uploaded as an R16F texture the vertex
-    // shader taps so a falling flake fades out ONTO the surface instead of
-    // depth-slicing through an elevated deck. The other kinds bind a 1x1
-    // "-1000" texel — canyon sand BLOWS across the deck at ground height, and
-    // flooring it would dim the streaks over the road.
+    // The particles' floor: a coarse max-height grid over the whole track,
+    // uploaded as an R16F texture the vertex shader taps. For FLAKES it is
+    // the terrain and the road ribbon, so a falling flake fades out ONTO the
+    // surface instead of depth-slicing through an elevated deck; the other
+    // kinds have none (kAmbNoFloor: canyon sand BLOWS across the deck at
+    // ground height, and flooring it would dim the streaks over the road).
+    // For every kind it carries the roofs over the road (layAmbientRoofs).
     filament::Texture* mAmbFloorTex = nullptr;
+    // The same grid on the CPU, for a split's lite cells, whose particles
+    // skip the shader's tap: a cell whose camera is under the floor (in a
+    // gallery, a tunnel, under a bridge) thins its own by how far under
+    // (cullAmbientCells). mAmbFloorBase is the floor as buildStatic laid it;
+    // mAmbFloorY has the roofs over the road on it too (layAmbientRoofs,
+    // TtpRendererTrack.cpp), found off the baked set pieces: mAmbRoof, the
+    // highest sky-facing face of any in each unit of the floor's span.
+    std::vector<float> mAmbFloorBase, mAmbFloorY, mAmbRoof;
+    static constexpr int kAmbRoofN = 340;            // 2 kAmbR, a unit a cell
+    static constexpr float kAmbNoFloor = -3.0f;      // under every kind's band (it starts at y 0.5)
+    static constexpr float kAmbRoofClear = 2.0f;     // a roof stands this far over the deck at least
+    void uploadAmbientFloor();
+    void noteAmbientRoof(const Mesh& m);
+    void layAmbientRoofs();
     static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
     static constexpr int kAmbFloorN = 86;   // ~4u cells across it
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
+    // THE CUP'S AMBIENT LIFE (theme.life): a second cloud through the same
+    // material (vpoint.mat says what its uniforms add), with a texture of its
+    // own over the flake floor's grid: R the floor it lives on (the ground),
+    // G where it lives (round the set pieces its `near` names). It is SEEDED
+    // there, in kLifeTile tiles it never leaves. Never culled per cell: it is
+    // a few hundred sprites, not thousands.
+    void buildLife(const TrackBin& tb);
+    struct LifeAnchor { float x, z, ax, az, hx, hz; };   // a footprint (hx = hz = 0: a point)
+    std::vector<LifeAnchor> mLifeAnchors;
+    Mesh mLife;
+    filament::MaterialInstance* mLifeMat = nullptr;
+    filament::Texture* mLifeTex = nullptr;
+    float mLifeHalf = 0;    // the sprite's halfSize, world-sized (no rows fit)
+    uint32_t mLifeCells = 0;
+    static constexpr float kLifeTile = 4.0f;
     filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
     filament::math::float3 mLastCarN{}; // ...and last car — both must jump
     utils::Entity mSun;
@@ -1791,10 +2420,9 @@ private:
     //
     // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
     // a byte-at-a-time FNV over the whole buffer, so consulting the cache
-    // re-read every model it was there to avoid re-reading. That is ~1.2 MB
-    // a build in play and tens of megabytes in the gallery's kit field. The name
-    // is exact because provideAsset is the only place an asset's bytes change,
-    // and it drops the entry.
+    // re-read every model it was there to avoid re-reading, ~1.2 MB a build
+    // in play. The name is exact because provideAsset is the only place an
+    // asset's bytes change, and it drops the entry.
     std::unordered_map<std::string, std::vector<std::string>> mAssetUriCache;
     std::vector<filament::MaterialInstance*> mSceneMatInstances;
 
@@ -1817,9 +2445,12 @@ private:
     // (TtpRenderer.cpp has why).
     static ttp::rt::GlbMeshPrim weldPrimExact(const ttp::rt::GlbMeshPrim& p, bool reorder);
     // One range's simplified far form, appended to m.idx (buildMesh's own).
-    // `scale` is meshopt's for the whole vertex set; `lockBorder` keeps a
-    // range's open edges where a neighbouring range shares them.
-    static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder);
+    // `scale` is meshopt's for the vertices it is shown, [v0, v1) (v1 0:
+    // all); `lockBorder` keeps a range's open edges where a neighbouring range
+    // shares them. farFormByBone is a skinned range's, a part at a time.
+    static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder,
+            bool keepShades, uint32_t v0 = 0, uint32_t v1 = 0);
+    static LodRange farFormByBone(Mesh& m, size_t idx0, size_t idxN, bool keepShades);
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);
@@ -1993,8 +2624,8 @@ private:
         utils::Entity ent;
         std::vector<MergedPrim> prims;
         filament::InstanceBuffer* ibuf = nullptr;
-        // THE BAKED FORM, for a STATIC group whose model the kit colour table
-        // knows (generated/kit_colors.h): the copies expanded into one
+        // THE BAKED FORM, for a STATIC group whose model kitColors can
+        // colour: the copies expanded into one
         // world-space mesh with base colour x matte light folded per vertex,
         // drawn unlit — no instance buffer, no tangents, no texture, no
         // shading. `ent` is this mesh's entity and `prims`/`ibuf` stay empty.
@@ -2006,6 +2637,8 @@ private:
         float radius = 0;                        // mesh-local bound, world AABB
         bool dynamic = false;                    // mirror world transforms per frame
         uint8_t feat = 0;                        // kFeat* bit for tagFeatures
+        int setRow = -1;                         // a set piece's layout row (TTP_DEBUG_SET_ID)
+        std::vector<uint32_t> idSaved;           // its shipped colours while painted
     };
     std::vector<MergedGroup> mMergedCars;   // rebuilt whenever the roster moves
     std::vector<MergedGroup> mMergedDress;  // built once per scene's dressing
@@ -2093,6 +2726,12 @@ private:
     std::unordered_map<std::string, uint64_t> mGlbKeyOf;
     const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
             const std::vector<uint8_t>& glb);
+    // A parsed model's base colour per vertex (ttp/kit_colors.h), sampled from
+    // the atlas on first ask and kept as long as the parse; null for a model
+    // glbMeshes could not decode, whose copies keep the instanced, live-lit draw.
+    const ttp::kitcolors::Model* kitColors(uint64_t key);
+    std::unordered_map<uint64_t, std::unique_ptr<ttp::kitcolors::Model>> mKitColors;
+    double mKitColorMs = 0.0;   // what the sampling cost the merge now building (its log line)
     bool buildMergedGroup(std::vector<MergedGroup>& out,
             const std::vector<utils::Entity>& sources,
             const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
@@ -2100,6 +2739,40 @@ private:
     bool bakeMergedRun(MergedGroup& g, const std::vector<ttp::rt::GlbMeshPrim>& prims,
             const ttp::kitcolors::Mesh& colors,
             utils::Entity src0);
+    bool bakeFactors(utils::Entity src, const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors, std::vector<filament::math::float3>& factor);
+    // `drapeOn`: lay the copy on that track's drawn ground, each vertex lifted
+    // by the land under it over `foot`, the height its placement stands at (a
+    // set piece's `drape` part: modelled from its foot, it lands on the ground).
+    // `wallAt`, the placement's spot, for a `drape_wall` part (a canyon
+    // length): a vertex rides the lowest land along a little of the wall's
+    // own length, and by at most its own height over the lowest land between
+    // it and that spot (the face's foot), so a summit over a short rise and a
+    // tail over a massif's flank never stretch into needles. `turf`, for a
+    // `drape_turf` part (a garden's lawn, a brook's grassy bank): it wears the
+    // ground's own colour where each vertex lands (groundColorAt, landTint),
+    // so it reads as the field it lies in, not a tile laid on it. `grade`,
+    // for a `drape_grade` part (a railway's bed): lifted by the GRADED land
+    // (gradeSurfaceY), not the facet under each vertex. `plane`, for a
+    // `drape_plane` part (a floral clock's dial): the whole part lies on ONE
+    // plane, the best fit to the ground under its vertices raised to clear
+    // it everywhere, so a figure drawn on it keeps its shape on a slope (a
+    // circle draped facet by facet over a crease came out a bean). It stands
+    // off the ground by what the land is not flat, so the part brings its
+    // own edge down (a skirt), and it wants a spot on one even slope.
+    void appendBaked(Mesh& m, const filament::math::mat4f& xf,
+            const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors,
+            const std::vector<filament::math::float3>& factor,
+            const TrackBin* drapeOn = nullptr, float foot = 0.0f,
+            const filament::math::float2* wallAt = nullptr, bool turf = false,
+            bool grade = false, bool plane = false);
+    // A set piece's still parts, one baked mesh per PLACEMENT (the Dressing.cpp
+    // comment): `still` is each (entity slot, parsed mesh) that stands still.
+    bool bakePlacements(const std::vector<filament::gltfio::FilamentInstance*>& insts,
+            const std::vector<ttp::rt::GlbMeshNode>& nodes,
+            const ttp::kitcolors::Model& colors,
+            const std::vector<std::pair<size_t, int>>& still);
     void destroyMergedGroups(std::vector<MergedGroup>& groups);
     void mirrorMergedGroup(MergedGroup& g,
             filament::math::float3& mn, filament::math::float3& mx);
@@ -2110,11 +2783,21 @@ private:
             bool dynamic);
     void updateMergedTransforms();
     void buildWater(const TrackBin& tb);
+    void buildPonds(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
-    void buildKitField(const TrackBin& tb);
-    void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
+    void buildRoomRing(const TrackBin& tb);
+    // The playroom's room (buildRoomRing), in world units: its walls stand
+    // kRoomMargin past the lap's centreline on every side, kRoomH tall; a
+    // skirting board kRoomSkirt tall, a dado rail kRoomRail tall at kRoomDado,
+    // the window kRoomWinW by kRoomWinH over a sill at kRoomSill, and the
+    // bunting's pins every kBuntPin at kBuntY, each swag sagging kBuntSag.
+    // The room train's rails (set_prototypes.py ROOM_TRAIN_MARGIN) run inside it.
+    static constexpr float kRoomMargin = 40.0f, kRoomH = 60.0f, kRoomStep = 10.0f;
+    static constexpr float kRoomSkirt = 2.2f, kRoomDado = 13.0f, kRoomRail = 0.7f;
+    static constexpr float kRoomWinW = 34.0f, kRoomWinH = 24.0f, kRoomSill = 10.0f;
+    static constexpr float kBuntPin = 16.0f, kBuntY = 31.0f, kBuntSag = 3.5f;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
     void buildSetPieces(const TrackBin& tb);
@@ -2218,7 +2901,10 @@ public:
     // baked path (an undecodable GLB, ambiguous node names, a colour table
     // that disagrees with the geometry) is silent on the glass and costs
     // vertex shading in every cell, so the scene budget gate reads this.
-    // What moves (a spin subtree, the cone pool) is not counted.
+    // What moves (a spin subtree, the cone pool) is not counted. A set piece's
+    // `anim_` part needs no exemption: its baked mover took it out of the scene
+    // (buildSetMovers), so it is counted only when that bake failed, which is
+    // exactly a part left standing live-lit.
     std::vector<std::pair<std::string, int>> debugLiveDressing() const;
     void debugWipeSkids() { mSkidWipe = true; }
     // FEATURE ABLATION — the per-feature cost map's only instrument.

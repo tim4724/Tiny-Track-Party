@@ -30,6 +30,9 @@ import androidx.compose.runtime.setValue
  *                                            # nor the tag View's draw (1/unset = shown)
  * adb shell setprop debug.ttp.biome snow     # build every scene in this biome, whatever
  *                                            # the cup (SceneStaging reads it at build)
+ * adb shell setprop debug.ttp.detail full    # draw the FULL world, not this box's lite
+ *                                            # tier (read when the surface is created,
+ *                                            # DisplayHost): what lite buys, A/B
  * ```
  *
  * WHY PROPERTIES AND NOT A KEY. An ablation sweep is a dozen arms, each needing a

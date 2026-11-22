@@ -41,24 +41,32 @@ namespace rt {
 
 enum GroundKind : uint32_t { GROUND_LAWN = 0, GROUND_SAND, GROUND_REDROCK, GROUND_SNOW, GROUND_WOOD };
 // A shape change rebuilds the horizon ring: 'dome' soft meadow mounds, 'mesa'
-// flat-topped buttes, 'block' giant toy building blocks, 'island' a sparse low
-// offshore chain with sea gaps between features.
-enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_BLOCK, HILL_ISLAND };
-// Ambient particle motion presets (trackPayload.js AMB_KINDS).
-enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE };
+// flat-topped buttes, 'room' the playroom's walls (a skirting board and the
+// wall over it), 'island' a sparse low offshore chain with sea gaps between
+// features.
+enum HillShape : uint32_t { HILL_DOME = 0, HILL_MESA, HILL_ROOM, HILL_ISLAND };
+// Ambient particle motion presets (trackPayload.js AMB_KINDS), and the one
+// the cups' ambient life added (Theme::life): a petal tumbling down. Rain is
+// the one kind drawn as a STREAK (vpoint.mat `streak`): `size` is its width.
+enum AmbKind : uint32_t { AMB_NONE = 0, AMB_POLLEN, AMB_MOTE, AMB_SAND, AMB_FLAKE,
+                          AMB_PETAL, AMB_RAIN };
 // Hero set-piece kinds. The renderer dispatches these in buildLandmarks' SOURCE
 // order rather than id order — several kinds share one rand stream, so the draw
 // order is part of the contract and these ids must not be renumbered.
 enum LandmarkKind : uint32_t {
-  // A kind here is PROCEDURAL geometry the renderer builds. Two are gone —
-  // the snowman and the wind-up train — because the snow and playroom biomes
-  // plant Kenney kit models for both now (their prop scatters). The numbering
-  // is not stable across such a retirement, and does not need to be: nothing
-  // outside this tree stores a kind, the renderer selects on these NAMES, and
-  // the theme corpus is re-recorded with the change.
-  LM_GNOME = 0, LM_DOGHOUSE, LM_PICNIC, LM_HOODOO, LM_BLOCKS,
-  LM_WINDMILL, LM_LIGHTHOUSE, LM_SAILBOAT, LM_DUCK, LM_BALL, LM_UMBRELLA,
-  LM_SANDCASTLE, LM_CABIN, LM_CRAYONS, LM_BOOKS
+  // A kind here is PROCEDURAL geometry the renderer builds. Some are gone:
+  // the snowman and the wind-up train, because the snow and playroom biomes
+  // plant built models for both now (a snowman prop, the room train set
+  // piece); the windmill, a windpump at three times its size, because Crag's
+  // ranch carries the real-size one as a set piece; and the playroom's giants
+  // (alphabet blocks, bath duck, play ball, crayons, picture books), because
+  // indoors every toy stands at its real size beside a toy car, as a track's
+  // set piece. The numbering is not stable across such a retirement, and does
+  // not need to be: nothing outside this tree stores a kind, the renderer
+  // selects on these NAMES, and the theme corpus is re-recorded with the change.
+  LM_GNOME = 0, LM_DOGHOUSE, LM_PICNIC, LM_HOODOO,
+  LM_LIGHTHOUSE, LM_SAILBOAT, LM_UMBRELLA,
+  LM_SANDCASTLE, LM_CABIN
 };
 // Near-field ground clutter kinds (procedural — the renderer's clutter builders).
 enum ClutterKindId : uint32_t {
@@ -82,6 +90,12 @@ struct RoadPalette {
   uint32_t sand = 0xe4cc94;      // the strip between asphalt and kerb on a track that has one
   float kerbW = 0.22f, kerbH = 0.20f;  // kerb cross-section (visual only)
   bool edgeLines = true;         // false drops the painted side lines
+  // The kerb drawn as a plough's snowbank (buildRoadMesh): rounded and lumpy,
+  // its height wandering under kerbH, slush (`kerbSlush`) on its road face,
+  // no bands, its outer slope running down to the land. Visual only,
+  // post-corpus (theme_check does not serialize either).
+  bool kerbBank = false;
+  uint32_t kerbSlush = 0xa3aab4;
   // Whether this deck has ever been REPAIRED — the asphalt patches of
   // ttp/wear.h. A moulded-plastic deck has not: a patch on it reads as a
   // stain, not as a season of racing. Post-corpus (theme_check does not
@@ -114,6 +128,7 @@ struct ScenerySpec {
   BushSpec bush;
   std::vector<uint32_t> rocks;       // boulder tint family (flat-shaded)
   float rockS[2] = { 0.3f, 0.45f };  // boulder radius = rockS[0] + rand() * rockS[1]
+  bool rockBlocks = false;           // the boulders are toy building blocks, not stones
   float clutterDensity = 0;
   std::vector<ClutterSpec> clutter;  // drawn from its OWN seeded stream
 };
@@ -162,6 +177,13 @@ struct AmbientSpec {
   float size = 0.3f, opacity = 0.85f;
   uint32_t tint = 0xffffff;
   float fall = 1, wind = 0.7f, bob = 0, band = 1;
+  // The rest is the ambient LIFE's (Theme::life), post-corpus: theme_check
+  // serializes the fields above only.
+  uint32_t tint2 = 0;     // every second particle's tint; 0 = `tint`
+  // Where it lives: round every set piece whose model name holds `near`, out
+  // to `reach` past its footprint (an avenue's petals, a sunbeam's motes).
+  std::string near;
+  float reach = 0;
 };
 struct BirdSpec {  // trackPayload.js DEF_BIRDS
   uint32_t count = 0, tint = 0xffffff;
@@ -173,6 +195,24 @@ struct PlaneSpec {  // trackPayload.js DEF_PLANE
   float size = 3.2f, y = 22, a0 = 1.3f, rc = 95, rb = 32, speed = 0.3f, bank = 0.4f;
 };
 struct BalloonSpec { std::vector<uint32_t> panels; float y = 44, size = 6; };
+// How a bridge pillar is BUILT (TtpRenderer::buildStructures), each cup's own
+// make: a plain column, a stone pier in courses (on snow, with snow lying on
+// its cap and its footing), a painted concrete pier on a footing under a cap,
+// or a timber post under a cap beam. The shaft wears `shaft`, or
+// `Theme::structure` where that is 0.
+// Renderer-only: the sim's pillar is a 0.5 u column whatever this says, and a
+// make stays inside the margin the builder keeps a pillar from any road
+// beside it, so nothing drawn reaches a road the sim lets a car onto.
+// Post-corpus (theme_check does not serialize it).
+enum PierKind : uint32_t { PIER_COLUMN = 0, PIER_STONE, PIER_PAINTED, PIER_TIMBER };
+struct PierSpec {
+  uint32_t kind = PIER_COLUMN;
+  uint32_t shaft = 0;   // 0: Theme::structure
+  uint32_t course = 0;  // STONE: every second course's stone
+  uint32_t cap = 0;     // the cap block (TIMBER: the cap beam)
+  uint32_t foot = 0;    // the footing
+  uint32_t snow = 0;    // STONE: the snow on the cap and the footing; 0 = none
+};
 struct IceSpec { uint32_t sheet = 0xa9d7ee, frost = 0xf0f8fd; };
 
 // The track's SET PIECES (public/shared/tracks.js `set`): composed landmark
@@ -190,6 +230,18 @@ struct SetSpec {
   std::vector<SetPiece> pieces;
 };
 
+// The track's LANDFORMS (public/shared/tracks.js `land`, plus SET_GROUND under
+// the set pieces modelled on one): ttp::LandDef's fields, as the renderer's
+// terrain reads them. A function of the track alone, like the set.
+struct Landform {
+  uint32_t kind = 0;          // 0 ridge, 1 ring, 2 plain, 3 mound, 4 fan, 5 paint, 6 shore, 7 pond, 8 clear, 9 street, 10 snake, 11 ladder, 12 shed (LandDef)
+  int piece = -1;             // anchored on set.pieces[piece]; -1: on u/lat/yaw
+  float u = 0, lat = 0, yaw = 0;   // yaw RADIANS, like SetPiece's
+  float x = 0, z = 0, len = 0, r = 0, r1 = 0, w = 0, rz = 0, h = 0, h1 = 0, top = 0, shape = 1;
+  uint32_t tint = 0;          // 0xRRGGBB over the ground it covers; 0 = none
+  float near = 0;             // ridge / ring: its flank's clearance past the kerb; 0 = the default
+};
+
 // One scenery model's recolour, resolved against that model's authored glTF
 // materials — gltfio names its material instances after the glTF material, so
 // the renderer applies these by name.
@@ -198,6 +250,12 @@ struct MatTint { std::string name; uint32_t rgb = 0xffffff; };
 struct Theme {
   RoadPalette road;
   uint32_t sky[3] = { 0x59a7e8, 0x8ecae6, 0xc8e9f2 };  // zenith / horizon / below
+  // How fast the dome climbs from the horizon's colour to the zenith's: the
+  // mix's exponent over the sine of the elevation. Lower turns the sky above a
+  // chase camera's horizon to the zenith's sooner, where two far-apart colours
+  // (the canyon's dust over a blue) would otherwise meet as a third, a mauve.
+  // Post-corpus, like groundBase.
+  float skyCurve = 0.65f;
   uint32_t fog = 0x8ecae6;        // race + overview + perimeter fog AND the background
   uint32_t hillShape = HILL_DOME;
   std::vector<uint32_t> hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
@@ -205,7 +263,17 @@ struct Theme {
   PropsSpec props;
   std::vector<uint32_t> landmarks;
   uint32_t structure = 0x9aa1b4;  // pillars / poles / loop shafts (toy concrete)
+  // Non-empty: the bridge pillars are a toy kit's stacked cylinders, one
+  // colour per piece round this list, on a foot disc under a cap (Helix's
+  // marble kit). Empty: piers of `pier`'s make.
+  std::vector<uint32_t> structureStack;
+  PierSpec pier;
   uint32_t groundKind = GROUND_LAWN;
+  // The ground canvas's base colour where a track's land is not its kind's
+  // own (a hay-yellow down, a water meadow); 0 keeps the kind's. A landform
+  // tint only multiplies, so it cannot warm or lighten a lawn. Post-corpus
+  // (theme_check does not serialize it).
+  uint32_t groundBase = 0;
   float fogTune = 1;              // scalar on the RACE + lobby-perimeter fog distances
   KeyLight key;
   HemiLight hemi;
@@ -217,6 +285,13 @@ struct Theme {
   WaterSpec water;
   HazeSpec haze;
   AmbientSpec ambient;
+  // THE CUP'S AMBIENT LIFE, beside its weather: what tells the places apart in
+  // the corner of the eye (petals by Cloverleaf's cherries, motes in the
+  // playroom's sunbeam).
+  // The same cloud as `ambient` (vpoint.mat), a second draw; none on snow,
+  // whose weather is its life, nor on the beach or in the canyon. Post-corpus, and left out of
+  // the lite tier.
+  AmbientSpec life;
   BirdSpec birds;
   KiteSpec kites;
   bool hasPlane = false;
@@ -225,6 +300,7 @@ struct Theme {
   bool hasIce = false;
   IceSpec ice;
   SetSpec set;
+  std::vector<Landform> land;
   // One entry per `scenery.models` index, filled by resolve_model_tints() once
   // the shell has handed over that model's bytes. Empty until then.
   std::vector<std::vector<MatTint>> modelTints;
@@ -294,10 +370,19 @@ const char* biome_for_cup(const char* cupId);
 const char* biome_for_track(const char* trackId);
 
 // The fully resolved palette for a biome on a track. An unknown biome name
-// resolves to grass, matching themeForCup's fallback. `trackId` only reaches two
-// things: the per-track ambient patch (the snow cup's four different winter
-// days) and the shoreline seed.
+// resolves to grass, matching themeForCup's fallback. `trackId` reaches the
+// track's own patch over its biome (weather, props, carriers), the shoreline
+// seed and the set pieces. Its props keep the biome's slot order
+// (ttp_theme_prop_models), whatever order the patch named them in.
+//
+// In the LITE tier in force (detail.h) a piece authored `lite: false` is left
+// out, and every model with a lite build is named by it (lite_models), so the
+// shell fetches and the renderer builds the lite world from the same lists.
 Theme resolve_theme(const char* biomeName, const char* trackId);
+
+// Each model that has a lite build (<model>-lite.glb, TTP_LITE_MODELS) renamed
+// to it, in place.
+void lite_models(std::vector<std::string>& models);
 
 // The recolour table for `model`, resolved against that model's own authored
 // glTF materials.

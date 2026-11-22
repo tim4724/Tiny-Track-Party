@@ -59,9 +59,16 @@ mkdir -p "$OUT/toycar/Textures" "$OUT/audio/cues" "$OUT/materials"
 # The model kit. Textures/ keeps its subdirectory because the name IS the lookup
 # key: gltfio resolves an external texture by the exact URI authored in the GLB
 # ("Textures/colormap.png"), and the shell provides bytes under that same string.
-cp "$ROOT/public/assets/toycar"/*.glb "$OUT/toycar/"
+#
+# ONLY THE FULL TIER'S MODELS: the Apple TV draws full (ttp/detail.h), so a
+# lite build (<model>-lite.glb) is never asked for. TTP_STAGE_TIERS=all stages
+# both, for a bench that prices the other tier here
+# (`npm run perf:race -- --platform tvos --detail lite`).
+for glb in "$ROOT/public/assets/toycar"/*.glb; do
+  case "$glb" in *-lite.glb) [ "${TTP_STAGE_TIERS:-}" = all ] || continue;; esac
+  cp "$glb" "$OUT/toycar/"
+done
 cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
-cp "$ROOT/public/assets/toycar/KENNEY-License.txt" "$OUT/toycar/"
 
 # The 2D thumbnails: each car's front-3/4 HERO STILL. They are what makes a
 # lobby seat show the car the player actually picked rather than a shape

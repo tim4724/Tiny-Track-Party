@@ -2,6 +2,7 @@
 // passes. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
+#include <cstdio>
 #include <utils/Log.h>
 
 #include "TtpRendererKit.h"
@@ -144,11 +145,12 @@ float3 TtpRenderer::fogColorGraded(const Camera* cam) const {
 // span. At the shipped race profile (70 → 170) that is 77.5 / 0.0185 — mean
 // |Δfog| 0.055 against the ramp, where fitting the far end alone crushed the
 // middle and a uniform-weight fit under-fogged the near deck.
-static View::FogOptions fogFor(float near, float far, const float3& color) {
+static View::FogOptions fogFor(float near, float far, const float3& color,
+        float cutOff = FOG_CUTOFF) {
     View::FogOptions fog{};
     fog.color = color;
     fog.heightFalloff = 0.0f;
-    fog.cutOffDistance = FOG_CUTOFF; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
+    fog.cutOffDistance = cutOff; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
     // ALWAYS DISABLED, AND THE OPTIONS STILL MATTER. `enabled` selects Filament's
     // fog VARIANT, which is the expensive thing — a cubemap sampler and a sun
     // inscattering pow behind uniform branches this scene never takes, for one
@@ -1420,11 +1422,17 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     if (mTrack && !mPlane.entity.isNull()) {
         const TrackBin& t = *mTrack;
         const float ph = mTime * t.planeSpeed;
-        const float cx = std::cos(t.planeA0) * t.planeRc * mHillSf;
-        const float cz = std::sin(t.planeA0) * t.planeRc * mHillSf;
-        const float3 p{ cx + std::cos(ph) * t.planeRb,
+        float cx = std::cos(t.planeA0) * t.planeRc * mHillSf;
+        float cz = std::sin(t.planeA0) * t.planeRc * mHillSf;
+        float rb = t.planeRb;
+        if (mRoom.z > mRoom.x) {   // indoors: round the middle of the room, clear of its walls
+            cx = 0.5f * (mRoom.x + mRoom.z);
+            cz = 0.5f * (mRoom.y + mRoom.w);
+            rb = std::min(rb, 0.5f * std::min(mRoom.z - mRoom.x, mRoom.w - mRoom.y) - 12.0f);
+        }
+        const float3 p{ cx + std::cos(ph) * rb,
                         t.planeY + std::sin(ph * 2.1f) * 1.1f, // long shallow swoops
-                        cz + std::sin(ph) * t.planeRb };
+                        cz + std::sin(ph) * rb };
         const float yaw = std::atan2(-std::sin(ph), std::cos(ph));
         tcm.setTransform(tcm.getInstance(mPlane.entity),
                 mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
@@ -1444,34 +1452,60 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             if (ti) tcm.setTransform(ti, turn);
         }
     }
+    // The set pieces' moving parts (TtpRendererMotion.cpp).
+    stepSetMovers(carPosW);
 
-    // Chimney smoke: each puff rises, grows and dissolves over ~6 s, staggered
-    // in thirds. Billboarded toward this frame's first camera (they're tiny and
-    // far; a per-cell re-aim isn't worth the extra state).
+    // Chimney smoke: each puff rises, grows and dissolves over ~7 s, staggered
+    // evenly and each taller than the gap to the next, so they overlap into one
+    // gentle column leaning off with the breeze (spaced wider, they read as a
+    // dotted line of blots). Billboarded toward this frame's first camera (they're tiny and
+    // far; a per-cell re-aim isn't worth the extra state). Sized for a
+    // chimney or a camp fire beside a 0.9 u car: a puff the size of the cabin
+    // it rises from reads as a dark blot in the sky.
     if (!mSmoke.empty() && input.viewCount > 0) {
         const TtpViewInput& v0 = ttp_frame_views(&input)[0];
         const float3 camP{ v0.world[12], v0.world[13], v0.world[14] };
         for (size_t i = 0; i < mSmoke.size(); i++) {
             if (mSmoke[i].entity.isNull()) continue;
-            const float u = std::fmod(mTime * 0.16f + (float) i / 3, 1.0f);
-            const float3 p{ mSmokeOrigin.x + u * 1.7f
-                                    + std::sin(mTime * 0.8f + i * 2.1f) * 0.15f,
-                            mSmokeOrigin.y + u * 3.4f, mSmokeOrigin.z };
-            const float w = 0.7f + u * 2.2f;
-            // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
-            // so shrink to nothing at the ends instead (same read at this size).
-            const float fade = 0.42f * std::min(1.0f, u * 5) * (1 - u) / 0.42f;
+            const float k = mSmokeScale;
+            float u, w, fade;
+            float3 p;
+            if (mSmokePeriod > 0) {
+                // A gun's smoke: every period a flash at the muzzle (the
+                // first puff, there for a tenth of a second) and the rest
+                // burst from it together, each thrown a different way out
+                // along the bore a stride or two, slow to a stop, swell, lift
+                // a little and thin over two seconds; then nothing until the
+                // next shot.
+                constexpr float kBurst = 2.0f, kFlash = 0.1f;
+                const float since = std::fmod(mTime, mSmokePeriod);
+                u = std::min(1.0f, since / kBurst);
+                const float far = (float) i / (mSmoke.size() - 1);
+                const float out = 1 - (1 - u) * (1 - u) * (1 - u);
+                p = mSmokeOrigin + mSmokeDir * (out * (0.25f + 1.3f * far) * k);
+                p.y += (u * (0.3f + 0.4f * far) + std::sin(i * 2.1f) * 0.1f * out) * k;
+                w = (0.4f + 0.25f * far + u * 0.7f) * k;
+                fade = std::min(1.0f, u * 12) * std::sqrt(1 - u);
+                if (i == 0) {
+                    p = mSmokeOrigin + mSmokeDir * (0.2f * k);
+                    w = 1.1f * k;
+                    fade = since < kFlash ? 1.0f : 0.0f;
+                }
+            } else {
+                u = std::fmod(mTime * 0.14f + (float) i / mSmoke.size(), 1.0f);
+                p = float3{ mSmokeOrigin.x + (u * 0.6f
+                                    + std::sin(mTime * 0.8f + i * 2.1f) * 0.06f) * k,
+                            mSmokeOrigin.y + u * 2.0f * k, mSmokeOrigin.z };
+                w = (0.5f + u * 1.0f) * k;
+                // The JS fades the sprite's opacity; ours bakes alpha into the mesh,
+                // so shrink to nothing at the ends instead (same read at this size).
+                fade = std::min(1.0f, u * 5) * std::sqrt(1 - u);
+            }
             const float yaw = std::atan2(camP.x - p.x, camP.z - p.z);
             tcm.setTransform(tcm.getInstance(mSmoke[i].entity),
                     mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                    * mat4f::scaling(float3{ w * fade, w * 0.62f * fade, 1 }));
+                    * mat4f::scaling(float3{ w * fade, w * 0.8f * fade, 1 }));
         }
-    }
-
-    // The windmill's multi-blade rotor spins about its facing axis.
-    if (!mWindmill.entity.isNull()) {
-        tcm.setTransform(tcm.getInstance(mWindmill.entity),
-                mWindmillBase * mat4f::rotation(mTime * 0.85f, float3{ 0, 0, 1 }));
     }
 
     // Kickable cones — TrackProps._stepCones, with the kick test upgraded from
@@ -1821,6 +1855,13 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         // The events say which case it is, so the fireball can ride the car out
         // like the JS does (TrackProps IMPACT_FOLLOW) while the shockwave ring
         // stays put at the impact point.
+        //
+        // Both are clipped to the deck under them (vburst.mat point 3), as its
+        // normal and how high `at` stands over the deck point at (s, lat).
+        const auto deckGround = [&](float s, float lat, const float3& at) {
+            const float3 n = mTrack->frameAt(s).up;
+            return math::float4{ n, dot(n, at - mTrack->deckPoint(s, lat)) };
+        };
         const TtpBurstInput* bursts = ttp_frame_bursts(&input);
         for (uint32_t bi = 0; bi < input.burstCount; bi++) {
             Burst* slot = nullptr;
@@ -1833,10 +1874,12 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 slot->pos = carPosW[ev.car]
                         + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
                 slot->car = ev.car;
+                slot->ground = deckGround(hit.trackS, hit.trackLat, slot->pos);
             } else {
                 const TrackBin::Sample f = mTrack->frameAt(ev.s);
                 slot->pos = f.pos + f.lat * ev.lat + f.up * 0.3f;
                 slot->car = -1;
+                slot->ground = deckGround(ev.s, ev.lat, slot->pos);
             }
             slot->ball = slot->pos;
             slot->t = 0;
@@ -1858,11 +1901,14 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             }
             // The fireball chases the car it hit as that car spins away
             // (TrackProps IMPACT_FOLLOW 10/s); the ring stays at the impact.
+            // Followed, it is clipped by the deck under the car NOW.
+            math::float4 ballGround = b.ground;
             if (b.car >= 0 && (uint32_t) b.car < nCars && (size_t) b.car < carPosW.size()) {
                 const TtpCarInput& hit = cars[b.car];
                 const float3 target = carPosW[b.car]
                         + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
                 b.ball += (target - b.ball) * std::min(1.0f, 10.0f * input.dt);
+                ballGround = deckGround(hit.trackS, hit.trackLat, b.ball);
             }
             // Ring: IMPACT_RING_R0 0.25 → R1 2.0 on the JS ease-out
             // (1-(1-t)²), half-width held at IMPACT_RING_W 0.05 the whole way,
@@ -1875,6 +1921,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 mBurstRingMats[bi]->setParameter("ring", math::float2{ R, 0.05f });
                 mBurstRingMats[bi]->setParameter("tint",
                         math::float4{ 1, 1, 1, 0.55f * (1.0f - tr) });
+                mBurstRingMats[bi]->setParameter("ground", b.ground);
             }
             // Ball: pops to IMPACT_FLASH_R 0.62 in ~0.1 s and then HOLDS that
             // size while its brightness dies — a fireball that shrank instead
@@ -1890,6 +1937,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                     const float a = tf < 0.25f ? 1.0f
                             : std::max(0.0f, 1.0f - (tf - 0.25f) / 0.75f);
                     mBurstBallMats[bi]->setParameter("tint", math::float4{ 1, 1, 1, a });
+                    mBurstBallMats[bi]->setParameter("ground", ballGround);
                 }
             }
         }
@@ -2594,9 +2642,13 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
     // the three side ever loses the quirk, this collapses to a constant.
     if (mPollenMat) {
         const uint32_t vc = input.viewCount;
+        // (Rain grows by the root of that: a streak doubled for a split's
+        // cell is a bar across a picture a quarter the size, and one left at
+        // its solo size is under a pixel there.)
         const uint32_t rows = gridDims(vc ? vc : 1).rows;
+        const float grow = mAmbStreak > 0 ? std::sqrt((float) rows) : (float) rows;
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
-        mAmbHalfSize = mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f);
+        mAmbHalfSize = mAmbSize * grow * std::tan(fov * (float) M_PI / 360.0f);
         mAmbTime = mTime;
         mPollenMat->setParameter("halfSize", mAmbHalfSize);
         mPollenMat->setParameter("time", mAmbTime); // drives the shader-side drift
@@ -2622,6 +2674,44 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
             }
             mPollenMat->setParameter("boxXZ", kAmbBox / std::sqrt((float) vc));
             mPollenMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
+        }
+        // Rain blows at each cell's camera: its drift moves on by this
+        // frame's step against that camera's heading, so a turn swings the
+        // wind round and never moves the field. The drift is kept inside one
+        // wrap box, a whole box at a time, which the shader's wrap cannot see
+        // (the same float as the boxXZ uniform). An undrawn frame steps too.
+        if (mAmbStreak > 0 && vc) {
+            const float dt = std::min(0.1f, std::max(0.0f, mTime - mAmbDriftAt));
+            mAmbDriftAt = mTime;
+            const float bx = kAmbBox / std::sqrt((float) vc);
+            mAmbDrift.resize(vc, float4{ 0.0f });
+            const TtpViewInput* views = ttp_frame_views(&input);
+            for (uint32_t i = 0; i < vc; i++) {
+                // The heading: forward's x/z plus up's, which point the same
+                // way at any pitch from level to straight down.
+                const float* w = views[i].world;   // column-major: right, up, back, eye
+                const float hx = w[4] - w[8], hz = w[6] - w[10];
+                const float hl = std::sqrt(hx * hx + hz * hz);
+                float4& d = mAmbDrift[i];
+                if (hl > 1e-4f) {
+                    d.z = -hx / hl * mAmbWind;
+                    d.w = -hz / hl * mAmbWind;
+                }
+                d.x += d.z * dt;
+                d.y += d.w * dt;
+                d.x -= bx * std::floor(d.x / bx);
+                d.y -= bx * std::floor(d.y / bx);
+            }
+        }
+    }
+    // The cup's ambient life: world-sized, so no rows fit, and culled on its
+    // tiles' bounds.
+    if (mLifeMat) {
+        mLifeMat->setParameter("time", mTime);
+        const uint32_t vc = input.viewCount;
+        if (vc && vc != mLifeCells) {
+            mLifeCells = vc;
+            mLifeMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
         }
     }
 
@@ -2703,22 +2793,24 @@ inline double ambMediumpErr(float x) {
 // outside plane j when a_j . lo + b_j < 0.
 struct AmbCullCell {
     double a[5][3], b[5];
-    double xOff, zOff;   // (wind t - camX - epsXZ) and (-camZ - epsXZ), mod bx
+    double xOff, zOff;   // (driftX - camX - epsXZ) and (driftZ - camZ - epsXZ), mod bx
     double yOff;         // -U: the y interval starts U below the replayed height
     double fallT;        // fall t
     double bx, invBx, bandH, invBand;
     double lenXZ, lenY;  // the x/z and y interval lengths
 };
 
-// The replay moves each sprite by fall and wind exactly as given, and widens
-// its x/z and y intervals by the most another reading of them moves it by
-// time t (speed is at most 2.5); halfSize and bob only bound the sprite, so
-// they are rounded UP by what a mediump load can add. Every operation on a
-// uniform has a highp operand (time, speed, sin, the camera axes) and the
-// vertex stage defaults to highp, so those loads are the only fp16 in the
-// position path.
-void ambCullCell(AmbCullCell& c, float t, float fall, float wind, float bob, float halfSize,
-        float bandH, float boxXZ, float seedBox, uint32_t sprites,
+// The replay moves each sprite by fall and its x/z drift exactly as given,
+// and widens its x/z and y intervals by the most another reading of them
+// moves it by time t (speed is at most 2.5); halfSize and bob only bound the
+// sprite, so they are rounded UP by what a mediump load can add. Every
+// operation on a uniform has a highp operand (time, speed, sin, the camera
+// axes) and the vertex stage defaults to highp, so those loads are the only
+// fp16 in the position path. The drift is the world wind's wind t, whose
+// reading moves by driftErr; rain's is the view's own (material global 1),
+// highp and so read exactly (driftErr 0).
+void ambCullCell(AmbCullCell& c, float t, float fall, double driftX, double driftZ, double driftErr,
+        float bob, float halfSize, float bandH, float boxXZ, float seedBox, uint32_t sprites,
         const mat4f& world, float fov, float aspect, float nearZ) {
     c.bx = boxXZ;
     c.invBx = 1.0 / c.bx;
@@ -2731,18 +2823,18 @@ void ambCullCell(AmbCullCell& c, float t, float fall, float wind, float bob, flo
     // The slack of each wrap: the mediump readings' drift, then the fp32
     // error at this frame's magnitudes under any of them. The y term also
     // carries the speed's own rounding times fall t.
-    const double dFall = ambMediumpErr(fall), dWind = ambMediumpErr(wind);
+    const double dFall = ambMediumpErr(fall);
     const double fallT = (std::fabs((double) fall) + dFall) * t;
-    const double windT = (std::fabs((double) wind) + dWind) * t;
-    const double epsXZ = kAmbCullEps + dWind * t
-            + ambUlp16(seedBox + c.bx + windT + std::fabs(cx) + std::fabs(cz));
+    const double driftM = std::fabs(driftX) + std::fabs(driftZ) + driftErr;
+    const double epsXZ = kAmbCullEps + driftErr
+            + ambUlp16(seedBox + c.bx + driftM + std::fabs(cx) + std::fabs(cz));
     // A compiler may also fuse the shader's fract(k * 0.618...) into one fma,
     // which skips the product's rounding: h1 then moves by up to an fp32 ulp
     // of k * 0.618 for the largest k drawn, and speed by 1.4 times that.
     const double dH1 = ((double) sprites * 0.6180339887 + 1.0) * (1.0 / 8388608.0);
     const double epsY = kAmbCullEps + 2.5 * dFall * t + 1.4 * dH1 * fallT
             + ambUlp16(64.0 + c.bandH + 2.5 * fallT + bob03 + std::fabs(cy)) + 2e-6 * fallT;
-    const double sx = (double) wind * t - cx - epsXZ, sz = -cz - epsXZ;
+    const double sx = driftX - cx - epsXZ, sz = driftZ - cz - epsXZ;
     c.xOff = sx - c.bx * ambFloor(sx * c.invBx);
     c.zOff = sz - c.bx * ambFloor(sz * c.invBx);
     const double U = bob03 + epsY;
@@ -2862,15 +2954,41 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
     for (uint32_t i = 0; i < vc; i++) {
         mat4f wf;
         std::memcpy(&wf, views[i].world, sizeof(wf));
-        // The uniforms exactly as renderAmbient and buildStatic set them.
+        // The uniforms exactly as renderAmbient and buildStatic set them,
+        // and rain's drift as this cell's view carries it.
+        const bool own = mAmbStreak > 0 && i < mAmbDrift.size();
         AmbCullCell c;
-        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob, mAmbHalfSize,
-                mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
+        ambCullCell(c, mAmbTime, mAmbFall,
+                own ? (double) mAmbDrift[i].x : (double) mAmbWind * mAmbTime,
+                own ? (double) mAmbDrift[i].y : 0.0,
+                own ? 0.0 : ambMediumpErr(mAmbWind) * mAmbTime, mTrack->ambBob,
+                mAmbHalfSize * std::max(1.0f, mAmbStreak), mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
 
+        // A lite cell's particles do not tap the floor (vpoint.mat), so one
+        // whose camera is under it (in a gallery, a tunnel, under a bridge)
+        // drops its own: the share it keeps falls to nothing over the first
+        // unit under, a thinning as the car runs in at a mouth, not a blink.
+        float share = 1.0f;
+        if (vc >= 3 && !mAmbFloorY.empty()) {
+            constexpr int N = kAmbFloorN;
+            const float cell = 2 * kAmbR / (N - 1);
+            const float fx = std::min((float) N - 1.001f, std::max(0.0f, (wf[3].x + kAmbR) / cell));
+            const float fz = std::min((float) N - 1.001f, std::max(0.0f, (wf[3].z + kAmbR) / cell));
+            const int gx = (int) fx, gz = (int) fz;
+            const float tx = fx - gx, tz = fz - gz;
+            const float* r0 = &mAmbFloorY[(size_t) gz * N + gx];
+            const float* r1 = r0 + N;
+            const float floorY = (r0[0] * (1 - tx) + r0[1] * tx) * (1 - tz) + (r1[0] * (1 - tx) + r1[1] * tx) * tz;
+            share = 1.0f - std::min(1.0f, std::max(0.0f, floorY - wf[3].y));
+        }
         mAmbCellOff[i] = (uint32_t) out->size();
         for (uint32_t k = 0; k < per; k++) {
             const Vertex& s = mPollen.verts[(size_t) k * 3];
-            const bool keep = ambSpriteMayReach(c, s.px, s.py, s.pz, k);
+            // (which flakes go is a hash of their own: 1 / the plastic number)
+            const float pick = (float) k * 0.7548777f;
+            // NO_CULL keeps every sprite the share leaves, frustum or not.
+            const bool keep = (share >= 1.0f || pick - (float) (int32_t) pick < share)
+                    && (mNoCull || ambSpriteMayReach(c, s.px, s.py, s.pz, k));
             if (keep) {
                 out->push_back((uint16_t) (k * 3));
                 out->push_back((uint16_t) (k * 3 + 1));
@@ -2937,7 +3055,10 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     // The far forms (LodRange) are every race cell's trade past that cell's
     // own gate; only the overviews draw every near range.
     const bool lods = input.viewCount > 0 && (input.flags & TTP_FRAME_OVERVIEW) == 0;
-    if (!lods) chooseLods(float3{ 0 }, 0.0f);
+    if (!lods) {
+        chooseLods(float3{ 0 }, 0.0f, 0.0f, 0.0f);
+        chooseCuts(float3{ 0 }, 0.0f);
+    }
     if (input.viewCount == 0) {
         restoreAmbientRange();   // the overview draws the cloud's whole range
         if (mOverlayFolded) {
@@ -3006,9 +3127,13 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // and the overview each run their own ramp, and the gallery runs
             // none (fogFar <= fogNear).
             v->setFogOptions(mFogOn
-                    ? fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam))
+                    ? fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam),
+                            mFogWhole ? 1e9f : FOG_CUTOFF)
                     : fogFor(1.0f, 0.0f, fogColorGraded(cam)));   // far <= near disables
             applyDebugGlobals(v);
+            // Rain's drift and wind as THIS cell's camera blows them
+            // (renderAmbient; vpoint.mat reads them as global 1).
+            if (mAmbStreak > 0 && i < mAmbDrift.size()) v->setMaterialGlobal(1, mAmbDrift[i]);
             // Per-cell monster fade: a truck looming in front of THIS cell's
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it
@@ -3028,11 +3153,20 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
                             mPollen.vb, mAmbCullIbs[slot], mAmbCellOff[i], mAmbCellCnt[i]);
                 }
             }
+            v->setFrustumCullingEnabled(!mNoCull);
             if (lods) {
                 // THIS cell's pixels per radian, so the trade scales itself to
-                // the pixels it has (TtpRenderer.h, LodRange).
-                chooseLods(world[3].xyz, (float) rect.h
-                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f)));
+                // the pixels it has (TtpRenderer.h, LodRange), counted as its
+                // share of a frame no taller than kLodLines.
+                const float lines = (float) rect.h
+                        * std::min(1.0f, kLodLines / (float) std::max(mHeight, 1u));
+                const float pxPerRad = lines
+                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f));
+                // The haze this cell draws through, as fogFor lays it.
+                const float span = mFogOn ? views[i].fogFar - views[i].fogNear : 0.0f;
+                chooseLods(world[3].xyz, pxPerRad, views[i].fogNear + 0.075f * span,
+                        span > 0.0f ? 1.85f / span : 0.0f);
+                chooseCuts(world[3].xyz, pxPerRad);
             }
             mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
             mRenderer->render(v);
@@ -3066,19 +3200,34 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
 // lap that decides whether a 4-way split holds 60, lose about a third of their
 // GPU time to its far ribbon. docs/perf/androidtv-frame-map.md, 2026-09-02, has every
 // arm; the decoration's far forms are priced beside it.
-void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
+//
+// FULL holds the swap to kLodPxFull pixels of what the haze lets through: a
+// far form is a different picture up close (a fir's snow tiers gone green, a
+// pole gone altogether, which the simplifier's error does not count), and at
+// kLodPx whole groves changed 60 to 100 u ahead of a racer (npm run
+// see:pops). Past the haze's onset the error is weighed by the share of a
+// surface's colour that still arrives, so a form swaps where the fog has
+// taken the difference. Lite keeps kLodPx and no haze term: its frame is the
+// box's budget.
+void TtpRenderer::chooseLods(const float3& cam, float pxPerRad, float fogStart, float fogDensity) {
     auto& rcm = mEngine->getRenderableManager();
-    const float k = mLodOff ? 0.0f : pxPerRad / kLodPx;
+    const float k = mLodOff ? 0.0f : pxPerRad / (mLite ? kLodPx : kLodPxFull);
+    const bool haze = !mLite && fogDensity > 0.0f;
     for (LodRange& r : mLods) {
-        const float near = r.err * k;
+        float near = r.err * k;
         const float3 d = clamp(cam, r.lo, r.hi) - cam;   // to the nearest point of the box
+        if (haze && dot(d, d) < near * near && dot(d, d) > fogStart * fogStart) {
+            near *= std::exp(-fogDensity * (std::sqrt(dot(d, d)) - fogStart));
+        }
         bool pinned = false;
         if (r.ring0 >= 0) {
             for (const auto& [a, b] : mShadowRings) {
                 if (a < r.ring1 && b > r.ring0) { pinned = true; break; }
             }
         }
-        const bool far = k > 0.0f && !pinned && (mLodAll || dot(d, d) > near * near);
+        // Held (the pop probe), a range keeps its form; the shadow pin still wins.
+        const bool far = mLodHold ? r.far && !pinned
+                : k > 0.0f && !pinned && (mLodAll || dot(d, d) > near * near);
         if (far == r.far) continue;
         r.far = far;
         const auto ri = rcm.getInstance(r.entity);
@@ -3086,6 +3235,34 @@ void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
         rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES, r.vb,
                 far ? r.farIb : r.ib, far ? r.farOff : r.off, far ? r.farCnt : r.cnt);
     }
+}
+
+// Lite's small-thing cut for one cell (CutRange): what holds only things
+// smaller than kCutPx pixels of THIS cell leaves its scene. Stated only when it
+// changes, like the far forms. On the heavy tracks at the box's 4P cell it
+// takes a few percent of the worst frame's vertices (the far clutter, mostly)
+// and of its draws (the far scatter runs).
+void TtpRenderer::chooseCuts(const float3& cam, float pxPerRad) {
+    const float k = pxPerRad / kCutPx;
+    if (mLodHold) return;
+    for (CutRange& c : mCuts) {
+        if (c.sheet && !mDressSheets) continue;   // the ablation holds them out
+        const float3 d = clamp(cam, c.lo, c.hi) - cam;
+        const float reach = c.size * k;
+        const bool cut = k > 0.0f && dot(d, d) > reach * reach;
+        if (cut == c.cut) continue;
+        c.cut = cut;
+        if (cut) mScene->remove(c.entity); else mScene->addEntity(c.entity);
+    }
+}
+
+// Every cut back in the scene and the list emptied, before what it names is
+// rebuilt or destroyed.
+void TtpRenderer::restoreCuts() {
+    for (const CutRange& c : mCuts) {
+        if (c.cut) mScene->addEntity(c.entity);
+    }
+    mCuts.clear();
 }
 
 // The monster ghost swap for one cell: a truck looming in front of THAT cell's
@@ -3170,8 +3347,7 @@ void TtpRenderer::orientCellBillboards(const float3& camPos, float farZ) {
     // cloud spans a few percent of its distance, far less than the gap from
     // FOG_CUTOFF to the dome); if it were the fog bound would win, since a
     // hidden edge is the lesser of the two artefacts.
-    const float dome = SKY_DOME_SHARE * farZ * std::cos((float) M_PI / SKY_DOME_SEGS)
-            * std::cos((float) M_PI / (2 * SKY_DOME_RINGS));
+    const float dome = SKY_DOME_SHARE * farZ * mSkyInset;
     const auto fitSkyBand = [&](float3& p, float& scale, float near, float far) {
         if (near <= 0.0f) return;
         const float tMin = FOG_CUTOFF / near;
@@ -3373,8 +3549,8 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     double tMark = tFrame0;
 
     // Cars follow the contract poses: basis (right, up, forward) + pos. GLB
-    // assets get an extra half-turn — Kenney vehicles are modelled facing -Z
-    // (same fix as the Three.js renderer's base yaw).
+    // assets get an extra half-turn — the cars (scripts/toy_cars.py) are
+    // modelled facing -Z (same fix as the Three.js renderer's base yaw).
     const TtpCarInput* cars = ttp_frame_cars(&input);
     const uint32_t nCars = std::min<uint32_t>(input.carCount, (uint32_t) mCars.size());
     // Conformed car positions, kept for the props that test against the car's
@@ -3427,7 +3603,25 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     }
     if (mDressMergeDirty) {
         mDressMergeDirty = false;
-        if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
+        if (mMergeOff) {
+            restoreCuts();
+            destroyMergedGroups(mMergedDress);
+            mSetMovers.clear();
+            mSetSkins.clear();
+        }
+        else {
+            // The scene build's last leg, a frame after the phases above it
+            // printed (buildTrack), and the one that samples a model's colours
+            // the first time it is baked (kitColors).
+            const double t0 = ttpNowMs();
+            mKitColorMs = 0.0;
+            buildDressingMerge();
+            char line[96];
+            std::snprintf(line, sizeof line, "ttp dress merge: %.1f ms (colours %.1f)",
+                    ttpNowMs() - t0, mKitColorMs);
+            utils::slog.i << line << utils::io::endl;
+        }
+        if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;
     }
     if (mGlPrioDirty && mAndroidGl) {

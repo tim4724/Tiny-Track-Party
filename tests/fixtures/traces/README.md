@@ -187,7 +187,8 @@ SHIPPING codegen path onto C++: `scripts/gen-track-schematics.js` bakes
 licensed by this corpus and by the bake reproducing BYTE-IDENTICALLY — the
 committed file is still the bytes the JS wrote, and the `schematic` ctest holds
 the native projection to them for all 20 tracks. What no longer has JS evidence
-is a track added AFTER the recording; `tests/track.test.js` covers those against
+is a track added or re-baked AFTER the recording (its rows re-emitted with
+`--record`); `tests/track.test.js` covers those against
 the live geometry, but as C++ agreeing with C++.
 
 The consequence is the one the ratchet always had: a frozen corpus can be
