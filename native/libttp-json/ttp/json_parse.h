@@ -8,9 +8,16 @@
 // through strtod, which is correctly rounded for decimal->binary64, so a value
 // round-trips exactly: parse(canonical_stringify(v)) == v for finite numbers.
 //
-// NOT a validating parser for hostile input: it trusts structure it has already
-// matched (the peer here is our own adapter, and the relay's JSON is re-encoded
-// by the browser before it reaches us).
+// It reads HOSTILE text: the relay's frames and the fastlane's packets arrive
+// raw from anyone holding the room code (ttp_framing_classify, ttp_link_inbound).
+// What it guarantees on any input is that it either parses or fails, never
+// crashes: nesting deeper than MAX_DEPTH fails the parse, so its recursion (and
+// the recursive destroy and stringify of what it built) is bounded whatever the
+// text. Length is NOT bounded here, because the ABI also hands it large trusted
+// payloads; the network entry points cap length before they call it.
+//
+// It is still not a validator: it is lenient about what it accepts (trailing
+// bytes, loose numbers, unpaired surrogates), and a caller checks the shape.
 //
 // STRICT_NUMBERS is for the conformance corpora, where the numbers ARE the
 // evidence: every token is reformatted with js_number_to_string and must equal
@@ -32,6 +39,12 @@ namespace json {
 
 enum NumberMode { LENIENT_NUMBERS, STRICT_NUMBERS };
 
+// Containers open at once. Everything this tree parses nests under ten (the
+// room snapshot, every corpus, every glTF document), so 64 is headroom; at that
+// depth the recursion costs tens of KB of stack, which every platform's thread
+// has to spare.
+inline constexpr int MAX_DEPTH = 64;
+
 class Parser {
  public:
   explicit Parser(const std::string& src, NumberMode numbers = LENIENT_NUMBERS)
@@ -40,13 +53,14 @@ class Parser {
   // Parse one value. Returns false on malformed input (out is then undefined).
   bool parse(Value& out) {
     ws();
-    if (!value(out)) return false;
+    if (!value(out, 0)) return false;
     ws();
     return true;  // trailing bytes tolerated (one value per call site)
   }
 
   // Why the last parse() failed, when it can be said more precisely than
-  // "malformed" (currently: a STRICT_NUMBERS round-trip miss). Empty otherwise.
+  // "malformed" (a STRICT_NUMBERS round-trip miss, or nesting past MAX_DEPTH).
+  // Empty otherwise.
   const std::string& error() const { return err_; }
 
  private:
@@ -132,10 +146,15 @@ class Parser {
     return false;  // unterminated
   }
 
-  bool value(Value& v) {
+  // `depth` is how many containers enclose v.
+  bool value(Value& v, int depth) {
     ws();
     if (eof()) return false;
     const char c = s_[p_];
+    if ((c == '{' || c == '[') && depth >= MAX_DEPTH) {
+      err_ = "nesting deeper than " + std::to_string(MAX_DEPTH);
+      return false;
+    }
     if (c == '{') {
       p_++;
       v = Value::Obj();
@@ -149,7 +168,7 @@ class Parser {
         if (eof() || s_[p_] != ':') return false;
         p_++;
         Value child;
-        if (!value(child)) return false;
+        if (!value(child, depth + 1)) return false;
         v.set(std::move(key), std::move(child));
         ws();
         if (eof()) return false;
@@ -165,7 +184,7 @@ class Parser {
       if (!eof() && s_[p_] == ']') { p_++; return true; }
       while (true) {
         Value child;
-        if (!value(child)) return false;
+        if (!value(child, depth + 1)) return false;
         v.push(std::move(child));
         ws();
         if (eof()) return false;

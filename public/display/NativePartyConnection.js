@@ -20,6 +20,8 @@ import { loadNativeRuntime } from './nativeRuntime.js';
 
 let M = null;
 let fn = null;
+// ttp_party_max_inbound_bytes, read once: see ws.onmessage.
+let maxInbound = 0;
 
 export async function init() {
   if (M) return;
@@ -38,6 +40,7 @@ export async function init() {
     maxReconnectAttempts: c('ttp_framing_max_reconnect_attempts', 'number', []),
     pinUrl: c('ttp_framing_pin_url', 'string', ['string', 'string', 'string'])
   };
+  maxInbound = M.ccall('ttp_party_max_inbound_bytes', 'number', [], []);
 }
 
 // base + '/' + enc(room) + '?instance=' + enc(instance), or `base` unchanged
@@ -98,8 +101,14 @@ export class NativePartyConnection {
 
     ws.onmessage = (event) => {
       if (this.ws !== ws) return;             // stale
+      const text = String(event.data);
+      // Longer than the ABI reads: dropped HERE, because cwrap copies the
+      // string onto the fixed wasm stack, which a long enough frame overflows
+      // before C++ can refuse it. `length` counts UTF-16 units, never more than
+      // the UTF-8 bytes C++ counts, so this drops nothing C++ would keep.
+      if (text.length > maxInbound) return;
       // The ABI classifies the RAW text: route + payload, or 'none' to drop.
-      const r = JSON.parse(fn.classify(String(event.data)));
+      const r = JSON.parse(fn.classify(text));
       if (r.route === 'message') {
         if (this.onMessage) this.onMessage(r.from, r.data);
       } else if (r.route === 'state') {

@@ -598,6 +598,25 @@ test('asym: a packet with neither `pa` nor `h` is counted and silently ignored b
   assert.equal(fl.getStats(1).lastPsSeen, 9);
 });
 
+test('fastlane: hostile packets are dropped unread, and the link keeps applying', async () => {
+  // A DataChannel is open to any phone that joined, so its text is as hostile
+  // as the relay's (wire-compat.test.js has the frame-side twin and the why).
+  // Too deep, or past the wasm stack: neither may reach the Link, be counted,
+  // or stop the next real packet applying.
+  const ctx = await bringUpLink();
+  H.withFakeClock((clock) => {
+    const { displayCh } = pairAndOpen(ctx);
+    const deep = '{"h":' + '['.repeat(4500) + ']'.repeat(4500) + '}';
+    const huge = '{"h":[],"pad":"' + 'x'.repeat(2 << 20) + '"}';
+    for (const text of [deep, huge]) displayCh.onmessage({ data: text });
+    assert.equal(ctx.display.getStats(1).received, 0, 'neither hostile packet was counted');
+
+    ctx.net.sendControl({ s: 0.5, b: 0, u: 0 }, clock.now);
+    clock.flush();
+    assert.deepEqual(ctx.applied.map((a) => a.ev.s), [0.5], 'the next real CONTROL applies');
+  });
+});
+
 test('fastlane: a closed channel drops on both sides without counting the write', async () => {
   const abi = await H.loadAbi();
   const h = abi.link.create();

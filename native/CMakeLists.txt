@@ -291,6 +291,15 @@ add_test(NAME json_escape
   COMMAND json_escape_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-escape-corpus.jsonl
 )
 
+# ---- The parser on hostile text ----------------------------------------------
+# json_parse.h's nesting limit, at its boundary and far past it. The relay and
+# the fastlane hand the parser raw network text, so this is what keeps a few KB
+# of '[' from crashing a display.
+add_executable(json_parse_check simtest/json_parse_check.cc)
+target_link_libraries(json_parse_check PRIVATE libttp_json ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(json_parse_check)
+add_test(NAME json_parse COMMAND json_parse_check)
+
 # ---- Conformance: the cup-series scoring corpus ------------------------------
 # Replays tests/fixtures/grandprix-corpus.jsonl against CupSeries + ShuffleBag.
 # The cup layer was ported for parity and then never replayed by anything — no

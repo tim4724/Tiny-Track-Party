@@ -8,6 +8,7 @@
 #include "ttp_party.h"
 #include "ttp_runtime.h"
 
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
@@ -356,6 +357,20 @@ const char* put(std::string& buf, const Value& v) {
   buf = canonical_stringify(v);
   return buf.c_str();
 }
+
+// The most raw text ttp_framing_classify and ttp_link_inbound will parse. Both
+// read the network, where anyone holding the room code can send anything, so
+// longer text is dropped unread. What a display acts on is a few KB at most (a
+// phone's SDP is the largest), and nothing on the relay bounds a message
+// frame, so the size is a choice: twice the largest frame the relay sends a
+// display at all, the replay of its own retained snapshot, which the relay
+// does cap (tests/wire-compat/relay-contract.json maxStateBytes) and which
+// tests/wire-compat.test.js holds to still classifying.
+constexpr size_t MAX_INBOUND_BYTES = 32 * 1024;
+
+bool oversized(const char* text) {
+  return strnlen(text, MAX_INBOUND_BYTES + 1) > MAX_INBOUND_BYTES;
+}
 }  // namespace
 
 const char* ttp_framing_encode_create(const char* clientId, double maxClients, const char* urlOrNull) {
@@ -389,14 +404,16 @@ const char* ttp_framing_encode_close_room(void) {
 
 const char* ttp_framing_classify(const char* frameText) {
   bool ok = false;
-  Value frame = frameText && *frameText ? json::parse(frameText, &ok) : Value::Null();
+  Value frame = frameText && *frameText && !oversized(frameText)
+                    ? json::parse(frameText, &ok) : Value::Null();
   Value out = Value::Obj();
   if (!ok || frame.type != Value::OBJ) {
-    // Not a JSON object — malformed text, or valid JSON that is a scalar or array.
-    // Both are dropped. The kit only agrees with this since the typeof guard in
-    // PartyConnection.js's onmessage: before it, `null` threw a TypeError out of the
-    // handler and `7`/`"x"`/`[1,2]` reached onProtocol with an undefined type. The
-    // raw-text cases in framing-corpus.jsonl pin the agreed behaviour.
+    // Not a JSON object: malformed text (oversized and too-deep included), or
+    // valid JSON that is a scalar or array. All are dropped. The kit only agrees
+    // with this since the typeof guard in PartyConnection.js's onmessage: before
+    // it, `null` threw a TypeError out of the handler and `7`/`"x"`/`[1,2]`
+    // reached onProtocol with an undefined type. The raw-text cases in
+    // framing-corpus.jsonl pin the agreed behaviour.
     out.set("route", Value::Str("none"));
     return put(g_bufClassify, out);
   }
@@ -415,6 +432,8 @@ const char* ttp_framing_classify(const char* frameText) {
   }
   return put(g_bufClassify, out);
 }
+
+int ttp_party_max_inbound_bytes(void) { return static_cast<int>(MAX_INBOUND_BYTES); }
 
 const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBefore,
                                       double maxAttempts, int shouldReconnectBefore) {
@@ -504,7 +523,8 @@ const char* ttp_link_inbound(int h, const char* packetText, double nowMs) {
   LinkHandle* lh = linkOf(h);
   if (!lh) return EMPTY_OUTCOME;
   bool ok = false;
-  Value pkt = packetText && *packetText ? json::parse(packetText, &ok) : Value::Null();
+  Value pkt = packetText && *packetText && !oversized(packetText)
+                  ? json::parse(packetText, &ok) : Value::Null();
   if (!ok) pkt = Value::Null();  // non-object: Link ignores it (and counts nothing)
   return outcomeJson(lh, lh->link.handleInbound(pkt, nowMs));
 }
