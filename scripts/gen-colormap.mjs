@@ -13,8 +13,8 @@
 // shipped here until round 27); the file itself is ours, and a new swatch is a
 // new row in this table. Unused cells stay black.
 //
-//   node scripts/gen-colormap.mjs        then gen-kit-colors.mjs and a rebuild:
-// the renderer bakes every model's colours from this file (kit_colors.h).
+//   node scripts/gen-colormap.mjs        then gen-kit-atlas.mjs and a rebuild:
+// the renderer bakes every model's colours from this file (kit_atlas.h).
 
 import fs from 'node:fs';
 import path from 'node:path';

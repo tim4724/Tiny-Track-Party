@@ -37,6 +37,8 @@ struct GlbMeshPrim {
     std::vector<float> normal;    // 3 per vertex; empty when the file has none
     std::vector<float> uv;        // 2 per vertex; empty when the file has none
     std::vector<uint32_t> idx;    // triangles
+    bool textured = false;        // its material samples a base colour texture
+                                  // (the kit's one atlas) and it carries a uv
 };
 
 struct GlbMeshNode {
@@ -266,6 +268,14 @@ inline std::vector<GlbMeshNode> read_glb_meshes(const uint8_t* bytes, size_t len
             if (!readIndices(doc, (size_t) idx->num, bin, binLen, out.idx)
                     || out.idx.size() % 3) {
                 return {};
+            }
+            if (const Value* mat = p.find("material"); mat && !out.uv.empty()) {
+                const Value* mats = doc.find("materials");
+                if (mats && mats->type == Value::ARR && (size_t) mat->num < mats->arr.size()) {
+                    const Value& m = mats->arr[(size_t) mat->num];
+                    const Value* pbr = m.type == Value::OBJ ? m.find("pbrMetallicRoughness") : nullptr;
+                    out.textured = pbr && pbr->type == Value::OBJ && pbr->has("baseColorTexture");
+                }
             }
             decoded[m].push_back(std::move(out));
         }

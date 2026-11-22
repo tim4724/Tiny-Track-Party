@@ -9,14 +9,12 @@
 // WHAT THIS GRAFTS. Blender's exporter writes no images here (export_image_format
 // NONE), so the builder's one material comes out as a bare white factor over
 // its UVs. This points it at the shared colour atlas by URI (Textures/colormap.png,
-// scripts/gen-colormap.mjs), which is what gen-kit-colors.mjs and the
-// renderer's merge need (only external atlases are handled).
+// scripts/gen-colormap.mjs), which is what the renderer's bake
+// samples (ttp/kit_colors.h).
 //
 //   node scripts/gen-set-prototypes.mjs [name ...]      (all pieces when none named)
 //
-// Needs `blender` on the PATH. Run gen-kit-colors.mjs after, or the new bytes
-// miss the colour table and draw live-lit (tests/codegen-freshness.test.js says
-// so). `node scripts/set-check.mjs <name>` then says whether a part was left
+// Needs `blender` on the PATH. `node scripts/set-check.mjs <name>` then says whether a part was left
 // floating (tests/set-pieces.test.js holds the shipped set to it), and
 // `npm run score:landmarks` how well a racer sees the piece where it stands.
 

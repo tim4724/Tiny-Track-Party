@@ -28,7 +28,7 @@
 // the caster set before the bake (keepTravellersOutOfBake), or its shadow
 // would stay behind where it was authored.
 #include "TtpRendererImpl.h"
-#include "../generated/kit_colors.h"
+#include "ttp/kit_colors.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -144,7 +144,7 @@ void TtpRenderer::buildSetMovers() {
         if (keyIt == mAssetMeshKey.end()) continue;
         const auto meshIt = mGlbMeshCache.find(keyIt->second);
         if (meshIt == mGlbMeshCache.end()) continue;
-        const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
+        const ttp::kitcolors::Model* const colorModel = kitColors(keyIt->second);
         for (size_t k = 0; k < mSetInstances[m].size(); k++) {
             gltfio::FilamentInstance* const inst = mSetInstances[m][k];
             if (!inst) continue;

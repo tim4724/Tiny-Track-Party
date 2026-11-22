@@ -6,7 +6,7 @@
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py -- --roster
 #       the four SHIPPED cars (toy_cars.ROSTER) and the monster truck into
 #       public/assets/toycar/.
-#       Then: scripts/dedupe-wheel-meshes.mjs, scripts/gen-kit-colors.mjs and a
+#       Then: scripts/dedupe-wheel-meshes.mjs and a
 #       wasm rebuild, scripts/capture-car-thumbs.js.
 #   blender -b --factory-startup --python scripts/gen-concept-cars.py [-- name ...]
 #       the CONCEPT cars (toy_cars.CARS) into public/assets/concepts/ with an

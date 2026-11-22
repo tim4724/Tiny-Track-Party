@@ -256,7 +256,13 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
     .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
   const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps, ...placed]);
-  // A lite build (<m>-lite.glb) is what the lite tier draws in m's place.
+  // A lite build (<m>-lite.glb) is what the lite tier draws in m's place. Only
+  // the themed lists are renamed to it (ttp/theme.h lite_models), and each TV
+  // app ships one tier's files (its stage-assets.sh), so a car or an always
+  // loaded prop with a lite build would be asked for by a name the Android TV
+  // app does not carry.
+  assert.deepEqual([...CARS, ...PROPS].filter((m) => kit.includes(`${m}-lite`)), [],
+    'a car or an always-loaded prop has a lite build the lite tier would never draw');
   for (const m of [...drawnBy]) drawnBy.add(`${m}-lite`);
   assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
     'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');

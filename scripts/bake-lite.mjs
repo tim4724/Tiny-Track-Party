@@ -17,8 +17,8 @@
 //
 // SOURCES.json records each bake ({ generated, from, ratio }), so a re-run
 // with no arguments re-derives every lite build from its current original.
-// Run gen-kit-colors.mjs and gen-track-defs-header.mjs after, then rebuild the
-// engine (tests/codegen-freshness.test.js holds both headers to the assets).
+// Run gen-track-defs-header.mjs after, then rebuild the engine
+// (tests/codegen-freshness.test.js holds the header to the assets).
 //
 // Needs `blender` on the PATH.
 // Usage: node scripts/bake-lite.mjs [model:ratio ...]   e.g. set-ranch:0.35

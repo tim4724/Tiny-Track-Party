@@ -397,7 +397,8 @@ branch, before any build), and what lite takes off the frame is
 baseline and ceilings are this box's, and a world change is priced against
 them; `full`'s are the Apple TV's. `setprop debug.ttp.detail full` draws the
 full world here instead, read when the surface is created: the A/B for what
-lite buys on this GPU, which no host count can say. `perf-race --detail
+lite buys on this GPU, which no host count can say (the APK carries only
+lite's models unless it was built with `TTP_STAGE_TIERS=all`). `perf-race --detail
 lite|full` sets the property before its launch and clears it after, and every
 create logs its answer (`DisplayHost: detail tier lite (debug.ttp.detail
 unset)`). Read the tier off the bench header, which prints the readout's

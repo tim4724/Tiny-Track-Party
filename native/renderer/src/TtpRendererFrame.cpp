@@ -2,6 +2,7 @@
 // passes. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
+#include <cstdio>
 #include <utils/Log.h>
 
 #include "TtpRendererKit.h"
@@ -3610,7 +3611,18 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
             mSetMovers.clear();
             mSetSkins.clear();
         }
-        else buildDressingMerge();
+        else {
+            // The scene build's last leg, a frame after the phases above it
+            // printed (buildTrack), and the one that samples a model's colours
+            // the first time it is baked (kitColors).
+            const double t0 = ttpNowMs();
+            mKitColorMs = 0.0;
+            buildDressingMerge();
+            char line[96];
+            std::snprintf(line, sizeof line, "ttp dress merge: %.1f ms (colours %.1f)",
+                    ttpNowMs() - t0, mKitColorMs);
+            utils::slog.i << line << utils::io::endl;
+        }
         if (mSetIdOn) paintSetIds();
         mGlPrioDirty = true;
     }

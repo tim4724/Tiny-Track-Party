@@ -12,7 +12,8 @@
 #include <mutex>
 
 #include "TtpRendererImpl.h"
-#include "../generated/kit_colors.h"
+#include "ttp/kit_colors.h"
+#include "../generated/kit_atlas.h"
 
 #include "ttp/glb.h"
 // The meshoptimizer the Filament SDK already links (native/vendor/meshoptimizer):
@@ -1581,8 +1582,21 @@ const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
     return it->second.empty() ? nullptr : &it->second;
 }
 
+const ttp::kitcolors::Model* TtpRenderer::kitColors(uint64_t key) {
+    const auto meshIt = mGlbMeshCache.find(key);
+    if (meshIt == mGlbMeshCache.end() || meshIt->second.empty()) return nullptr;
+    const auto it = mKitColors.find(key);
+    if (it != mKitColors.end()) return it->second.get();
+    const auto t0 = std::chrono::steady_clock::now();
+    auto model = std::make_unique<ttp::kitcolors::Model>();
+    ttp::kitcolors::model_colors(meshIt->second, ttp::kitcolors::kAtlas,
+            ttp::kitcolors::kAtlasWidth, ttp::kitcolors::kAtlasHeight, *model);
+    mKitColorMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    return (mKitColors[key] = std::move(model)).get();
+}
+
 // The baked form of one run (MergedGroup::baked): every copy's vertices in
-// world space, coloured with the kit table's texture colour (the atlas's own
+// world space, coloured with the kit's texture colour (kitColors) (the atlas's own
 // sRGB bytes) times the LIVE instance's baseColorFactor (the biome's recolour
 // lands there, not in the GLB) times the matte light of the copy's own world
 // normal, as one unlit mesh in display space. Refuses — and the caller falls back to the instanced draw — when the
@@ -1638,7 +1652,7 @@ bool TtpRenderer::bakeFactors(utils::Entity src,
 }
 
 // One copy of a mesh into a baked mesh: its vertices in world space under
-// `xf`, each coloured with the table's texture colour times the prim's factor
+// `xf`, each coloured with the kit's texture colour times the prim's factor
 // times the matte light of its own world normal.
 void TtpRenderer::appendBaked(Mesh& m, const mat4f& xf,
         const std::vector<ttp::rt::GlbMeshPrim>& prims,
@@ -1817,7 +1831,7 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
         if (!run.empty()) runs.push_back(std::move(run));
     }
 
-    // A static run the kit colour table covers is BAKED (MergedGroup::baked):
+    // A static run kitColors can colour is BAKED (MergedGroup::baked):
     // same draw count, no instancing, nothing lit at draw time. That holds for
     // a run of ONE as well: a straggler has nothing to instance with, but left
     // on its gltfio draw it is lit per vertex and per fragment beside identical

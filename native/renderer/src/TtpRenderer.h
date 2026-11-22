@@ -2630,8 +2630,8 @@ private:
         utils::Entity ent;
         std::vector<MergedPrim> prims;
         filament::InstanceBuffer* ibuf = nullptr;
-        // THE BAKED FORM, for a STATIC group whose model the kit colour table
-        // knows (generated/kit_colors.h): the copies expanded into one
+        // THE BAKED FORM, for a STATIC group whose model kitColors can
+        // colour: the copies expanded into one
         // world-space mesh with base colour x matte light folded per vertex,
         // drawn unlit — no instance buffer, no tangents, no texture, no
         // shading. `ent` is this mesh's entity and `prims`/`ibuf` stay empty.
@@ -2732,6 +2732,12 @@ private:
     std::unordered_map<std::string, uint64_t> mGlbKeyOf;
     const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
             const std::vector<uint8_t>& glb);
+    // A parsed model's base colour per vertex (ttp/kit_colors.h), sampled from
+    // the atlas on first ask and kept as long as the parse; null for a model
+    // glbMeshes could not decode, whose copies keep the instanced, live-lit draw.
+    const ttp::kitcolors::Model* kitColors(uint64_t key);
+    std::unordered_map<uint64_t, std::unique_ptr<ttp::kitcolors::Model>> mKitColors;
+    double mKitColorMs = 0.0;   // what the sampling cost the merge now building (its log line)
     bool buildMergedGroup(std::vector<MergedGroup>& out,
             const std::vector<utils::Entity>& sources,
             const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,

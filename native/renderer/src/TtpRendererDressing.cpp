@@ -1,7 +1,7 @@
 // Trackside dressing: the scenery scatter, landmarks, water and clutter.
 // TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
-#include "../generated/kit_colors.h"
+#include "ttp/kit_colors.h"
 #include "TtpRendererKit.h"
 
 #include <cstdio>
@@ -2743,14 +2743,14 @@ void TtpRenderer::buildStructuresReceiver() {
 }
 
 // A set piece's `floor` part into mStructures: its vertices in world space,
-// each with the kit table's colour times its prim's factor as albedo (the
+// each with the kit's colour (kitColors) times its prim's factor as albedo (the
 // receiver bakes the light). False leaves the part to draw as gltfio loaded it.
 bool TtpRenderer::appendFloorPart(const gltfio::FilamentAsset* asset, utils::Entity e) {
     const auto keyIt = mAssetMeshKey.find(asset);
     if (keyIt == mAssetMeshKey.end()) return false;
     const auto meshIt = mGlbMeshCache.find(keyIt->second);
     if (meshIt == mGlbMeshCache.end()) return false;
-    const ttp::kitcolors::Model* colorModel = ttp::kitcolors::find(keyIt->second);
+    const ttp::kitcolors::Model* colorModel = kitColors(keyIt->second);
     const char* nm = asset->getName(e);
     if (!colorModel || !nm) return false;
     const ttp::rt::GlbMeshNode* node = nullptr;
@@ -2805,9 +2805,9 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     // the slots are the same in every instance.
     const utils::Entity* ents = insts[0]->getEntities();
     const auto spins = [&](size_t e) { return hangsUnder(asset, tcm, ents[e], isSpin); };
-    // The kit colour table for this model, keyed by the same bytes hash; a
+    // The kit's colours for this model, keyed by the same bytes hash; a
     // model it does not know keeps the instanced, live-lit draw.
-    const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
+    const ttp::kitcolors::Model* const colorModel = kitColors(keyIt->second);
     for (auto* in : insts) {
         if (!in || in->getEntityCount() != nEnt) return;
     }
@@ -2897,7 +2897,7 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
 // border and two neighbours can never open a crack between them.
 //
 // Every check runs on instance 0, before anything is built, and refuses the
-// whole model when a part is one the kit table cannot colour: the placements
+// whole model when a part is one kitColors cannot colour: the placements
 // are instances of one model sharing its materials (loadInstancedProp), so
 // what holds for one holds for all and a model is never half baked.
 bool TtpRenderer::bakePlacements(const std::vector<gltfio::FilamentInstance*>& insts,

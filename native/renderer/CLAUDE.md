@@ -330,7 +330,7 @@ only near exact; `vpresent` and `voverlay` sit past all of it and read bytes.
   coordinates and world units stay high. `vshadow` is medium though blended;
   the other blended materials (`vglbfade`, `vblend`, `vcloud`, `vburst`,
   `vpoint`) keep their default precision.
-- **The kit colour table is the atlas's own bytes** (`gen-kit-colors.mjs`),
+- **A baked vertex's colour is the atlas's own bytes** (`ttp/kit_colors.h`),
   sampled the way the GPU samples them; the merged bake decodes them to
   multiply the light and encodes the product once.
 - **Blends, fog and the deck's compositing happen in gamma space**, as they
@@ -1046,11 +1046,11 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
 - **A STATIC dressing group is BAKED, not instanced** (`MergedGroup::baked`,
   `bakeMergedRun`): the copies expand into one world-space mesh whose vertex
   colour is texture × live baseColorFactor × matte light, drawn unlit. The texture
-  half comes from `generated/kit_colors.h` (`scripts/gen-kit-colors.mjs`, gated by
-  codegen-freshness) — the kit's atlas is flat swatches, so a vertex sample
-  interpolates back to the picture. The FACTOR is read from the live instance,
-  never the GLB, because the biome recolours untextured models through it. A model
-  the table does not know keeps the instanced, live-lit draw.
+  half is sampled from the atlas per vertex when a model is first baked
+  (`kitColors`, `ttp/kit_colors.h`; the atlas's bytes are `generated/kit_atlas.h`,
+  gated by codegen-freshness) — the kit's atlas is flat swatches, so a vertex
+  sample interpolates back to the picture. The FACTOR is read from the live instance,
+  never the GLB, because the biome recolours untextured models through it.
 - **An INSTANCED prim that is not flat is welded on bit-identical (position,
   normal, uv) first** (`weldPrimExact`): same attributes, same quats, same
   pixels, fewer vertices per instance. A baked run expands the prims as they
@@ -1217,7 +1217,9 @@ of the vertices are the road, the cars and the ground, which it does not touch. 
 changes no sim, so `film:laps -- --detail lite` films the same race frame for
 frame beside full, and `score:verge -- --detail lite` scores it. `perf:race --
 --detail lite|full` prices either tier on any of the three shells; the
-readout's `detail` is the tier the display was handed, read in C++.
+readout's `detail` is the tier the display was handed, read in C++. Each TV app
+SHIPS only its own tier's models (its `stage-assets.sh`), so pricing the other
+tier there takes a build staged with `TTP_STAGE_TIERS=all`.
 
 **What a draw cut buys is a fact about the device.** On a fill-bound frame (the
 Android box) it steadies the tail and leaves the median; on a submission-bound one
