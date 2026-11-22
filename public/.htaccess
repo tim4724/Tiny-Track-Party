@@ -1,0 +1,88 @@
+# Server config of every deployed host: Apache 2.4 on Hetzner Webhosting (main,
+# at tinytrack-main and tinytrack.paperballoon.games) and the Dockerfile's httpd
+# image (branch previews on k8s). Both serve site/
+# (scripts/build-site.mjs). Local dev runs server/index.js instead, which reads
+# the CSP below and mirrors the routes (server/site.js).
+
+RewriteEngine On
+RewriteBase /
+
+# www, then HTTPS. www resolves only because Hetzner's certificate always
+# covers it, so it redirects rather than serving a second origin. Host-scoped,
+# so a local run of the image stays plain HTTP. TLS ends at the proxy in front
+# of Apache (Hetzner's, or Traefik on previews), which says so in
+# X-Forwarded-Proto. ACME HTTP-01 challenges must stay reachable on every host.
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+RewriteCond %{HTTP_HOST} ^www\.(.+\.paperballoon\.games)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
+RewriteCond %{HTTP_HOST} paperballoon\.games$ [NC]
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# Never serve dotfiles, except /.well-known/ (app links, ACME).
+RewriteRule (^|/)\.(?!well-known/) - [R=404,L]
+
+RewriteRule ^$ display/index.html [END]
+# Liveness check for the k8s readiness probe and uptime monitoring.
+RewriteRule ^health$ health.txt [END]
+RewriteRule ^licenses/?$ licenses.html [END]
+# server/site.js's JSON_ROUTES, baked to files.
+RewriteRule ^api/([\w-]+)$ api/$1.json [END]
+
+# Room join links (/<CODE>?pbp=web#<instance>) serve the controller, except
+# server/site.js's RESERVED_SEGMENTS, which 404 (tests/site.test.js).
+RewriteCond $1 !^(display|controller|shared|assets|partyplug|gallery|trailer|kits|api|health|privacy|about|terms|robots|sitemap|favicon|licenses|licences|credits|imprint|legal)$ [NC]
+RewriteRule ^([A-Za-z0-9_-]{1,24})/?$ controller/index.html [END]
+
+# Types a stock mime.types may lack. The engine's correct type is what enables
+# WebAssembly.instantiateStreaming. The license notices open in place rather
+# than download.
+AddType application/wasm .wasm
+AddType text/javascript .mjs
+AddType model/gltf-binary .glb
+AddType application/octet-stream .filamat
+AddType text/plain .md
+AddCharset utf-8 .txt .md
+# The App Clip's app-site-association: Apple's CDN only accepts it as
+# application/json, and the file has no extension.
+<Files "apple-app-site-association">
+  ForceType application/json
+</Files>
+
+# Compression, brotli else gzip. The full list, text types too: a type list
+# here REPLACES the server's own rather than adding to it. The engine wasm is
+# the whole cold load and shrinks ~3x; the GLBs and Filament materials are
+# binary but not compressed formats, and every boot fetches dozens of them.
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml application/wasm model/gltf-binary application/octet-stream
+</IfModule>
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml application/wasm model/gltf-binary application/octet-stream
+</IfModule>
+
+Header always set Strict-Transport-Security "max-age=31536000"
+Header always set X-Content-Type-Options "nosniff"
+# Only tinytrack.paperballoon.games is for search engines; tinytrack-main and
+# the previews are review hosts.
+Header always set X-Robots-Tag "noindex, nofollow" "expr=%{HTTP_HOST} != 'tinytrack.paperballoon.games'"
+
+# CSP. Every script is a same-origin file, so no nonce. 'wasm-unsafe-eval'
+# admits WebAssembly only (the engine), not JS eval. connect-src: the relay
+# (STUN is UDP, which CSP does not govern). Only the display and the controller
+# may be framed, by the galleries on the same host.
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' wss://ws.paperballoon.games https://ws.paperballoon.games; img-src 'self' data:; object-src 'none'; frame-src 'self'; frame-ancestors 'none'"
+<If "%{REQUEST_FILENAME} =~ m#/(display|controller)/index\.html$#">
+  Header always edit Content-Security-Policy "frame-ancestors 'none'" "frame-ancestors 'self'"
+</If>
+
+# Caching. Code is never stored: a page restored by Back reuses cached
+# subresources WITHOUT revalidating, even under no-cache, and old scripts beside
+# a freshly fetched engine fail the boot's ABI checks. CSS too, as its ?v= is
+# the app version, which deploys do not bump. Everything else revalidates by
+# Last-Modified. No "always", so errors aren't cached.
+Header set Cache-Control "no-cache"
+<FilesMatch "\.(html|js|mjs|wasm|filamat|css)$">
+  Header set Cache-Control "no-store"
+</FilesMatch>

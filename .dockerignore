@@ -1,4 +1,5 @@
 node_modules
+site
 .git
 *.md
 .github
@@ -6,8 +7,9 @@ node_modules
 .playwright-mcp
 tests
 scripts
-# …except the trailer's shot list: the server serves it to /trailer.html, so the
-# editor deployed anywhere can load the committed cut. The Dockerfile copies it.
+# …except what the Dockerfile's build stage runs: build-site and the trailer's
+# shot list it bakes into /api/trailer-shots.
+!scripts/build-site.mjs
 !scripts/trailer/shots.js
 test-results
 # Audition candidate dumps (see .gitignore). Gone from git, but a checkout that
