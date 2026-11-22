@@ -419,12 +419,21 @@ test('landmark gallery page: Full and Lite compared', async ({ page }) => {
   await page.keyboard.press('ArrowLeft');
   await expect.poll(async () => { const [a, b] = await both(car); return JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
 
-  await page.keyboard.press('g');
+  // Compare opens on the free camera (in a race, the race's own), and it is
+  // one camera: keys in the first stage and a drag in the lite one fly both.
+  await expect.poll(() => both((L) => L.race().cam)).toEqual(['free', 'free']);
   await page.keyboard.down('w');
   await page.waitForTimeout(300);
   await page.keyboard.up('w');
   const eye = (L) => L.moment().free;
   await expect.poll(async () => { const [a, b] = await both(eye); return !!a && JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+  const yaw = (await both(eye))[0].yaw;
+  const lite = await page.locator('#lm-stage-b').boundingBox();
+  await page.mouse.move(lite.x + lite.width / 2, lite.y + lite.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(lite.x + lite.width / 2 + i * 15, lite.y + lite.height / 2);
+  await page.mouse.up();
+  await expect.poll(async () => { const [a, b] = await both(eye); return a.yaw !== yaw && JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
 
   await page.keyboard.press('b');
   await expect(page.locator('#lm-stage-b-box')).toBeHidden();

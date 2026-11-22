@@ -344,8 +344,8 @@ section.stage iframe {
    judging the whole cell. Overlays again where the screen is too narrow. */
 .stage--beside { display: flex; }
 /* The landmark stage, or under Compare its two tiers side by side (stacked
-   where the window is narrow), each tagged. The second takes the first's
-   camera and none of the pointer. */
+   where the window is narrow), each tagged. Either one flies the shared
+   free camera (gallery-landmarks.js followTick). */
 .lm-stages { flex: 1 1 auto; min-width: 0; height: 100%; display: grid; }
 .lm-stages.is-compare { grid-template-columns: 1fr 1fr; gap: 2px; }
 .lm-stages__one { position: relative; min-width: 0; min-height: 0; }
@@ -357,7 +357,6 @@ section.stage iframe {
   color: #b9c3ff; background: rgba(6, 6, 15, 0.72); border: 1px solid rgba(140, 160, 255, 0.4);
 }
 .lm-stages.is-compare .lm-stages__tag { display: block; }
-#lm-stage-b { pointer-events: none; }
 @media (max-width: 900px) {
   .lm-stages.is-compare { grid-template-columns: none; grid-template-rows: 1fr 1fr; }
 }

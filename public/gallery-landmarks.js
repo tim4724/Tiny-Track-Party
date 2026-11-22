@@ -1105,6 +1105,8 @@ const stagesBox = document.getElementById('lm-stages');
 const boxB = document.getElementById('lm-stage-b-box');
 function setCompare(on) {
   state.compare = on;
+  camLead = 'a';
+  wantFree = on;   // Compare opens on the free camera
   if (on) state.tab = 'diff';
   else if (state.tab === 'diff') state.tab = round ? 'review' : 'pieces';
   save();
@@ -1117,7 +1119,15 @@ function setCompare(on) {
   diffOf = null;
   if (on) {
     frameB.src = stageUrl('lite', false);
-    whenReady(frameB, (h) => { lmB = h; h.timeScale(rate()); drawDiff(); },
+    whenReady(frameB, (h) => {
+      lmB = h;
+      h.timeScale(rate());
+      const win = frameB.contentWindow;
+      for (const ev of ['pointerdown', 'wheel', 'keydown']) win.addEventListener(ev, () => { camLead = 'b'; }, true);
+      win.addEventListener('keydown', onKey);
+      win.addEventListener('keyup', onKeyUp);
+      drawDiff();
+    },
               (e) => diffBox.replaceChildren(el('p', 'legend__note', `The lite stage did not build (${errText(e)}).`)));
   } else {
     nextLoad(frameB);   // abandons a load still waiting
@@ -1133,10 +1143,29 @@ function setCompare(on) {
 // every cell's look and parked car and the free camera's eye). So whatever
 // moved the first (a button, a key, a drag in it, a review stop) moves both,
 // and the two pictures differ by the tier. It takes the moment a frame late
-// at most, and no input of its own (pointer-events: none). What it cannot
-// follow is the renderer's own clock: a set piece that moves, or the clouds,
-// run on each stage's own since its build.
+// at most. What it cannot follow is the renderer's own clock: a set piece
+// that moves, or the clouds, run on each stage's own since its build.
+// THE CAMERA IS SHARED BOTH WAYS: the stage last dragged, scrolled or keyed
+// in (`camLead`) leads the free camera, so either one flies both; a drag in
+// the lite stage's view takes its free camera and the first stage's with it.
+// The lite stage leads only when its camera MOVED since it was handed the
+// first's (`handed`): a camera it merely holds must not keep the first in the
+// free view a button or G has just left. The view and the race stay the
+// first stage's.
 let busyB = null;
+let camLead = 'a';
+let wantFree = false;
+let handed = null;
+const sameEye = (p, q) => !!p && !!q && p.yaw === q.yaw && p.pitch === q.pitch
+  && p.eye.x === q.eye.x && p.eye.y === q.eye.y && p.eye.z === q.eye.z;
+function toFree() {
+  if (inRace()) {
+    if (lm.race().cam !== 'free') { lm.raceCam('free'); paintRace(); }
+  } else if (state.view !== 'free') {
+    viewBeforeFree = state.view;
+    setView('free');
+  }
+}
 function followTick() {
   requestAnimationFrame(followTick);
   if (!state.compare || !lm || !lmB || busyB) return;
@@ -1146,7 +1175,15 @@ function followTick() {
     busyB = build.catch(() => {}).then(() => { busyB = null; });
     return;
   }
-  lmB.follow(lm.moment());
+  if (wantFree) { wantFree = false; toFree(); }
+  const b = camLead === 'b' && lmB.moment().free;
+  if (b && !sameEye(b, handed)) {
+    if (!lm.moment().free) toFree();
+    lm.freeAt(b);
+  }
+  const m = lm.moment();
+  lmB.follow(m);
+  handed = m.free;
   if (drawn === 'full' && (!diffOf || diffOf.a !== lm.layout() || diffOf.b !== lmB.layout())) paintDiff();
 }
 requestAnimationFrame(followTick);
@@ -1294,6 +1331,7 @@ function init(h) {
   // window listener, registered first), so the level is set again after it.
   for (const ev of ['pointerdown', 'keydown']) frame.contentWindow.addEventListener(ev, () => syncSound());
   frame.contentWindow.addEventListener('keydown', onKey);
+  for (const ev of ['pointerdown', 'wheel', 'keydown']) frame.contentWindow.addEventListener(ev, () => { camLead = 'a'; }, true);
   frame.contentWindow.addEventListener('keyup', onKeyUp);
   // Grouped by cup, in catalogue order; once, a Res reload keeps it.
   const groups = new Map();

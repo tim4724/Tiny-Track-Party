@@ -1825,10 +1825,12 @@ export function runDisplayScenario(opts, ctx) {
       // A DRAG TAKES THE CAMERA in every other view: the free camera opens at
       // the picture's own eye (a race goes on, or stays paused, under it) and
       // the drag carries on as its first turn. So the stage takes the pointer
-      // in every view (`cam-free`, display.css).
+      // in every view (`cam-free`, display.css). A stage that follows another
+      // (follow) has no orbit of its own to turn: a drag there takes the
+      // camera in the orbit too, and the gallery hands it to the other stage.
       let taking = null;
       scene.container.addEventListener('pointerdown', (e) => {
-        if (mode !== 'orbit' && !free && e.isTrusted) taking = { x: e.clientX, y: e.clientY };
+        if ((mode !== 'orbit' || led) && !free && e.isTrusted) taking = { x: e.clientX, y: e.clientY };
       });
       scene.container.addEventListener('pointerup', () => { taking = null; });
       scene.container.addEventListener('pointermove', (e) => {
@@ -1845,7 +1847,7 @@ export function runDisplayScenario(opts, ctx) {
       const turn = { yaw: 0, pitch: 0, zoom: 1, held: false, drag: null };
       const unturn = () => Object.assign(turn, { yaw: 0, pitch: 0, zoom: 1, held: false });
       scene.container.addEventListener('pointerdown', (e) => {
-        if (mode !== 'orbit') return;
+        if (mode !== 'orbit' || led) return;
         turn.drag = { x: e.clientX, y: e.clientY };
         turn.held = true;
         scene.container.setPointerCapture(e.pointerId);
@@ -2706,6 +2708,9 @@ export function runDisplayScenario(opts, ctx) {
                          poses: poses.slice(),
                          free: free && { eye: { ...free.eye }, yaw: free.yaw, pitch: free.pitch } }),
         follow: (m) => follow(m),
+        // The free camera put where another stage's is ({eye, yaw, pitch}),
+        // when this one has it open: the gallery's two stages share one.
+        freeAt: (v) => { if (free && v) Object.assign(free, { eye: { ...v.eye }, yaw: v.yaw, pitch: v.pitch }); },
         // The scenery and prop GLBs this scene stamps, as the tier in force
         // names them (a lite build is `<model>-lite`).
         models: () => ({ scenery: biomes().sceneryModels(scene.biome()), props: biomes().propModels(scene.biome()) }),
