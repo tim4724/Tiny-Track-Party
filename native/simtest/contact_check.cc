@@ -190,15 +190,21 @@ int main() {
     for (const char* id : TRACKS) {
       BuiltRaceTrack bt = track(id);
       const std::vector<PlayerDesc> pair = field(2);
-      double s0;
-      {
-        Game probe(pair, bt.game, [](const Event&) {});
-        s0 = tightestS(probe.centerline(), probe.length());
-      }
-      const auto place = [&](Game& g, double lat, double dl, double ds, double ha, double hb) {
-        Car& a = *g.cars()[0];
-        Car& b = *g.cars()[1];
-        a.totalS = s0;      a.lat = lat;      a.heading = ha; a.v = 0; a.vlat = 0;
+      // ONE pair of games per track, not a pair per case. Building a Game
+      // samples the whole centerline for its crest table, and doing that twice
+      // for every case was nearly all of this check's run time. Each case
+      // starts instead from the cars exactly as the constructor left them, so
+      // nothing an earlier case did to a car reaches the next one.
+      Game m(pair, bt.game, [](const Event&) {});
+      Game g(pair, bt.game, [](const Event&) {});
+      const Car fresh[2] = {*g.cars()[0], *g.cars()[1]};
+      const double s0 = tightestS(g.centerline(), g.length());
+      const auto place = [&](Game& game, double lat, double dl, double ds, double ha, double hb) {
+        Car& a = *game.cars()[0];
+        Car& b = *game.cars()[1];
+        a = fresh[0];
+        b = fresh[1];
+        a.totalS = s0;      a.lat = lat;     a.heading = ha; a.v = 0; a.vlat = 0;
         b.totalS = s0 + ds; b.lat = lat + dl; b.heading = hb; b.v = 0; b.vlat = 0;
       };
       for (double ds = -1.4; ds <= 1.4001; ds += 0.1)
@@ -211,15 +217,10 @@ int main() {
                 // or the poses would come back already separated. Marking one
                 // car finished does exactly that — a finished car is a ghost to
                 // the racing pack — while leaving every other step identical.
-                double truth;
-                {
-                  Game m(pair, bt.game, [](const Event&) {});
-                  place(m, lat, dl, ds, ha, hb);
-                  m.cars()[1]->finished = true;
-                  m.update(1e-6);
-                  truth = drawnOverlap(m, *m.cars()[0], *m.cars()[1]);
-                }
-                Game g(pair, bt.game, [](const Event&) {});
+                place(m, lat, dl, ds, ha, hb);
+                m.cars()[1]->finished = true;
+                m.update(1e-6);
+                const double truth = drawnOverlap(m, *m.cars()[0], *m.cars()[1]);
                 place(g, lat, dl, ds, ha, hb);
                 Car& a = *g.cars()[0];
                 Car& b = *g.cars()[1];
