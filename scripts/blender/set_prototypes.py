@@ -21941,8 +21941,11 @@ def range_cow(at, yaw=0.0, coat=0x8a5a3c, patch=None, face=0xf8f8fb, k=1.0, pose
     turned by `yaw` (fig_quad). `face`: a Hereford's white, or
     the coat's; `patch` saddles it with a second colour. `pose`: `graze`,
     `up`, `drink` (the muzzle over a tank's rim) or `lie`; `life` hinges
-    the head and neck. `udder` (a dairy cow's) hangs one under the flank."""
-    F = fig_quad('cow', at, yaw, coat, k=k, pose=pose, life=life, patch=patch, face=face)
+    the head and neck. `udder` (a dairy cow's) hangs one under the flank.
+    The plainer build in both tiers, as the flock (flock()): the look the
+    user picked beside the fuller one; the head's life stays."""
+    with lite_parts(True):
+        F = fig_quad('cow', at, yaw, coat, k=k, pose=pose, life=life, patch=patch, face=face)
     if udder and pose != 'lie':
         F.block((0.13, 0.09, 0.13), (-0.2, 0.27), 0xf2bf99)['chamfer'] = 1     # (round-edged: not an ear or a horn)
 

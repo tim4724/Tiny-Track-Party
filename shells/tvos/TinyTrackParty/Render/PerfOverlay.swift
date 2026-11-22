@@ -65,6 +65,11 @@ final class PerfMonitor: ObservableObject {
     /// the build that ships is the only one with the real optimisation level, and
     /// an instrument compiled out of it cannot measure the thing people run.
     static let enabledAtLaunch = UserDefaults.standard.bool(forKey: "ttpPerf")
+    /// `-ttpPerf 0`, said outright: measure and log as asked, but draw no
+    /// panel. A bench puts the readout up for itself, and the panel is a
+    /// layer the system composites over the picture being priced.
+    static let panelHidden = UserDefaults.standard.object(forKey: "ttpPerf") != nil
+        && !enabledAtLaunch
 
     @Published private(set) var visible = false
     @Published private(set) var lines: [String] = []
@@ -236,7 +241,7 @@ struct PerfOverlay: View {
     @ObservedObject var monitor: PerfMonitor
 
     var body: some View {
-        if monitor.visible {
+        if monitor.visible && !PerfMonitor.panelHidden {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(monitor.lines.enumerated()), id: \.offset) { Text($0.element) }
             }
