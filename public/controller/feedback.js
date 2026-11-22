@@ -7,8 +7,8 @@
 // player taps Send, and what is sent is exactly `payload()` below: no name, no
 // room code. It goes to the feedback service all Paper Balloon games share
 // (paperballoon.games, repo Couch-Games, api/feedback.php), which keeps the
-// games themselves static. The privacy policy there lists every field of this
-// game's `data` block; change the two together.
+// games themselves static. The privacy policy there names the kinds of data in
+// this game's `data` block; a new kind belongs there too.
 import { raceStats, sessionId, token } from './raceStats.js';
 import { inShell } from './launcher.js';
 const { ROOM_STATE } = window; // protocol.js is a classic script: the page's globals

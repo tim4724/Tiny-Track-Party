@@ -4,8 +4,8 @@
 // (feedback.js), and only while their "Include race stats" switch is on.
 //
 // Nothing here names anyone: no player names, no room code, no addresses. The
-// privacy policy on paperballoon.games lists these fields; change the two
-// together.
+// privacy policy on paperballoon.games names these kinds of data; a new kind
+// belongs there too.
 
 // One-way delay buckets in ms: under 10, 10-20, ... , 250 and over. Fixed, so
 // submissions add up on the server and percentiles can be read off the sums.
