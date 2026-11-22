@@ -34,6 +34,7 @@ import { trackSchematic } from './NativeSchematic.js';
 import { glbTriangles } from './glbTriangles.js';
 import { assetUrl } from '../shared/assetUrl.js';
 import { FEAT, DEBUG } from './render/Display.js';
+import { biomes } from '../shared/biomes.js';
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO
@@ -924,6 +925,7 @@ export function runDisplayScenario(opts, ctx) {
       let lastHud = -Infinity;
       let passAt = null;          // drivePast's car per 60 Hz update, per scene
       let poses = [];             // what aim() last pushed, per cell (window.__landmarks.poses)
+      let led = false;            // another stage's camera is this one's (follow)
       // Race mode performs its events like every live preview (raceEventPerformer).
       const log = raceLog();
       // THE RACE VIEW'S CLOCK. The sim takes one update per frame of the
@@ -1900,8 +1902,10 @@ export function runDisplayScenario(opts, ctx) {
       // framed views put every car back on the grid and stand a look; race
       // clears both and lets the chase rigs drive; free hands one full view
       // to the viewer. cellBoxes() pushes the cells before any look or pose
-      // lands, and the engine only takes one for a cell it has.
+      // lands, and the engine only takes one for a cell it has. A stage that
+      // follows another stands nothing of its own (follow pushes the other's).
       function aim() {
+        if (led) return;
         display.cellLookClear();
         display.carPoseClear();
         poses = [];
@@ -2000,6 +2004,7 @@ export function runDisplayScenario(opts, ctx) {
         race.cam = c;
         if (free) closeFree();
         display.cellLookClear();
+        poses = [];
         scene.soloCam = c === 'free';
         scene.showHud = c === 'chase';
         scene.setFog(c === 'chase');
@@ -2021,8 +2026,10 @@ export function runDisplayScenario(opts, ctx) {
                                           pitch: Math.asin(d.y / Math.hypot(d.x, d.y, d.z)) });
         } else if (c === 'top') {
           const b = scene.cellBoxes()[0];
-          const pose = topPose(b ? b.w / Math.max(b.h, 1) : 16 / 9);
+          const aspect = b ? b.w / Math.max(b.h, 1) : 16 / 9;
+          const pose = topPose(aspect);
           display.cellLook(0, pose.eye, pose.target, pose.fov);
+          poses = [{ ...pose, aspect, piece: -1, look: true }];
         }
         return race.cam;
       }
@@ -2114,6 +2121,49 @@ export function runDisplayScenario(opts, ctx) {
         const at = seekRace(to);
         if (race.loop && (at < race.loop.from || race.ms > race.loop.toMs)) race.loop = null;
         return at;
+      }
+
+      // FOLLOW (window.__landmarks.follow): another stage's moment() taken as
+      // this one's, for the gallery's tier comparison, the other tier beside
+      // this one. Its view; its race at ITS updates, so the two are one race
+      // frame for frame (dealt again where the two lists part, up to
+      // FOLLOW_PLAY updates played with their events performed, a longer way
+      // wound, as a seek is); and its
+      // camera: the free camera's eye, and every cell's look and parked car as
+      // that stage stood them. Never this stage's own fit of its own layout,
+      // which a piece the tier leaves out would move. From the first call this
+      // stage stands no camera of its own (`led`).
+      const FOLLOW_PLAY = 8;
+      function follow(m) {
+        led = true;
+        if (m.mode !== mode) setView(m.mode);
+        if (mode === 'race' && engine) {
+          if (m.cam !== race.cam) setRaceCam(m.cam);
+          race.paused = true;
+          scene.frozen = true;
+          let same = 0;
+          while (same < race.step && race.dts[same] === m.dts[same]) same++;
+          race.dts = m.dts;
+          if (same < race.step) { engine.dispose(); newSession(); }
+          if (m.step < race.step || m.step - race.step > FOLLOW_PLAY) seekRace(m.step);
+          else {
+            for (; race.step < m.step && !raceOver(engine.getSnapshot()); race.step++) {
+              const ms = race.dts[race.step];
+              engine.update(ms);
+              race.ms += ms;
+              display.advance(ms / 1000);
+            }
+            if (performance.now() - lastHud > HUD_TICK_MS) { lastHud = performance.now(); paintHud(); }
+          }
+        }
+        if (free && m.free) Object.assign(free, { eye: { ...m.free.eye }, yaw: m.free.yaw, pitch: m.free.pitch });
+        display.cellLookClear();
+        display.carPoseClear();
+        m.poses.forEach((p, k) => {
+          if (p && p.car) display.carPose(k, p.car.s, p.car.lat);
+          if (p && p.look) display.cellLook(k, p.eye, p.target, p.fov);
+        });
+        poses = m.poses;
       }
 
       scene.onFrame = (dt, nowMs) => {
@@ -2649,6 +2699,16 @@ export function runDisplayScenario(opts, ctx) {
           return race.cam;
         },
         raceCams: () => RACE_CAMS.slice(),
+        // What a stage beside this one needs to show this moment (follow): the
+        // view, the race's step, camera and updates, the cells' poses and the
+        // free camera.
+        moment: () => ({ mode, cam: race.cam, step: race.step, dts: mode === 'race' ? race.dts.slice() : null,
+                         poses: poses.slice(),
+                         free: free && { eye: { ...free.eye }, yaw: free.yaw, pitch: free.pitch } }),
+        follow: (m) => follow(m),
+        // The scenery and prop GLBs this scene stamps, as the tier in force
+        // names them (a lite build is `<model>-lite`).
+        models: () => ({ scenery: biomes().sceneryModels(scene.biome()), props: biomes().propModels(scene.biome()) }),
         // A review note's picture and its facts, and what its pins point at.
         shot: () => shot(),
         under: (pins) => under(pins),
@@ -2680,7 +2740,11 @@ export function runDisplayScenario(opts, ctx) {
           display.cellLookClear();
           display.carPoseClear();
           display.carPose(0, s, lat);
-          poses = [];
+          const f = frameAt(s), b = scene.cellBoxes()[0];
+          const rig = display.chaseRig(f.pos.x + f.lateral.x * lat, f.pos.y + f.lateral.y * lat,
+                                       f.pos.z + f.lateral.z * lat, f.tangent.x, f.tangent.z, 0);
+          poses = [{ eye: v3(rig.eye), target: v3(rig.target), fov: rig.fov, aspect: b ? b.w / Math.max(b.h, 1) : 16 / 9,
+                     piece: -1, look: false, car: { s, lat } }];
         },
         // The lap visibility of every piece on the track (lapScore), for a
         // cell of this aspect (16:9, every split's shape, by default).

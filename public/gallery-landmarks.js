@@ -15,7 +15,7 @@ import { storedVolume } from './display/audio/bus.js';
 const STATE_KEY = 'tinytrack_gallery_landmarks_v2';
 const state = (() => {
   const d = { track: '', players: 1, view: 'race', res: 'sharp', speed: 'normal', help: false, tab: 'review',
-              tier: 'full', sort: 'size', item: '', sound: false };
+              tier: 'full', sort: 'size', item: '', sound: false, compare: false };
   try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}'), sound: false }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
@@ -34,6 +34,16 @@ const scoreBtn = document.getElementById('lm-score');
 const sortSel = document.getElementById('lm-sort');
 const card = document.getElementById('lm-card');
 const sum = document.getElementById('lm-sum');
+const frameB = document.getElementById('lm-stage-b');
+const compareBtn = document.getElementById('lm-compare');
+const diffBox = document.getElementById('lm-diff');
+let lmB = null;   // Compare's lite stage, once built
+// A model's own name: the lite tier's layout names a piece by the build it
+// draws (`<model>-lite`).
+const base = (model) => model.replace(/-lite$/, '');
+// The tier the first stage draws: Full beside Compare's Lite, else the one picked.
+const tier = () => (state.compare ? 'full' : state.tier);
+let drawn = null;   // the tier the first stage has built, null while it builds another
 
 // A LINK NAMES A PIECE. The hash carries the track, the model, which of its
 // placements and the camera, and follows every step, so the address bar is
@@ -45,9 +55,9 @@ let wantPiece = linked.get('piece'), wantPlace = +linked.get('n') || 0;
 function link() {
   const m = lm && lm.landmarks()[lm.focused()];
   const q = new URLSearchParams({ track: state.track, view: state.view });
-  if (m) q.set('piece', m.model.replace(/^set-/, ''));
+  if (m) q.set('piece', base(m.model).replace(/^set-/, ''));
   if (m && lm.placed()) q.set('n', String(lm.placed()));
-  if (state.tier !== 'full') q.set('tier', state.tier);
+  if (tier() !== 'full') q.set('tier', tier());
   history.replaceState(null, '', '#' + q);
 }
 
@@ -89,11 +99,12 @@ async function loadInfo(marks) {
   const [src, { TRACKS }] = await Promise.all([sources, tracksJs]);
   const set = (TRACKS[state.track] && TRACKS[state.track].set) || [];
   await Promise.all(marks.filter((m) => !info.has(m.model)).map(async (m) => {
-    const lite = src[`${m.model}-lite.glb`] ? await costOf(`${m.model}-lite.glb`) : null;
-    info.set(m.model, { full: await costOf(`${m.model}.glb`), lite });
+    const b = base(m.model);
+    const lite = src[`${b}-lite.glb`] ? await costOf(`${b}-lite.glb`) : null;
+    info.set(m.model, { full: await costOf(`${b}.glb`), lite });
   }));
   for (const m of marks) {
-    const rows = set.filter((e) => e.model === m.model);
+    const rows = set.filter((e) => e.model === base(m.model));
     info.get(m.model).liteOff = rows.length > 0 && rows.every((e) => e.lite === false);
   }
 }
@@ -126,50 +137,61 @@ function resScale() {
 function setRes(v) {
   state.res = v;
   save();
-  if (lm) lm.scale(resScale());
+  for (const h of [lm, lmB]) if (h) h.scale(resScale());
 }
-new ResizeObserver(() => { if (lm && state.res !== 'auto') lm.scale(resScale()); }).observe(frame);
+// The two stages are always the same size, so one is watched for both.
+new ResizeObserver(() => { if (state.res !== 'auto') for (const h of [lm, lmB]) if (h) h.scale(resScale()); }).observe(frame);
 
-let loads = 0;   // a newer load abandons the wait of the one before
-function load() {
-  lm = null;
-  loads++;
+// A stage's address: the scenario on this page's track and split, in `t` (the
+// tier) at the page's named scale; the game's sound only in the first.
+function stageUrl(t, sound) {
   const q = new URLSearchParams({ scenario: 'landmarks', players: String(state.players) });
   if (state.track) q.set('track', state.track);
-  if (state.tier === 'lite') q.set('detail', 'lite');
+  if (t === 'lite') q.set('detail', 'lite');
   if (state.res !== 'auto') q.set('dpr', String(resScale()));
-  q.set('sfx', '1');
-  frame.src = '/?' + q;
-  whenReady(init);
+  if (sound) q.set('sfx', '1');
+  return '/?' + q;
+}
+const errText = (e) => (e && e.message ? e.message : String(e));
+function load() {
+  lm = null;
+  frame.src = stageUrl(tier(), true);
+  // A first build that fails says so, and forgets the remembered track so the
+  // next load falls back to the catalogue's first rather than failing the same way.
+  whenReady(frame, init, (e) => {
+    state.track = '';
+    save();
+    list.replaceChildren(el('p', 'legend__note', `The scene did not build (${errText(e)}). Reload to try the first track.`));
+  });
 }
 
-// Only the stage's CURRENT page: right after a reload the frame still holds the
+// Only a stage's CURRENT page: right after a reload the frame still holds the
 // last one, hook and all, until the new document commits.
-function hook() {
+function hook(f) {
   try {
-    const w = frame.contentWindow;
-    return w && w.location.href === frame.src ? w.__landmarks : null;
+    const w = f.contentWindow;
+    return w && w.location.href === f.src ? w.__landmarks : null;
   } catch (_) { return null; }
 }
-// A first build that fails says so, and forgets the remembered track so the next
-// load falls back to the catalogue's first rather than failing the same way.
-function whenReady(fn) {
-  const gen = loads;
+// Per stage, a newer load (or an unload) abandons the wait of the one before.
+const loads = new Map();
+const nextLoad = (f) => { loads.set(f, (loads.get(f) || 0) + 1); return loads.get(f); };
+function whenReady(f, fn, failed) {
+  const gen = nextLoad(f);
   const tick = () => {
-    if (gen !== loads) return;
-    const h = hook();
-    if (h) {
-      h.ready().then(() => { if (gen === loads) fn(h); }).catch((e) => {
-        state.track = '';
-        save();
-        const p = document.createElement('p');
-        p.className = 'legend__note';
-        p.textContent = `The scene did not build (${e && e.message ? e.message : e}). Reload to try the first track.`;
-        list.replaceChildren(p);
-      });
-    } else setTimeout(tick, 120);
+    if (gen !== loads.get(f)) return;
+    const h = hook(f);
+    if (h) h.ready().then(() => { if (gen === loads.get(f)) fn(h); }).catch(failed);
+    else setTimeout(tick, 120);
   };
   tick();
+}
+// A DOM element with a class and its text, for the panels built in code.
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
 }
 
 // The camera button that is lit. A race has three of its own: its free and top
@@ -192,6 +214,9 @@ function paintButtons() {
   for (const b of speedBtns) b.classList.toggle('is-on', b.dataset.speed === state.speed);
   tierBtn.classList.toggle('is-on', state.tier === 'lite');
   tierBtn.textContent = state.tier === 'lite' ? 'Tier: Lite' : 'Tier: Full';
+  tierBtn.disabled = state.compare;   // Compare shows both
+  compareBtn.textContent = state.compare ? 'Compare: on' : 'Compare: off';
+  compareBtn.setAttribute('aria-pressed', String(state.compare));
   sortSel.value = state.sort;
 }
 
@@ -199,7 +224,7 @@ function paintButtons() {
 // idea, and twelve rows of it bury the heroes. Models that differ only in a
 // trailing letter, compass point or ordinal fold under one heading, open while
 // the focus is inside it.
-const stem = (model) => model.replace(/-(?:[a-l]|ne|nw|se|sw|north|south|east|west|end|short|loop)$/, '').replace(/-b$/, '');
+const stem = (model) => base(model).replace(/-(?:[a-l]|ne|nw|se|sw|north|south|east|west|end|short|loop)$/, '').replace(/-b$/, '');
 const ORDERS = {
   size: () => 0,                                   // the hook's own: biggest first
   lap: (a, b) => a.m.s - b.m.s,
@@ -208,7 +233,7 @@ const ORDERS = {
 };
 const trisOf = (m) => {
   const c = info.get(m.model);
-  const of = c && (state.tier === 'lite' ? (c.liteOff ? null : c.lite || c.full) : c.full);
+  const of = c && (tier() === 'lite' ? (c.liteOff ? null : c.lite || c.full) : c.full);
   return of ? of.tris : 0;
 };
 const placedTris = (m) => trisOf(m) * m.count;
@@ -247,7 +272,7 @@ function paintList() {
     const c = info.get(m.model);
     const bits = [];
     if (seen && seen.has(m.model)) bits.push(seen.get(m.model).seen.toFixed(1) + 's');
-    if (c && c.full) bits.push(state.tier === 'lite' && c.liteOff ? 'off' : kilo(trisOf(m)));
+    if (c && c.full) bits.push(tier() === 'lite' && c.liteOff ? 'off' : kilo(trisOf(m)));
     bits.push('×' + m.count);
     n.textContent = bits.join(' · ');
     if (seen && seen.has(m.model) && seen.get(m.model).seen < POOR_S) n.classList.add('kit-row__tris--poor');
@@ -272,11 +297,12 @@ function paintList() {
     if (open) for (const r of members) list.appendChild(rowOf(r, true));
   }
   const total = marks.reduce((t, m) => t + placedTris(m), 0);
-  sum.textContent = `${marks.length} models · ${marks.reduce((t, m) => t + m.count, 0)} placed · ${kilo(total)} tris (${state.tier})`;
+  sum.textContent = `${marks.length} models · ${marks.reduce((t, m) => t + m.count, 0)} placed · ${kilo(total)} tris (${tier()})`;
   paintCard(marks[at]);
   link();
   const on = list.querySelector('.kit-row--at');
   if (on) on.scrollIntoView({ block: 'nearest' });
+  if (state.compare) drawDiff();
 }
 
 // THE FOCUSED PIECE'S CARD: what it is, where on the lap, what it costs in
@@ -299,7 +325,7 @@ function paintCard(m) {
   h.textContent = m.label;
   const dl = document.createElement('dl');
   dl.className = 'lm-card__facts';
-  dl.append(line('file', m.model + '.glb'));
+  dl.append(line('file', base(m.model) + '.glb'));
   dl.append(line('full', cost(c.full) + (c.full && c.full.moves ? ' · moves' : '')));
   dl.append(line('lite', c.liteOff ? 'not drawn' : c.lite ? cost(c.lite) : c.full ? 'same as full' : '…'));
   const s = seen && seen.get(m.model);
@@ -427,18 +453,25 @@ async function scoreLap() {
     scoreBtn.textContent = 'Score lap';
   }
 }
-// The other tier on the standing stage: the scene is built again in it, where
-// it stood (the track, the view, the focused piece).
+// The other tier on the standing stage.
 function setTier() {
-  if (!lm) return;
+  if (!lm || state.compare) return;
   state.tier = state.tier === 'lite' ? 'full' : 'lite';
   save();
   paintButtons();
-  const at = lm.focused(), n = lm.placed();
+  return retier();
+}
+// The first stage built again in the tier it should draw (tier()), where it
+// stood: the track, the view and the focused piece, found again by its model,
+// since a tier that leaves pieces out renumbers the rest.
+function retier() {
+  if (!lm) return;
+  const m = lm.landmarks()[lm.focused()], n = lm.placed();
+  drawn = null;
   return rebuild(async () => {
-    await lm.detail(state.tier);
-    lm.focus(at);
-    lm.place(n);
+    drawn = await lm.detail(tier());
+    const i = m ? lm.landmarks().findIndex((x) => base(x.model) === base(m.model)) : -1;
+    if (i >= 0) { lm.focus(i); lm.place(n); }
   });
 }
 // A remembered view this build no longer has falls back to the default.
@@ -455,7 +488,7 @@ function setSpeed(v) {
   state.speed = v;
   save();
   paintButtons();
-  if (lm) lm.timeScale(rate());
+  for (const h of [lm, lmB]) if (h) h.timeScale(rate());
 }
 function stepSpeed(d) {
   const all = Object.keys(SPEEDS);
@@ -477,6 +510,7 @@ for (const b of viewBtns) b.addEventListener('click', () => { pickView(b.dataset
 trackSel.addEventListener('change', () => { setTrack(trackSel.value); frame.focus(); });
 for (const b of speedBtns) b.addEventListener('click', () => { setSpeed(b.dataset.speed); frame.focus(); });
 tierBtn.addEventListener('click', () => { setTier(); frame.focus(); });
+compareBtn.addEventListener('click', () => { setCompare(!state.compare); frame.focus(); });
 scoreBtn.addEventListener('click', () => { scoreLap(); frame.focus(); });
 sortSel.addEventListener('change', () => { state.sort = sortSel.value; save(); if (lm) paintList(); frame.focus(); });
 resSel.addEventListener('change', () => { setRes(resSel.value); frame.focus(); });
@@ -652,7 +686,7 @@ async function saveNote() {
   const under = lm ? lm.under(at) : [];
   const item = round && round.items[itemAt];
   const body = {
-    meta: { ...noteShot.meta, tier: state.tier, picture: { w: noteShot.w, h: noteShot.h }, link: location.href,
+    meta: { ...noteShot.meta, tier: tier(), picture: { w: noteShot.w, h: noteShot.h }, link: location.href,
             review: item ? { round: round.round, item: item.id } : undefined },
     note: noteText.value.trim(),
     pins: pins.map((p, i) => ({ n: i + 1, ...at[i], text: p.text.trim(), piece: under[i] || null })),
@@ -760,14 +794,20 @@ fetch('/api/review-round').then((r) => (r.ok ? r.json() : null)).then((j) => {
   paintReview();
 }).catch(() => { /* no dev server: no panel */ });
 
-// THE PANEL'S TWO BODIES: the review round, where there is one, and the
-// track's pieces. And the keys, folded away until asked for.
+// THE PANEL'S BODIES: the review round, where there is one, the track's
+// pieces, and under Compare what Lite changes. And the keys, folded away
+// until asked for.
 function paintTabs() {
-  const tab = round ? state.tab : 'pieces';
-  tabsBox.hidden = !round;
-  for (const b of tabBtns) b.classList.toggle('is-on', b.dataset.tab === tab);
+  const has = (t) => (t === 'review' ? !!round : t === 'diff' ? state.compare : true);
+  const tab = has(state.tab) ? state.tab : 'pieces';
+  tabsBox.hidden = !round && !state.compare;
+  for (const b of tabBtns) {
+    b.classList.toggle('is-on', b.dataset.tab === tab);
+    b.hidden = !has(b.dataset.tab);
+  }
   reviewBox.hidden = tab !== 'review';
   piecesBox.hidden = tab !== 'pieces';
+  diffBox.hidden = tab !== 'diff';
   keysBox.hidden = !state.help;
   helpBtn.classList.toggle('is-on', state.help);
 }
@@ -797,12 +837,6 @@ function stopLabel(st, withTrack) {
 function paintReview() {
   paintTabs();
   if (!round) return;
-  const el = (tag, cls, text) => {
-    const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text != null) n.textContent = text;
-    return n;
-  };
   const badgeOf = (v) => (v ? (v.decision ? upper(v.decision) : 'Answered') : '');
   const n = round.items.length;
   const it = !listOpen && round.items[itemAt];
@@ -929,7 +963,7 @@ async function goStop(k) {
     paintButtons();
     paintRace();
   } else if (st.piece) {
-    const i = lm.landmarks().findIndex((m) => m.model === st.piece || m.model === 'set-' + st.piece);
+    const i = lm.landmarks().findIndex((m) => base(m.model) === st.piece || base(m.model) === 'set-' + st.piece);
     if (i >= 0) { lm.focus(i); lm.place(st.place || 0); }
     setView(st.view || 'orbit');
   }
@@ -1038,6 +1072,7 @@ function onKey(e) {
   else if (k === 'h' && document.fullscreenElement) legend.hidden = !legend.hidden;
   else if (k === 'n') openNote();
   else if (k === 'v') { state.sound = !state.sound; save(); syncSound(); }
+  else if (k === 'b') setCompare(!state.compare);
   else return;
   e.preventDefault();
 }
@@ -1062,6 +1097,195 @@ function syncSound() {
 }
 document.getElementById('lm-sound').addEventListener('click', () => { state.sound = !state.sound; save(); syncSound(); });
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => syncSound(), true);
+
+// COMPARE: the first stage in Full beside a second in Lite (the first built
+// again in Full where it stood in Lite), or back to the one stage in the tier
+// picked. Each stage is a whole renderer, so the GPU draws the scene twice.
+const stagesBox = document.getElementById('lm-stages');
+const boxB = document.getElementById('lm-stage-b-box');
+function setCompare(on) {
+  state.compare = on;
+  if (on) state.tab = 'diff';
+  else if (state.tab === 'diff') state.tab = round ? 'review' : 'pieces';
+  save();
+  boxB.hidden = !on;
+  stagesBox.classList.toggle('is-compare', on);
+  paintButtons();
+  paintTabs();
+  lmB = null;
+  diff = null;
+  diffOf = null;
+  if (on) {
+    frameB.src = stageUrl('lite', false);
+    whenReady(frameB, (h) => { lmB = h; h.timeScale(rate()); drawDiff(); },
+              (e) => diffBox.replaceChildren(el('p', 'legend__note', `The lite stage did not build (${errText(e)}).`)));
+  } else {
+    nextLoad(frameB);   // abandons a load still waiting
+    frameB.src = 'about:blank';
+  }
+  drawDiff();
+  return retier();
+}
+
+// THE LITE STAGE FOLLOWS THE FIRST, every frame: the first's track and split
+// (each a scene build here too, one at a time), then its moment (the stage's
+// `follow`: the view, the race at the first's own updates, and the camera,
+// every cell's look and parked car and the free camera's eye). So whatever
+// moved the first (a button, a key, a drag in it, a review stop) moves both,
+// and the two pictures differ by the tier. It takes the moment a frame late
+// at most, and no input of its own (pointer-events: none). What it cannot
+// follow is the renderer's own clock: a set piece that moves, or the clouds,
+// run on each stage's own since its build.
+let busyB = null;
+function followTick() {
+  requestAnimationFrame(followTick);
+  if (!state.compare || !lm || !lmB || busyB) return;
+  const build = lmB.trackId() !== lm.trackId() ? lmB.track(lm.trackId())
+    : lmB.seats() !== lm.seats() ? lmB.players(lm.seats()) : null;
+  if (build) {
+    busyB = build.catch(() => {}).then(() => { busyB = null; });
+    return;
+  }
+  lmB.follow(lm.moment());
+  if (drawn === 'full' && (!diffOf || diffOf.a !== lm.layout() || diffOf.b !== lmB.layout())) paintDiff();
+}
+requestAnimationFrame(followTick);
+
+// THE DIFFERENCES (Compare's tab): what the lite tier changes on this track,
+// off the two stages' own answers. Per set piece: its placements in each
+// stage's layout and the triangles of the file each draws (Lite's build where
+// it has one), ranked by what Lite saves over every placement; a click frames
+// it in both stages, at a placement Lite leaves out where it leaves one out.
+// Then the scenery and props Lite swaps for a lite build (a stamp each: the
+// scatter is not counted per model), the land it leaves out (tracks.js,
+// `lite: false`), and what the renderer changes in Lite on every track, each
+// with where in the code; native/renderer/CLAUDE.md, "The detail tier", is
+// that list, and the order here is the one its comments' savings suggest.
+const LITE_RENDERER = [
+  ['Coarser tiles: the static scene in fewer, larger draws', 'TtpRendererTrack.cpp, buildStatic'],
+  ['Small things leave a cell: a run of scatter or props, or a chunk of clutter, once it covers only a few pixels of that cell',
+   'TtpRendererDressing.cpp, buildDressingMerge; TtpRendererFrame.cpp, chooseCuts'],
+  ['Far forms swap in nearer: a looser gate with no haze term, simplified without holding each shade',
+   'TtpRendererFrame.cpp, chooseLods; TtpRenderer.cpp, farForm'],
+  ['A coarser sky dome: fewer rings and spokes', 'TtpRendererTrack.cpp, the sky dome'],
+  ['Octagonal ground-shadow discs', 'TtpRendererTrack.cpp, the ground shadows'],
+  ['Ground rock without its strata: a facet is plain rock, still shaded by its own normal', 'TtpRendererTrack.cpp, setRockParams'],
+  ['Mesas without their pale seams', 'TtpRendererTrack.cpp, the mesa rings'],
+  ['A moving set piece draws a part at a time, not as one skinned draw', 'TtpRendererMotion.cpp, THE SKIN'],
+  ['No ambient life: a cup\'s petals or motes', 'ttp/theme.cc, resolve_theme']
+];
+let diff = null, diffOf = null, diffGen = 0;
+async function paintDiff() {
+  const a = lm.layout(), b = lmB.layout(), track = lm.trackId();
+  diffOf = { a, b };
+  const gen = ++diffGen;
+  const at = (p) => `${base(p.model)} ${p.u} ${p.lat}`;
+  const kept = new Map(b.pieces.map((p) => [at(p), p.model]));
+  const by = new Map();   // model -> its placements in Full, the file Lite draws, those Lite leaves out
+  a.pieces.forEach((p, i) => {
+    const r = by.get(p.model) || { model: p.model, n: 0, as: null, out: [] };
+    const as = kept.get(at(p));
+    r.n++;
+    if (as) r.as = as;
+    else r.out.push(i);
+    by.set(p.model, r);
+  });
+  const labels = new Map(lm.landmarks().map((m) => [m.model, m.label]));
+  const { scenery, props } = lmB.models();
+  const swaps = [...new Set([...scenery, ...props])].filter((m) => m !== base(m));
+  const { TRACKS } = await tracksJs;
+  const pieces = [];
+  let full = 0, lite = 0, out = 0;
+  for (const r of by.values()) {
+    const f = await costOf(`${r.model}.glb`);
+    if (!f) continue;
+    const l = r.as ? (await costOf(`${r.as}.glb`)) || f : null;
+    const saved = f.tris * r.n - (l ? l.tris * (r.n - r.out.length) : 0);
+    full += f.tris * r.n;
+    lite += l ? l.tris * (r.n - r.out.length) : 0;
+    out += r.out.length;
+    if (saved > 0 || r.out.length) {
+      pieces.push({ model: r.model, label: labels.get(r.model) || r.model, n: r.n, out: r.out, saved,
+                    full: f.tris, lite: r.as && r.as !== r.model && l ? l.tris : null });
+    }
+  }
+  pieces.sort((x, y) => y.saved - x.saved);
+  const stamps = [];
+  for (const m of swaps) {
+    const f = await costOf(`${base(m)}.glb`), l = await costOf(`${m}.glb`);
+    if (f && l) stamps.push({ model: base(m), full: f.tris, lite: l.tris });
+  }
+  stamps.sort((x, y) => (y.full - y.lite) - (x.full - x.lite));
+  const land = ((TRACKS[track] && TRACKS[track].land) || []).filter((l) => l.lite === false);
+  if (gen !== diffGen) return;
+  diff = { track, pieces, full, lite, out, placed: a.pieces.length, stamps, land };
+  drawDiff();
+}
+function drawDiff() {
+  if (!state.compare) { diffBox.replaceChildren(); return; }
+  if (!lm || !diff || diff.track !== lm.trackId()) {
+    diffBox.replaceChildren(el('p', 'legend__note', lmB ? 'Reading the two tiers…' : 'Building the lite stage…'));
+    return;
+  }
+  const d = diff;
+  const minus = (n) => '−' + kilo(n);
+  const row = (tag, name, what, saved) => {
+    const r = el(tag, 'kit-row lm-diff__row');
+    r.append(el('span', 'kit-row__name', name), el('span', 'kit-row__tris', what),
+             el('span', 'kit-row__tris lm-diff__saved', saved));
+    return r;
+  };
+  const share = d.full ? Math.round(100 * (d.full - d.lite) / d.full) : 0;
+  const out = [el('h2', '', 'What Lite changes here'),
+               el('p', 'legend__note', `Set pieces: ${kilo(d.full)} tris in Full, ${kilo(d.lite)} in Lite (−${share}%) · `
+                 + `${d.out} of ${d.placed} placed left out`),
+               el('h3', '', 'Set pieces')];
+  if (!d.pieces.length) out.push(el('p', 'legend__note', 'Lite draws every piece as Full does.'));
+  const m = lm.landmarks()[lm.focused()];
+  for (const p of d.pieces) {
+    const what = p.out.length === p.n ? `left out ×${p.n}`
+      : [p.lite != null ? `${kilo(p.full)} → ${kilo(p.lite)} ×${p.n}` : '',
+         p.out.length ? `${p.out.length} of ${p.n} left out` : ''].filter(Boolean).join(', ');
+    const r = row('button', p.label, what, minus(p.saved));
+    if (m && m.model === p.model) r.classList.add('kit-row--at');
+    r.title = `${p.model}: frame it in both stages (orbit)`;
+    r.addEventListener('click', () => { frameDiff(p); frame.focus(); });
+    out.push(r);
+  }
+  if (d.stamps.length) {
+    out.push(el('h3', '', 'Scenery and props, a stamp each'));
+    for (const s of d.stamps) out.push(row('div', s.model, `${kilo(s.full)} → ${kilo(s.lite)}`, minus(s.full - s.lite)));
+  }
+  if (d.land.length) {
+    const kinds = new Map();
+    for (const l of d.land) kinds.set(l.kind, (kinds.get(l.kind) || 0) + 1);
+    out.push(el('h3', '', 'Land'),
+             el('p', 'lm-diff__all', `${d.land.length} landform${d.land.length === 1 ? '' : 's'} left out: `
+               + [...kinds].map(([k, n]) => `${k} ×${n}`).join(', ')));
+  }
+  out.push(el('h3', '', 'On every track (the renderer)'));
+  const ul = el('ul', 'lm-diff__all');
+  for (const [text, where] of LITE_RENDERER) {
+    const li = el('li', '', text);
+    li.title = where;
+    ul.append(li);
+  }
+  out.push(ul, el('p', 'legend__note', 'Pieces are ranked by the triangles Lite saves over every placement. '
+    + 'Hover a renderer line for where it is in the code.'));
+  diffBox.replaceChildren(...out);
+}
+// A Differences row: its piece in the orbit view, in both stages; at the first
+// placement Lite leaves out, where it leaves one out.
+async function frameDiff(p) {
+  if (!lm) return;
+  await pickView('orbit');
+  const i = lm.landmarks().findIndex((m) => m.model === p.model);
+  if (i < 0) return;
+  lm.focus(i);
+  if (p.out.length) lm.place(lm.landmarks()[i].indices.indexOf(p.out[0]));
+  leaveStop();
+  paintList();
+}
 
 function init(h) {
   lm = h;
@@ -1091,11 +1315,14 @@ function init(h) {
   lm.timeScale(rate());
   restoreView();
   // A link's piece, once: the model it names and which of its placements.
-  const i = wantPiece ? lm.landmarks().findIndex((m) => m.model === 'set-' + wantPiece) : -1;
+  const i = wantPiece ? lm.landmarks().findIndex((m) => base(m.model) === 'set-' + wantPiece) : -1;
   if (i >= 0) { lm.focus(i); lm.place(wantPlace); }
   wantPiece = null;
   seen = null;
-  rebuild(() => {});
+  // Compare turned on or off while the stage was loading wants the other tier.
+  drawn = frame.contentWindow.__scene.detail;
+  if (drawn !== tier()) retier();
+  else rebuild(() => {});
   paintReview();   // its stops name tracks, which have names now
 }
 
@@ -1103,3 +1330,4 @@ paintButtons();
 paintTabs();
 Gallery.initMobileOptionsToggle();
 load();
+if (state.compare) setCompare(true);

@@ -343,7 +343,35 @@ section.stage iframe {
    its own place pill and view in that corner, and judging a landmark is
    judging the whole cell. Overlays again where the screen is too narrow. */
 .stage--beside { display: flex; }
-.stage--beside iframe { flex: 1 1 auto; min-width: 0; width: auto; }
+/* The landmark stage, or under Compare its two tiers side by side (stacked
+   where the window is narrow), each tagged. The second takes the first's
+   camera and none of the pointer. */
+.lm-stages { flex: 1 1 auto; min-width: 0; height: 100%; display: grid; }
+.lm-stages.is-compare { grid-template-columns: 1fr 1fr; gap: 2px; }
+.lm-stages__one { position: relative; min-width: 0; min-height: 0; }
+.lm-stages__one[hidden] { display: none; }
+.lm-stages__tag {
+  display: none; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  padding: 1px 10px; border-radius: 999px; pointer-events: none;
+  font: 700 11px/1.6 system-ui, -apple-system, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #b9c3ff; background: rgba(6, 6, 15, 0.72); border: 1px solid rgba(140, 160, 255, 0.4);
+}
+.lm-stages.is-compare .lm-stages__tag { display: block; }
+#lm-stage-b { pointer-events: none; }
+@media (max-width: 900px) {
+  .lm-stages.is-compare { grid-template-columns: none; grid-template-rows: 1fr 1fr; }
+}
+.lm-tabs [hidden] { display: none; }
+/* Compare's Differences tab. */
+.lm-diff[hidden] { display: none; }
+.lm-diff h2 { font-size: 13px; color: #fff; margin-bottom: 4px; }
+.lm-diff h3 { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600;
+              color: #9aa3c7; margin: 12px 0 4px; }
+.lm-diff .lm-diff__saved { color: #78dc96; font-variant-numeric: tabular-nums; }
+div.lm-diff__row { cursor: default; }
+div.lm-diff__row:hover { background: none; }
+.lm-diff__all { list-style: none; color: #b8bedc; }
+.lm-diff__all li { margin-bottom: 4px; cursor: help; }
 .stage--beside .legend {
   position: static; flex: none; max-height: none;
   width: var(--legend-w, 232px);
@@ -359,7 +387,6 @@ section.stage iframe {
 .stage--beside .legend-grip.is-dragging { background: rgba(140, 160, 255, 0.45); outline: none; }
 @media (max-width: 640px) {
   .stage--beside { display: block; }
-  .stage--beside iframe { width: 100%; }
   .stage--beside .legend {
     position: absolute; max-height: calc(100% - 24px); width: 232px;
     border-radius: 10px; border-width: 1px;

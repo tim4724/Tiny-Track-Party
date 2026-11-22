@@ -385,3 +385,49 @@ test('landmark gallery page: the race, paused, rewound and noted', async ({ page
   expect(posted.png.startsWith('data:image/png;base64,')).toBe(true);
   expect(posted.marked.startsWith('data:image/jpeg;base64,')).toBe(true);
 });
+
+// COMPARE (B): a second stage in Lite beside the first in Full, following it.
+// What an eye cannot hold it to: that the two are ONE race (paused, the same
+// step and the same car to the bit, which only the first stage's own updates
+// give), that the first's free camera is the second's, that the list names what
+// Lite leaves out, and that turning it off unloads the second renderer.
+test('landmark gallery page: Full and Lite compared', async ({ page }) => {
+  test.slow();   // two renderers
+  await page.goto('/gallery-landmarks.html#track=powder');
+  await expect(page.locator('#lm-list .kit-row').first()).toBeVisible({ timeout: 30000 });
+  const both = (fn) => page.evaluate((f) => ['lm-stage', 'lm-stage-b'].map((id) => {
+    const w = document.getElementById(id).contentWindow;
+    return new Function('L', 'w', `return (${f})(L, w)`)(w.__landmarks, w);
+  }), fn.toString());
+
+  await page.keyboard.press('b');
+  await expect(page.locator('#lm-compare')).toHaveText('Compare: on');
+  await page.waitForFunction(() => document.getElementById('lm-stage-b').contentWindow.__landmarks, null, { timeout: 30000 });
+  await expect.poll(() => both((L, w) => w.__scene.detail), { timeout: 30000 }).toEqual(['full', 'lite']);
+  await expect(page.locator('#lm-tier')).toBeDisabled();
+  // Powder leaves its outer verge out of Lite.
+  await expect(page.locator('#lm-diff button.kit-row', { hasText: 'left out' }).first()).toBeVisible({ timeout: 30000 });
+
+  await page.waitForFunction(() => document.getElementById('lm-stage').contentWindow.__landmarks.race().step > 10,
+                             null, { timeout: 60000 });
+  await page.keyboard.press('Space');
+  const car = (L, w) => {
+    const p = w.__engine.getSnapshot().cars[0].pose.pos;
+    return [L.race().step, p.x, p.y, p.z];
+  };
+  await expect.poll(async () => { const [a, b] = await both(car); return JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(async () => { const [a, b] = await both(car); return JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+
+  await page.keyboard.press('g');
+  await page.keyboard.down('w');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('w');
+  const eye = (L) => L.moment().free;
+  await expect.poll(async () => { const [a, b] = await both(eye); return !!a && JSON.stringify(a) === JSON.stringify(b); }).toBe(true);
+
+  await page.keyboard.press('b');
+  await expect(page.locator('#lm-stage-b-box')).toBeHidden();
+  expect(await page.evaluate(() => document.getElementById('lm-stage-b').src)).toBe('about:blank');
+  await expect(page.locator('#lm-tier')).toBeEnabled();
+});

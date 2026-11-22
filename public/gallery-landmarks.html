@@ -34,6 +34,7 @@
 
   <div class="group">
     <button class="ctrl" id="lm-tier" title="The detail tier drawn: Full is the web and the Apple TV, Lite the Android TV box">Tier: Full</button>
+    <button class="ctrl" id="lm-compare" aria-pressed="false" title="Full and Lite side by side, one camera; the panel lists what Lite changes (B)">Compare: off</button>
     <button class="ctrl" id="lm-sound" title="The game's sound: the race's engines and effects and the track's own song (V)">Sound: off</button>
   </div>
 
@@ -61,8 +62,19 @@
 <section class="stage stage--beside" id="lm-box">
   <!-- The real display page on a catalogue track, driven through its
        window.__landmarks hook. Interactive like the asset stage: Free mode
-       hands the camera to the viewer. -->
-  <iframe id="lm-stage" title="Landmarks"></iframe>
+       hands the camera to the viewer. Compare stands a second stage beside
+       it in the lite tier, which takes the first one's camera and race
+       moment and takes no input of its own. -->
+  <div class="lm-stages" id="lm-stages">
+    <div class="lm-stages__one">
+      <iframe id="lm-stage" title="Landmarks"></iframe>
+      <span class="lm-stages__tag">Full</span>
+    </div>
+    <div class="lm-stages__one" id="lm-stage-b-box" hidden>
+      <iframe id="lm-stage-b" title="Landmarks, lite tier" tabindex="-1"></iframe>
+      <span class="lm-stages__tag">Lite</span>
+    </div>
+  </div>
   <div class="legend-grip" id="lm-grip" role="separator" aria-orientation="vertical"
        aria-label="Panel width" tabindex="0" title="Drag to resize the panel"></div>
   <!-- THE PANEL (gallery-landmarks.js): a head that stays put (the tabs, the
@@ -74,6 +86,7 @@
         <div class="seg lm-tabs" id="lm-tabs" role="tablist" hidden>
           <button class="ctrl" data-tab="review" role="tab">Review</button>
           <button class="ctrl" data-tab="pieces" role="tab">Pieces</button>
+          <button class="ctrl" data-tab="diff" role="tab">Differences</button>
         </div>
         <span class="lm-gap"></span>
         <button class="ctrl" id="lm-help" title="The keys (?)" aria-controls="lm-keys">?</button>
@@ -117,12 +130,14 @@
         <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>one frame back / on</dd></div>
         <div><dt><kbd>M</kbd></dt><dd>speed: slow, 1x, 2x</dd></div>
         <div><dt><kbd>V</kbd></dt><dd>sound on / off</dd></div>
+        <div><dt><kbd>B</kbd></dt><dd>Full and Lite side by side</dd></div>
         <div><dt><kbd>C</kbd></dt><dd>race camera: chase, free, top</dd></div>
         <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>review item</dd></div>
         <div><dt><kbd>F</kbd> <kbd>H</kbd></dt><dd>fullscreen, hide this panel</dd></div>
         <div><dt><kbd>N</kbd></dt><dd>note on a screenshot</dd></div>
       </dl>
       <div class="lm-review" id="lm-review" hidden></div>
+      <div class="lm-diff" id="lm-diff" hidden></div>
       <div id="lm-pieces">
         <div class="lm-card" id="lm-card"></div>
         <div class="lm-bar">
