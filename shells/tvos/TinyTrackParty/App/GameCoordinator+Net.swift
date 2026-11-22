@@ -202,10 +202,14 @@ extension GameCoordinator {
     /// self-contained.
     func drainRaceEvents() {
         guard sessionHandle != 0 else { return }
-        run(TTP.obj(ttp_race_events_live_json(
+        let answer = ttp_race_events_live_json(
             sessionHandle, net.roomHandle,
             audio.ready ? 1 : 0, fastForwarding ? 1 : 0,
-            ttp_race_intermission_ms(), nowMs())))
+            ttp_race_intermission_ms(), nowMs())
+        // Nothing fired, which is nearly every frame: performing an empty list
+        // is a no-op, so skip the String, the parse and the dictionary.
+        if let answer, strcmp(answer, TTP.noEffects) == 0 { return }
+        run(TTP.obj(answer))
     }
 
     /// The ~6 Hz poll. Everything the DOM used to be written for per frame lives
@@ -332,7 +336,9 @@ extension GameCoordinator {
                 reconnectURL: reconnectURLs[car.id]))
         }
         display.cellCards(mask: cardMask)
-        state.cells = cells
+        // Nearly every tick repaints what is already up (a place or a lap moves
+        // a few times a lap), so only a change is published.
+        if cells != state.cells { state.cells = cells }
     }
 
     /// Relight a (re)joining phone's held item, once.

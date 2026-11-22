@@ -402,7 +402,7 @@ function syncRoom(data) {
     el('drive-hud').classList.remove('hidden');  // pause + settings ride inside it
     setPauseOverlay(!!data.paused);  // re-raise a pause missed while away
     if (data.paused) haptics.stopLoop();
-    startDriving(myName || 'Racer'); // resume/continue streaming tilt to our car
+    startDriving(myName || 'Racer', !!data.paused); // stream tilt to our car, or hold it under the pause
   } else if (waitingForNextRace && board && board.over) {
     // Late joiner and the FINAL board is up — it lists us as "Next race", so join
     // everyone on the results screen.

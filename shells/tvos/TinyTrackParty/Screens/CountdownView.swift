@@ -126,7 +126,7 @@ struct CountdownView: View {
             }
         }
         .padding(Self.pad * l)
-        // GLASS without the web's backdrop blur, as the race HUD's lap pill:
+        // GLASS without a backdrop blur, as the race HUD's lap pill:
         // the live race is behind it, and the tint alone carries the type.
         .background(Capsule().fill(Tokens.glass))
     }
@@ -207,5 +207,14 @@ struct PauseOverlay: View {
         // runs when the focus system ESTABLISHES focus here and again after
         // every reset, so it cannot lose the race the manual version can.
         .defaultFocus($focus, .resume)
+        // …but only once the focus system looks again. The race's focus park
+        // leaves as this fades in, and nothing above re-renders while a race is
+        // frozen, so without a request focus stays NOWHERE and the next Menu
+        // goes to tvOS (`RaceRemoteTests`). Past the fade, a pause with no focus
+        // asks for Continue itself.
+        .task {
+            try? await Task.sleep(for: .milliseconds(300))
+            if focus == nil { focus = .resume }
+        }
     }
 }

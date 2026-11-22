@@ -269,6 +269,10 @@ export class TiltInput {
     const interval = 1000 / SEND_HZ;
     this._timer = setInterval(() => this._tick(), interval);
   }
+  // A pause: nothing is emitted until start() again, and everything held stays
+  // held. The race goes on after it, so unlike stop() this resets nothing — a
+  // use counter back at 0 would read to the display as a press.
+  suspend() { clearInterval(this._timer); this._timer = null; }
   stop() {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;

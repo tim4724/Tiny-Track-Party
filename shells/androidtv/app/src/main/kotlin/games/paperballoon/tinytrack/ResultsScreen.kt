@@ -137,9 +137,16 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
         // — on this GPU, exactly when the next circuit is meshing — and it can
         // still be counting when the intermission advances.
         val startedAt = SystemClock.uptimeMillis()
-        while (accounted < 1f) {
+        var clock = 0f
+        while (clock < 1f) {
             delay(16)
-            accounted = min(1.0, (SystemClock.uptimeMillis() - startedAt) / runMs).toFloat()
+            clock = min(1.0, (SystemClock.uptimeMillis() - startedAt) / runMs).toFloat()
+            // A write recomposes the whole board, and only a whole point or the
+            // end is visible (the floor() and `settled` below), so the clock
+            // writes only those: the same numbers on the same frames.
+            val a = accounted
+            if (clock >= 1f || results.listRows.any {
+                    floor(clock * it.owed()) != floor(a * it.owed()) }) accounted = clock
         }
         // The cup is now told. Anything waiting on it — the phones — can say so.
         game.settleStandings()

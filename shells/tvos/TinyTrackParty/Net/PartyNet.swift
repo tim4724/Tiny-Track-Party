@@ -200,10 +200,6 @@ final class PartyNet {
     /// Re-entrancy guard on the event drain (see `drainRoomEvents`).
     private var draining = false
 
-    /// The walks' shared no-op answer, compared as BYTES so the common case
-    /// skips the parse — the same trick as `Net.js`'s EMPTY_EFFECTS.
-    private static let emptyEffects = "{\"effects\":[]}"
-
     // MARK: - Boot
 
     init(proto: GameProtocol, socket: RelaySocket) {
@@ -522,7 +518,7 @@ final class PartyNet {
                       from: EngineIdentity? = nil,
                       data: [String: Any] = [:]) -> [String: Any] {
         drainRoomEvents()
-        guard answer != PartyNet.emptyEffects else { return [:] }
+        guard answer != TTP.noEffects else { return [:] }
         let ans = TTP.obj(answer)
         for case let e as [String: Any] in (ans["effects"] as? [Any] ?? []) {
             perform(e, from: from, data: data)

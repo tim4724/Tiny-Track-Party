@@ -36,8 +36,19 @@ function refreshMotionTip() {
   el('motion-tip').classList.toggle('hidden', !show);
 }
 
-export function startDriving(playerName) {
+// `paused`: the pause overlay covers the pad, so the beat and the sends stop
+// under it — and nothing else does. Held buttons, the use counter and the fill
+// belong to the race and carry on at the resume; stopDriving's reset is for a
+// race that is over.
+export function startDriving(playerName, paused = false) {
   el('hud-name').textContent = playerName;   // who you are, top-left (mirrors the display cell)
+  if (paused) {
+    _tilt.suspend();
+    if (steerRaf) cancelAnimationFrame(steerRaf);
+    steerRaf = null;
+    refreshMotionTip();
+    return;
+  }
   if (steerRaf) return; // already driving (may have begun during the countdown)
   _tilt.start();
   const fill = el('steer-fill');

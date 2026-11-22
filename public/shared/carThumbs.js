@@ -8,9 +8,10 @@
 //   <model>.strip.png  — horizontal sprite strip of the turntable (SPIN_FRAMES
 //                        frames). Animated by stepping background-position.
 //
-// Spin sync: ALL spinning cars are driven by ONE shared requestAnimationFrame
-// clock, so they read the same frame index every tick and rotate in lockstep
-// (the display shows several cars pointing the same way, not a random jumble).
+// Spin sync: ALL spinning cars are driven by ONE shared clock, so they read the
+// same frame index every tick and rotate in lockstep (the display shows several
+// cars pointing the same way, not a random jumble). It ticks at the strip's own
+// SPIN_FPS, not every vsync: between two spin frames there is nothing to write.
 // The clock RESTARTS at frame 0 whenever it spins up from idle, so a car that
 // starts turning with nothing else on the turntable — the phone, where only
 // your own pick spins — begins at the hero pose it was already showing and
@@ -47,29 +48,37 @@ function spinAllowed() {
 // ---- shared spin clock ----------------------------------------------------
 // Every registered overlay element gets the SAME background-position each tick,
 // so all spinning cars are perfectly synchronized regardless of when they were
-// added. Disconnected elements drop out automatically; the loop idles when none
-// remain. Falls back to a static hero (frame 0) where rAF is unavailable.
+// added. Disconnected elements drop out automatically; the clock idles when none
+// remain. Each tick is timed for the next frame's boundary on the clock, and the
+// frame is read off the time (rounded, so a timer a hair early or late still
+// names the frame it was set for), so a late tick never slows the turn.
 const _spins = new Set();
-let _raf = 0;
+let _timer = 0;
 let _start = 0;
-function _tick(t) {
+let _posX = '';   // the angle the clock last wrote
+function _tick() {
+  const t = performance.now();
   if (!_start) _start = t;
-  const frame = Math.floor(((t - _start) / 1000) * SPIN_FPS) % SPIN_FRAMES;
+  const n = Math.round(((t - _start) / 1000) * SPIN_FPS);
+  const frame = n % SPIN_FRAMES;
   const posX = (SPIN_FRAMES > 1 ? (frame * 100) / (SPIN_FRAMES - 1) : 0).toFixed(3) + '%';
   for (const el of _spins) {
     if (!el.isConnected) { _spins.delete(el); continue; }
     el.style.backgroundPositionX = posX;
   }
-  _raf = _spins.size ? requestAnimationFrame(_tick) : 0;
+  _posX = posX;
+  _timer = _spins.size ? setTimeout(_tick, _start + ((n + 1) * 1000) / SPIN_FPS - t) : 0;
 }
 function registerSpin(el) {
-  if (typeof requestAnimationFrame !== 'function') return; // old browser → static hero
   // Nothing is turning, so there is no phase to keep: rewind the clock and let
   // this car pick up from the still it is standing on. Gated on the SET, not on
-  // `_raf` — a tick can still be scheduled for a set the last car just left.
-  if (!_spins.size) _start = 0;
+  // `_timer` — a tick can still be scheduled for a set the last car just left.
+  if (!_spins.size) { _start = 0; _posX = ''; }
+  // Onto a running clock's angle at once: its next tick can be most of a spin
+  // frame away, and the cut from the still has to land on the shared angle.
+  el.style.backgroundPositionX = _posX;
   _spins.add(el);
-  if (!_raf) _raf = requestAnimationFrame(_tick);
+  if (!_timer) _timer = setTimeout(_tick, 0);
 }
 
 // Take a thumb off the clock — called when a tile's render is retired. A layer

@@ -65,6 +65,13 @@ enum TTP {
         return v
     }
 
+    /// The answer of an effects walk that has nothing to do — the race drain's
+    /// and the room walks' on almost every call — compared as BYTES so the
+    /// common case skips the parse, as `Net.js`'s EMPTY_EFFECTS does. `abi_check`
+    /// holds the C side's literal to the canonical `{effects:[]}`; were this copy
+    /// ever to drift, a caller skipping on it would only stop skipping.
+    static let noEffects = "{\"effects\":[]}"
+
     /// Parse a JSON array answer.
     static func arr(_ p: UnsafePointer<CChar>?) -> [Any] {
         guard let text = str(p), let data = text.data(using: .utf8),
