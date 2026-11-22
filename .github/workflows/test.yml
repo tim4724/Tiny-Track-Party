@@ -70,8 +70,9 @@ jobs:
     # standard-runner minutes are free, and wall clock is the only axis that
     # pays.
     #
-    # Per-test sharding (fullyParallel in playwright.config.js) is what makes any
-    # of these splits even; by FILE, cup-series alone would pin one shard.
+    # scripts/e2e-shard.mjs deals the tests out in turn rather than using
+    # --shard, whose contiguous blocks put every slow gallery spec in one shard
+    # and made it run several times longer than the rest.
     #
     # 10 covered the slowest shard plus the retry the config arms, with room for
     # a cold-cache run, and still tripped on a genuine hang. What it did NOT
@@ -140,7 +141,7 @@ jobs:
         run: npx playwright install chromium
       - name: Run E2E tests
         # --grep matches the file name too; e2e-webkit runs that spec.
-        run: npx playwright test --shard=${{ matrix.shard }}/6 --grep-invert webkit-controller-layout
+        run: node scripts/e2e-shard.mjs ${{ matrix.shard }}/6 --grep-invert webkit-controller-layout
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v7

@@ -35,14 +35,10 @@ module.exports = defineConfig({
   // the 120 s timeout — margin worth keeping. Hence 3, not "half the cores":
   // this scales with the rasterizer's appetite, not with the core count.
   workers: process.env.CI ? 1 : 3,
-  // Shard granularity as well as in-machine parallelism. On CI (workers: 1) it
-  // is ONLY the former — every test still runs one at a time there, and what
-  // this changes is how --shard splits the suite. Left off, Playwright shards
-  // whole FILES, so
-  // cup-series.spec.js (5 tests, ~3m49s on CI) is one atomic lump and the
-  // shards came out 2:19/3:54/6:01/2:50 against a 3:46 perfect split — the
-  // slowest shard set the whole workflow's wall clock. Per-test sharding lets
-  // that file spread. Safe because no spec has beforeAll/describe.serial or any
+  // Tests of one file run on different workers. That is what the local run's
+  // three workers scale on; on CI (workers: 1) it changes nothing, and the
+  // split across runners is scripts/e2e-shard.mjs, which deals out single
+  // tests. Safe because no spec has beforeAll/describe.serial or any
   // other file-level shared state; every test opens its own display and phones,
   // and the _reapContexts fixture in helpers.js closes them per test.
   fullyParallel: true,
