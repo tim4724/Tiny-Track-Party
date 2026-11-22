@@ -44,6 +44,7 @@ export default [
       'public/shared/qrcode-generator.js', // vendored verbatim; upstream style, not ours
       'artwork/**',
       'scratch/**',                       // gitignored one-off probes; see .gitignore
+      'site/**',                          // scripts/build-site.mjs output, a copy of public/
     ],
   },
 

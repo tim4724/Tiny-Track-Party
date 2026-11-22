@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - '**'
+      # main deploys to Hetzner instead (hetzner-deploy.yml).
+      - '!main'
 
 concurrency:
   group: preview-${{ github.ref }}
@@ -13,7 +15,7 @@ jobs:
   build:
     uses: ./.github/workflows/docker-publish.yml
     with:
-      platforms: ${{ github.ref_name == 'main' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      platforms: linux/amd64
     secrets: inherit
     permissions:
       contents: read
@@ -47,14 +49,12 @@ jobs:
         env:
           BRANCH_RAW: ${{ github.ref_name }}
           IMAGE: ${{ needs.build.outputs.sha_tag }}
-          GIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
           NS="tinytrack-${SAFE_BRANCH}"
           # All preview hosts sit under *.paperballoon.games (covered by the
-          # existing wildcard TLS + DNS). main deploys to tinytrack-main,
-          # branches to tinytrack-<branch>.
+          # existing wildcard TLS + DNS).
           HOST="tinytrack-${SAFE_BRANCH}.paperballoon.games"
 
           kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
@@ -155,7 +155,7 @@ jobs:
                   app: tinytrack
               spec:
                 automountServiceAccountToken: false
-                # The image runs as nodejs (uid 1001); declaring it makes a future image
+                # The image runs Apache as uid 1001; declaring it makes a future image
                 # that drops USER fail to start instead of running as root.
                 securityContext:
                   runAsNonRoot: true
@@ -169,16 +169,13 @@ jobs:
                       allowPrivilegeEscalation: false
                       capabilities:
                         drop: [ALL]
-                      # The server writes no files; keep it that way.
+                      # Apache writes only its pid and runtime files, to /tmp
+                      # (httpd.conf).
                       readOnlyRootFilesystem: true
                     image: ${IMAGE}
-                    env:
-                      - name: BASE_URL
-                        value: https://${HOST}
-                      - name: APP_ENV
-                        value: preview
-                      - name: GIT_SHA
-                        value: ${GIT_SHA}
+                    volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
                     ports:
                       - containerPort: 4000
                         name: http
@@ -193,13 +190,16 @@ jobs:
                         port: 4000
                       periodSeconds: 5
                       failureThreshold: 3
-                    # The server stops listening on SIGTERM; Traefik notices the
-                    # endpoint is gone about a second later. Waiting first keeps
-                    # that gap from dropping requests on every deploy.
+                    # Apache stops listening when the pod stops; Traefik notices
+                    # the endpoint is gone about a second later. Waiting first
+                    # keeps that gap from dropping requests on every deploy.
                     lifecycle:
                       preStop:
                         sleep:
                           seconds: 3
+                volumes:
+                  - name: tmp
+                    emptyDir: {}
           ---
           apiVersion: v1
           kind: Service

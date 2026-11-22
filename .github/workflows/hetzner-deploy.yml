@@ -1,0 +1,102 @@
+name: Hetzner Deploy
+
+# Uploads site/ (scripts/build-site.mjs) to Hetzner Webhosting over SFTP on
+# every push to main, into public_html/tinytrack-main.paperballoon.games on the
+# account that also hosts paperballoon.games (account setup: that repo's
+# README). Until there is a production deploy, tinytrack.paperballoon.games,
+# the host the TV apps and the Paper Balloon launcher use, serves that same
+# folder (konsoleH points both subdomains at it). Branches get a k8s preview
+# instead (preview.yml).
+on:
+  push:
+    branches: [main]
+    # The upload is the web app only, and native/ reaches it as the checked-in
+    # artifact under public/.
+    paths-ignore:
+      - 'shells/**'
+      - 'native/**'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One upload at a time: a newer push waits instead of cutting an upload off
+# halfway.
+concurrency:
+  group: hetzner-deploy
+
+jobs:
+  deploy:
+    # A manual run could start from any branch.
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 15
+    env:
+      HOST: tinytrack-main.paperballoon.games
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # Node builtins only, so no npm ci.
+      - name: Build site
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: npm run build:site
+
+      - name: Install lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      # Every file goes up as .in.<name> and is renamed over the old one, so a
+      # request sees the old or the new file, never a half-written one (a fresh
+      # checkout makes every file look newer, so all of them go up each time,
+      # and a truncated asset would then answer 304 to every revalidation).
+      # Passes in order, stopping at the first failure:
+      #  1. Everything the pages use, so a visitor never gets a page whose
+      #     files aren't on the server yet.
+      #  2. The pages, with the .htaccess whose CSP and routes belong to them.
+      #  3. A minute later, delete what the previous upload left; the minute
+      #     lets a page that loaded just before the switch still fetch its
+      #     files. --only-missing keeps this pass a delete. ACME challenges
+      #     belong to Hetzner's cert renewal.
+      # Key login with the server's host key pinned; the key's public half is
+      # registered under konsoleH > Logindaten > Öffentliche SFTP-Schlüssel.
+      - name: Upload
+        env:
+          REMOTE: public_html/${{ env.HOST }}
+          SFTP_HOST: ${{ secrets.HETZNER_SFTP_HOST }}
+          SFTP_USER: ${{ secrets.HETZNER_SFTP_USER }}
+          SFTP_KEY: ${{ secrets.HETZNER_SFTP_KEY }}
+          SFTP_KNOWN_HOSTS: ${{ secrets.HETZNER_SFTP_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null "$RUNNER_TEMP/sftp_key"
+          printf '%s\n' "$SFTP_KEY" > "$RUNNER_TEMP/sftp_key"
+          printf '%s\n' "$SFTP_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+          lftp -u "$SFTP_USER," "sftp://$SFTP_HOST" -e "
+            set sftp:connect-program 'ssh -a -x -i $RUNNER_TEMP/sftp_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes'
+            set net:max-retries 2
+            set cmd:fail-exit yes
+            set xfer:use-temp-file yes
+            mirror --reverse --no-perms --parallel=4 --exclude-glob '*.html' --exclude-glob .htaccess site $REMOTE
+            mirror --reverse --no-perms --parallel=4 --include-glob '*.html' --include-glob .htaccess site $REMOTE
+            sleep 60
+            mirror --reverse --no-perms --only-missing --delete --exclude-glob .well-known/acme-challenge/ site $REMOTE
+            bye"
+
+      # Both hosts, from GitHub's network, not from home: Hetzner blocks an
+      # address that sends many requests. A bad .htaccess is a 500 on every path.
+      - name: Check
+        run: |
+          set -euo pipefail
+          for host in "$HOST" tinytrack.paperballoon.games; do
+            curl -fsS -o /dev/null "https://$host/health"
+            # The page names this commit, so this is the upload just made.
+            PAGE=$(curl -fsS "https://$host/")
+            grep -q "(#${GITHUB_SHA:0:7})" <<< "$PAGE"
+            echo "Deployed https://$host" >> "$GITHUB_STEP_SUMMARY"
+          done

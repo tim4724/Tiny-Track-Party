@@ -72,6 +72,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+          # The commit the pages name (see the Dockerfile).
+          build-args: GIT_SHA=${{ github.sha }}
 
       - name: Capture tags for outputs
         id: out

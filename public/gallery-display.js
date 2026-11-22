@@ -68,7 +68,7 @@ function render() {
     var c = GALLERY_SCENARIOS[i];
     // Only the DISPLAY PAGE's screens: a `tvOnly` card has nothing to mount,
     // and a `page` card (the licenses page) is a page the server refuses to
-    // frame (CSP frame-ancestors in server/index.js). Both are cards on
+    // frame (CSP frame-ancestors in public/.htaccess). Both are cards on
     // /gallery-shots.html, where a still can stand for either.
     if (!c.key) continue;
     var card = Gallery.makeCard({
