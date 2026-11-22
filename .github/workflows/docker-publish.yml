@@ -1,21 +1,14 @@
 name: Docker Image
 
+# The branch previews' image (preview.yml). main deploys to Hetzner without one
+# (hetzner-deploy.yml).
 on:
   workflow_dispatch:
   workflow_call:
-    inputs:
-      platforms:
-        description: "Target platforms for Docker build"
-        required: false
-        type: string
-        default: "linux/amd64,linux/arm64"
     outputs:
       sha_tag:
         description: "Image tag for this commit (sha)"
         value: ${{ jobs.build.outputs.sha_tag }}
-      branch_tag:
-        description: "Image tag for branch (short ref)"
-        value: ${{ jobs.build.outputs.branch_tag }}
 
 env:
   REGISTRY: ghcr.io
@@ -25,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha_tag: ${{ steps.out.outputs.sha_tag }}
-      branch_tag: ${{ steps.out.outputs.branch_tag }}
     permissions:
       contents: read
       packages: write
@@ -33,10 +25,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-
-      - name: Set up QEMU
-        if: contains(inputs.platforms || 'linux/amd64,linux/arm64', 'arm64')
-        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -55,12 +43,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push image
         uses: docker/build-push-action@v7
@@ -71,14 +54,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+          # The preview cluster is amd64.
+          platforms: linux/amd64
           # The commit the pages name (see the Dockerfile).
           build-args: GIT_SHA=${{ github.sha }}
 
-      - name: Capture tags for outputs
+      # The sha tag is the one preview.yml deploys: it names this exact commit's
+      # image even once the branch tag has moved on.
+      - name: Capture tag for output
         id: out
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | grep ":sha-" | head -n1)
-          BRANCH_TAG=$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | grep ":${GITHUB_REF_NAME}$" | head -n1)
-          echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
-          echo "branch_tag=$BRANCH_TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          echo "sha_tag=$(printf '%s' "$TAGS" | tr ',' '\n' | grep ':sha-' | head -n1)" >> "$GITHUB_OUTPUT"

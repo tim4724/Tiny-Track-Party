@@ -14,8 +14,6 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/docker-publish.yml
-    with:
-      platforms: linux/amd64
     secrets: inherit
     permissions:
       contents: read
