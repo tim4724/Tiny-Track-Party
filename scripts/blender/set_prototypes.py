@@ -18000,6 +18000,409 @@ def park_kiosk():
         bunting((KX, KH + 3.5, KZ), (6.0, 6.2, pz), (RED, YELLOW, BLUE, WHITE), n=7, drop=1.2, w=0.8)
     join_still('kiosk')
 
+# ---- CLOVERLEAF: the lawns either side of the playground ----------------------------
+# Three more of the park's amusements on the open lawns either side of the
+# playground, each a piece of its own on the yard's anchor and in its frame
+# (metres, +X the gateway's side, +Z a driver's left as the start straight
+# comes in), each with the gravel walk that joins it to the park's paths
+# (playground_path, as the lawn's and the grove's are): on the lawn past the
+# ball court a CAROUSEL turning under its striped canopy, an ice-cream cart
+# by its walk; up the lawn behind it a HEDGE MAZE round a white arbour; on
+# the other side of the yard, by the bend's path, a CRAZY GOLF course round
+# a windmill. Nobody about. Everything drapes (lie_on_land), as the
+# playground does; what turns is lifted by the land under its pivot.
+
+CAROUSEL_X, CAROUSEL_Z = 48.0, 30.0
+CAROUSEL_DECK = 0.85                                 # the deck's top over the land under its middle
+
+def park_galloper(F, yaw, y, coat, saddle, lite, k=1.25):
+    """A carousel horse at full stretch facing +X of the frame F (turned by
+    `yaw`), its belly `y` over the deck, `k` its size: a chunky painted
+    body, the neck thrown up and the head bowed, the forelegs bent up under
+    it and the hind legs out behind, ears, a gold mane and tail, a saddle on
+    its cloth (lite: no mane or ears, the forelegs one length)."""
+    GOLD = PLAY_YELLOW
+    def b(size, at, color, roll=0.0):
+        return box(tuple(v * k for v in size), F(at[0] * k, y + at[1] * k, at[2] * k), color, yaw=yaw, roll=roll)
+    with rounded_over(not lite):
+        b((1.5, 0.62, 0.56), (0.0, 0.31, 0.0), coat)                          # the body
+    b((0.5, 0.55, 0.5), (0.62, 0.42, 0.0), coat, roll=0.3)                    # the chest
+    b((0.42, 0.95, 0.4), (0.87, 0.95, 0.0), coat, roll=0.55)                  # the neck, thrown up
+    b((0.78, 0.34, 0.34), (1.34, 1.16, 0.0), coat, roll=0.75)                 # the head, bowed
+    b((0.74, 0.08, 0.64), (-0.05, 0.62, 0.0), saddle)                         # the saddle's cloth
+    b((0.44, 0.16, 0.48), (-0.05, 0.72, 0.0), PLAY_TIMBER)                    # the saddle
+    with plain_parts():
+        for s in (-1, 1):
+            b((0.18, 0.6, 0.18), (0.87, -0.11, s * 0.15), coat, roll=-1.0)    # the forelegs, raised
+            if not lite:
+                b((0.16, 0.42, 0.16), (1.1, -0.45, s * 0.15), coat, roll=0.2)  # and bent down at the knee
+                b((0.1, 0.2, 0.08), (1.08, 1.52, s * 0.1), coat)              # the ears
+            b((0.18, 0.7, 0.18), (-0.84, -0.2, s * 0.15), coat, roll=0.75)    # the hind legs, out behind
+        b((0.62, 0.2, 0.14), (-0.97, 0.26, 0.0), GOLD, roll=-0.8)             # the tail
+        if not lite:
+            b((0.14, 0.85, 0.12), (0.665, 1.08, 0.0), GOLD, roll=0.55)        # the mane
+
+def park_ice_cream_cart(x, z, yaw, lite):
+    """An ice-cream cart, its hatch toward +X turned by `yaw`: a white box on
+    two wheels with a blue band and a handle, a striped parasol over it and
+    a big cone on a post at its end, two scoops in it."""
+    F = local(x, z, yaw)
+    with rounded_over(not lite):
+        box((1.3, 1.0, 2.2), F(0.0, 1.05, 0.0), 'white', yaw=yaw)
+    box((1.42, 0.26, 2.32), F(0.0, 1.18, 0.0), PLAY_BLUE, yaw=yaw)                          # its band
+    box((1.5, 0.1, 2.4), F(0.0, 1.6, 0.0), PLAY_BLUE, yaw=yaw)                              # its lid
+    box((0.14, 0.4, 1.2), F(0.69, 1.05, 0.2), 'dark', yaw=yaw)                              # the hatch, proud of the band
+    for s in (-1, 1):
+        cyl(0.45, 0.14, F(s * 0.74 - (0.14 if s > 0 else 0.0), 0.45, -0.3), 'dark', segs=10, axis='across', yaw=yaw)
+    with plain_parts():
+        box((0.12, 0.55, 0.12), F(0.0, 0.3, 1.0), 'grey', yaw=yaw)                         # its leg at the handle's end
+        box((1.1, 0.1, 0.1), F(0.0, 1.35, 1.45), 'grey', yaw=yaw)                          # the handle
+        for s in (-1, 1):
+            box((0.1, 0.1, 0.4), F(s * 0.5, 1.35, 1.25), 'grey', yaw=yaw)
+    umbrella(F(0.0, 1.65, 0.3), 1.5, 1.7, (PLAY_RED, 'white'), gores=6 if lite else 8)
+    px, _, pz = F(0.0, 0.0, -1.75)
+    box((0.2, 3.0, 0.2), (px, 1.4, pz), 'white')                                           # the cone's post, off the cart's end
+    cyl(0.1, 0.95, (px, 2.8, pz), 'tan', r2=0.42, segs=8, stem=True)                        # the cone, its point down
+    sphere(0.44, (px, 3.85, pz), 'cream', subdiv=1, flat=False)
+    sphere(0.36, (px + 0.05, 4.4, pz), 'blossom', subdiv=1, flat=False)
+
+def park_carousel_build():
+    # lite (the Android TV's build): four horses of eight, ten gores, no
+    # crown flag, the small parts square
+    CX, CZ, DY = CAROUSEL_X, CAROUSEL_Z, CAROUSEL_DECK
+    R, RH, RIM, RY, TOP = 6.0, 4.3, 7.0, 5.6, 8.0             # the platform; the horses' ring; the canopy's rim, its height, its peak
+    def floor():
+        n = 20
+        playground_print([(CX + 9.0 * (0.96 + 0.06 * hash01(q, 7)) * math.cos(q * 2 * math.pi / n), CZ + 9.0 * (0.96 + 0.06 * hash01(7, q))
+                           * math.sin(q * 2 * math.pi / n)) for q in range(n)], 0.1, 'gravel', 26)
+        # the walk in off the playground's front path, past the court's far end
+        playground_path(((7.8, 25.3), (13.0, 28.8), (22.0, 30.3), (31.0, 30.6), (39.8, 30.2)), w=2.2, y=0.13)
+    draped('floor', floor)
+    # the steps up onto the deck from the walk
+    for r, h in ((6.55, DY * 0.67), (7.25, DY * 0.33)):
+        box((0.75, h + 0.3, 2.8), (CX - r, (h - 0.3) / 2, CZ), PLAY_TIMBER)
+    # everything turns: the platform and its skirt, the column, the canopy,
+    # the horses' poles; the horses ride up and down them, every other one
+    # in step
+    N = 10 if LITE else 16
+    with animated('anim_spin:a=y:w=0.3#carousel', (CX, DY, CZ)):
+        cyl(R, DY + 0.7, (CX, -0.7, CZ), PLAY_RED, segs=16)                    # the platform, its skirt down into the land
+        cyl(R + 0.1, 0.26, (CX, DY - 0.4, CZ), PLAY_YELLOW, segs=16)           # its gilt band
+        cyl(R - 0.15, 0.1, (CX, DY, CZ), PLAY_TIMBER, segs=16)                 # the boards
+        cyl(1.4, TOP - 0.25 - DY, (CX, DY, CZ), PLAY_BLUE, segs=8)            # the column, up into the canopy
+        for y in (DY + 0.1, 4.6):
+            cyl(1.52, 0.4, (CX, y, CZ), PLAY_YELLOW, segs=8)
+        for k in range(N):                                                    # the canopy, in gores
+            a0, a1 = k / N * 2 * math.pi, (k + 1) / N * 2 * math.pi
+            rim = lambda a: (CX + RIM * math.cos(a), RY, CZ + RIM * math.sin(a))
+            poly([(CX, TOP, CZ), rim(a1), rim(a0)], [(0, 1, 2)], (PLAY_RED, 'white')[k % 2])   # wound to the sky (umbrella())
+            m = (a0 + a1) / 2
+            box((0.16, 0.8 + 0.06 * (k % 2), 2 * RIM * math.sin(math.pi / N) + 0.05), (CX + RIM * math.cos(math.pi / N) * math.cos(m), RY - 0.38,
+                CZ + RIM * math.cos(math.pi / N) * math.sin(m)), (PLAY_YELLOW, PLAY_BLUE)[k % 2], yaw=-m)   # the valance (every other board a
+                                                                      # hair deeper: their ends overlap)
+        cyl(0.7, 0.55, (CX, TOP - 0.2, CZ), PLAY_YELLOW, r2=0.45, segs=8)      # the crown
+        sphere(0.42, (CX, TOP + 0.65, CZ), PLAY_YELLOW, subdiv=1, flat=False)
+        if not LITE:
+            box((0.16, 1.4, 0.16), (CX, TOP + 1.4, CZ), 'white')
+            box((0.08, 0.5, 0.9), (CX, TOP + 1.8, CZ + 0.5), PLAY_BLUE)
+        H = 8 if not LITE else 4
+        COATS = ('white', 'cream', 'white', 'white')
+        SADDLES = (PLAY_RED, PLAY_BLUE, PLAY_GREEN, 0xa878e8)
+        hy = DY + 1.1                                                          # a horse's belly, at the foot of its ride
+        for g in range(2):
+            with animated('anim_bob:h=%.4f:p=3.6:o=%.1f#horses%d' % (0.45 * REAL, 0.5 * g, g), (CX, hy, CZ)):
+                for k in range(g, H, 2):
+                    a = k / H * 2 * math.pi + math.pi / H
+                    px, pz = CX + RH * math.cos(a), CZ + RH * math.sin(a)
+                    yaw = math.pi / 2 - a                                      # facing the way the deck turns
+                    park_galloper(local(px, pz, yaw), yaw, hy, COATS[k % 4], SADDLES[k % 4], LITE)
+        for k in range(H):                                                    # the brass poles, deck to canopy
+            a = k / H * 2 * math.pi + math.pi / H
+            box((0.2, 6.75 - DY, 0.2), (CX + RH * math.cos(a), (6.75 + DY) / 2, CZ + RH * math.sin(a)), PLAY_YELLOW)
+    # the ice-cream cart beside the walk, its hatch to it
+    park_ice_cream_cart(37.0, 26.4, -math.pi / 2, LITE)
+    bench((35.8, 0.0, 34.0), yaw=math.pi / 2)
+    playground_lamp(40.0, 33.4, 0.0)
+    playground_bin(39.6, 25.0)
+    lie_on_land()
+
+@piece(REAL)
+def park_carousel():
+    park_carousel_build()
+
+# The hedge maze: a square of clipped hedge a little over head high to a
+# child, nine cells a side round a room in the middle where a white arbour
+# with roses on it stands over a bench; its way in on the side toward the
+# carousel, where the walk comes up from it, and another walk down past the
+# cherries to the playground's front path. The maze is cut by a seeded walk
+# (a recursive backtracker), so it is a real one: one way to the middle.
+MAZE_X, MAZE_Z, MAZE_N, MAZE_S = 22.0, 74.0, 9, 2.8          # its middle, cells a side, a cell's width
+
+def maze_passages(n, seed):
+    """The open sides of a maze n cells a side as pairs of cells (i along X,
+    j along Z), its way in at (n // 2, 0): a seeded backtracker's, round the
+    middle three by three, which is one room joined to the rest by the cell
+    next to it the walk reaches last."""
+    mid = range(n // 2 - 1, n // 2 + 2)
+    room = {(i, j) for i in mid for j in mid}
+    start = (n // 2, 0)
+    open_, depth, stack = set(), {start: 0}, [start]
+    while stack:
+        i, j = stack[-1]
+        nb = [(i + di, j + dj) for di, dj in ((1, 0), (0, 1), (-1, 0), (0, -1))
+              if 0 <= i + di < n and 0 <= j + dj < n and (i + di, j + dj) not in depth and (i + di, j + dj) not in room]
+        if not nb:
+            stack.pop()
+            continue
+        c = nb[int(hash01(i, j, len(depth), seed) * len(nb))]
+        open_.add(frozenset(((i, j), c)))
+        depth[c] = depth[(i, j)] + 1
+        stack.append(c)
+    door = max(((c, r) for c in depth for r in room if abs(c[0] - r[0]) + abs(c[1] - r[1]) == 1), key=lambda cr: depth[cr[0]])
+    open_.add(frozenset(door))
+    for a in room:
+        for b in room:
+            if abs(a[0] - b[0]) + abs(a[1] - b[1]) == 1:
+                open_.add(frozenset((a, b)))
+    return open_
+
+def maze_arbour(x, z, lite):
+    """A white arbour: six posts round a ring under a low white dome, roses
+    climbing it, a bench inside facing the way in."""
+    R, H = 1.8, 2.5
+    for k in range(6):
+        a = k * math.pi / 3 + math.pi / 6
+        box((0.22, H + 0.1, 0.22), (x + R * math.cos(a), H / 2, z + R * math.sin(a)), 'white')
+    torus(R, 0.16, (x, H, z), 'white', segs=12)
+    cyl(R + 0.35, 1.1, (x, H + 0.05, z), 'white', r2=0.35, segs=12)
+    sphere(0.3, (x, H + 1.3, z), PLAY_YELLOW, subdiv=1, flat=False)
+    for k in range(6 if lite else 12):                                    # the roses up the posts and over the dome
+        a = k * math.pi / 3 + math.pi / 6 if k < 6 else (k - 6) * math.pi / 3
+        r, y = (R + 0.12, 1.2 + 0.5 * (k % 2)) if k < 6 else (R * 0.7, H + 0.55)
+        box((0.45, 0.4, 0.45), (x + r * math.cos(a), y, z + r * math.sin(a)), ('blossom', PLAY_RED)[k % 2], yaw=a)
+    bench((x, 0.0, z + 0.7), yaw=math.pi)
+
+def hedge_maze_build():
+    # lite (the Android TV's build): the hedges square and in longer
+    # lengths (playground_hedge), half the roses
+    n, s, MX, MZ = MAZE_N, MAZE_S, MAZE_X, MAZE_Z
+    x0, z0 = MX - n * s / 2, MZ - n * s / 2
+    T, H = 1.0, 1.3
+    def floor():
+        playground_print([(x0 - 0.4, z0 - 0.4), (x0 + n * s + 0.4, z0 - 0.4), (x0 + n * s + 0.4, z0 + n * s + 0.4), (x0 - 0.4, z0 + n * s + 0.4)],
+                         0.1, 'gravel', 22)
+        # the walk up from the carousel to the way in, and the walk on from
+        # it down past the cherries to the playground's front path
+        playground_path(((45.0, 38.2), (40.0, 45.5), (31.5, 53.0), (24.5, 58.0), (22.0, z0 - 0.2)), w=2.2, y=0.13)
+        playground_path(((23.2, 58.4), (15.5, 56.0), (8.5, 49.5), (3.6, 40.5), (3.8, 33.5), (4.6, 28.0)), w=2.2, y=0.13)
+    draped('floor', floor)
+    open_ = maze_passages(n, 5)
+    gate = n // 2
+    def runs(walls):                                                 # consecutive unit walls along a line into one run
+        out, run = [], None
+        for k, on in enumerate(walls + [False]):
+            if on and run is None:
+                run = k
+            elif not on and run is not None:
+                out.append((run, k))
+                run = None
+        return out
+    for j in range(n + 1):                                           # the walls along X, at the j-th line of Z
+        walls = [(j in (0, n) and not (j == 0 and i == gate)) or (0 < j < n and frozenset(((i, j - 1), (i, j))) not in open_)
+                 for i in range(n)]
+        for a, b in runs(walls):
+            playground_hedge((x0 + a * s, z0 + j * s), (x0 + b * s, z0 + j * s), LITE, h=H, t=T)
+    for i in range(n + 1):                                           # and along Z, at the i-th line of X
+        walls = [i in (0, n) or frozenset(((i - 1, j), (i, j))) not in open_ for j in range(n)]
+        for a, b in runs(walls):
+            playground_hedge((x0 + i * s, z0 + a * s), (x0 + i * s, z0 + b * s), LITE, h=H, t=T)
+    # the way in between two clipped pillars, a ball on each
+    for sx in (-1, 1):
+        px = x0 + (gate + (sx + 1) / 2) * s
+        box((1.5, H + 0.9, 1.5), (px, (H + 0.9) / 2 - 0.25, z0), 0x4f9a48)
+        sphere(0.9, (px, H + 1.35, z0), 0x4f9a48, subdiv=1, flat=False)
+    maze_arbour(MX, MZ, LITE)
+    lie_on_land()
+
+@piece(REAL)
+def hedge_maze():
+    hedge_maze_build()
+
+# The crazy golf: three holes on a mown green behind a low white fence,
+# between the grove's walk and the bend's path, each a lane of green felt
+# between low white kerbs from its red tee to its hole and flag: the first
+# a dogleg over two humps, the second over a humpback bridge across the
+# stream out of the pond, the third through the windmill, whose sails turn
+# slowly over the tunnel's mouth, face on to the road. A hut for the
+# putters by the gate onto the bend's path and a big golf ball on its tee
+# beside it; the second gate opens onto the grove's walk.
+GOLF_X0, GOLF_X1, GOLF_Z0, GOLF_Z1 = -2.5, 25.5, -76.5, -50.0
+GOLF_FELT, GOLF_Y = 4, 0.14                                  # the felt's shade of green; its height over the paving
+GOLF_W, GOLF_KERB = 2.6, 0.3
+
+def golf_lane(pts, prints, gap=None):
+    """A lane through the (x, z) points: felt between kerbs, its tee mat at
+    the first point and its hole at the last with the flag in it, laid in
+    short lengths so it drapes. `prints`: the felt, the mat and the hole
+    (the floor's); else the kerbs and the flag. `gap` (x0, x1), a stretch
+    between two of the points, is left bare (where a bridge carries it)."""
+    w, t = GOLF_W, GOLF_KERB
+    def offset(d):                                                   # the points `d` to the left, mitred at the corners
+        out = []
+        for i, (x, z) in enumerate(pts):
+            ns = []
+            for a, b in ((pts[i - 1], pts[i]) if i else (pts[0], pts[1]), (pts[i], pts[i + 1]) if i + 1 < len(pts) else (pts[-2], pts[-1])):
+                l = math.dist(a, b)
+                ns.append((-(b[1] - a[1]) / l, (b[0] - a[0]) / l))
+            nx, nz = ns[0][0] + ns[1][0], ns[0][1] + ns[1][1]
+            l = math.hypot(nx, nz)
+            k = d / max(0.5, (nx * ns[0][0] + nz * ns[0][1]) / l)
+            out.append((x + nx / l * k, z + nz / l * k))
+        return out
+    def dense(line, step):                                           # cut as the middle line is, so both edges pair up
+        out = [line[0]]
+        for i in range(len(line) - 1):
+            a, b, m = line[i], line[i + 1], max(1, math.ceil(math.dist(pts[i], pts[i + 1]) / step))
+            out += [(a[0] + (b[0] - a[0]) * q / m, a[1] + (b[1] - a[1]) * q / m) for q in range(1, m + 1)]
+        return out
+    inside = lambda a, b: gap and gap[0] < (a[0] + b[0]) / 2 < gap[1]
+    if prints:
+        L, Rt = dense(offset(w / 2), 2.0), dense(offset(-w / 2), 2.0)
+        for i in range(len(L) - 1):                                  # the felt
+            if inside(L[i], L[i + 1]):
+                continue
+            rowed(ground_poly([(L[i][0], GOLF_Y, L[i][1]), (L[i + 1][0], GOLF_Y, L[i + 1][1]), (Rt[i + 1][0], GOLF_Y, Rt[i + 1][1]),
+                               (Rt[i][0], GOLF_Y, Rt[i][1])], [(0, 1, 2, 3)], 'green'), GOLF_FELT)
+    else:
+        with plain_parts():
+            for d in (w / 2 + t / 2, -w / 2 - t / 2):                # the kerbs, a short length at a time
+                line = dense(offset(d), 4.0 if LITE else 2.6)
+                for a, b in zip(line, line[1:]):
+                    if inside(a, b):
+                        continue
+                    l = math.dist(a, b)
+                    box((t, 0.42, l + t), ((a[0] + b[0]) / 2, 0.11, (a[1] + b[1]) / 2), 'white', yaw=math.atan2(b[0] - a[0], b[1] - a[1]))
+            for (ax, az), (bx, bz) in ((pts[0], pts[1]), (pts[-1], pts[-2])):   # and across each end
+                l = math.hypot(bx - ax, bz - az)
+                ux, uz = (ax - bx) / l, (az - bz) / l
+                box((w + 2 * t, 0.42, t), (ax + ux * (t / 2 + 0.05), 0.11, az + uz * (t / 2 + 0.05)), 'white', yaw=math.atan2(ux, uz))
+    (ex, ez), (px, pz) = pts[-1], pts[-2]
+    l = math.hypot(ex - px, ez - pz)
+    hx, hz = ex - (ex - px) / l * 1.4, ez - (ez - pz) / l * 1.4      # the hole
+    if not prints:
+        with plain_parts():
+            box((0.1, 1.9, 0.1), (hx, 0.95, hz), 'white')                                        # the flag in it
+            box((0.06, 0.5, 0.75), (hx, 1.62, hz + 0.42), PLAY_RED)
+        return
+    ground_poly([(hx + 0.32 * math.cos(q * math.pi / 4), GOLF_Y + 0.03, hz + 0.32 * math.sin(q * math.pi / 4)) for q in range(8)],
+                [tuple(range(8))], 'dark')
+    (tx, tz), (nx_, nz_) = pts[0], pts[1]
+    l = math.hypot(nx_ - tx, nz_ - tz)
+    ux, uz = (nx_ - tx) / l, (nz_ - tz) / l
+    mx, mz = tx + ux * 1.1, tz + uz * 1.1                              # the tee's mat
+    rowed(ground_poly([(mx + ux * a + uz * b, GOLF_Y + 0.03, mz + uz * a - ux * b) for a, b in ((-0.6, -0.8), (0.6, -0.8), (0.6, 0.8), (-0.6, 0.8))],
+                      [(0, 1, 2, 3)], PLAY_RED), 6)
+
+def golf_hump(x, z):
+    """A low hump of felt across a lane along X."""
+    rowed(cyl(1.1, GOLF_W - 0.04, (x, GOLF_Y + 0.32 - 1.1, z - GOLF_W / 2 + 0.02), 'green', segs=12, axis='along'), GOLF_FELT)
+
+def golf_windmill(x, z, lite):
+    """The windmill astride a lane along X at (x, z): a white tower tapering
+    to a red cap, the lane's tunnel through its foot, and on its +X face
+    four sails turning slowly about the windshaft, their tips sweeping low
+    over the tunnel's mouth."""
+    R0, R1, TH = 2.0, 1.4, 4.2
+    cyl(R0, TH + 0.3, (x, -0.3, z), 'white', r2=R1, segs=8, yaw=math.pi / 8)
+    cyl(R1 + 0.3, 1.7, (x, TH, z), PLAY_RED, r2=0.2, segs=8, yaw=math.pi / 8)
+    flat = lambda y: (R0 - (R0 - R1) * (y + 0.3) / (TH + 0.3)) * math.cos(math.pi / 8)   # the wall's face at height y
+    for s in (-1, 1):                                                   # the tunnel's mouths
+        box((0.34, 1.05, 1.5), (x + s * flat(0.5), 0.52, z), 'dark')
+    box((0.24, 0.9, 0.7), (x + flat(2.2), 2.2, z), 'dark')                              # a window over it
+    HY = 3.4
+    cyl(0.26, 1.3, (x + 1.15, HY, z), 'dark', segs=8, axis='across')                  # the windshaft
+    with animated('anim_spin:a=x:w=-0.6#sails', (x + 2.35, HY, z)):
+        cyl(0.42, 0.3, (x + 2.2, HY, z), PLAY_RED, segs=8, axis='across')              # the hub
+        for k in range(4):
+            a = k * math.pi / 2 + math.pi / 4
+            dy, dz = math.sin(a), math.cos(a)
+            strut((x + 2.45, HY, z), (x + 2.45, HY + dy * 3.0, z + dz * 3.0), 0.2, PLAY_TIMBER)
+            py, pz = math.cos(a), -math.sin(a)                         # the sail on the stock's leading side
+            cy, cz = HY + dy * 1.85 + py * 0.45, z + dz * 1.85 + pz * 0.45
+            box((0.1, 0.8, 2.2), (x + 2.43, cy, cz), 'white', pitch=a)                # (behind the stock's face, not in it)
+            if not lite:
+                box((0.16, 0.16, 2.2), (x + 2.43, cy + py * 0.4, cz + pz * 0.4), PLAY_RED, pitch=a)
+
+def crazy_golf_build():
+    # lite (the Android TV's build): the fence a rail on fewer posts, no
+    # benches, the sails without their red edges
+    X0, X1, Z0, Z1 = GOLF_X0, GOLF_X1, GOLF_Z0, GOLF_Z1
+    PX, PZ, PR = 8.5, -67.0, 1.8                                        # the pond
+    SX, SZ0, SZ1 = PX, PZ + PR - 0.2, -59.2                             # the stream out of it under the second hole, to the pool
+    GZ, GX = -58.2, 9.0                                                 # the gate onto the bend's path (its Z); onto the grove's walk (its X)
+    WATER = 0x8ecae6
+    def floor():
+        C = 2.0
+        playground_print([(X0 + C, Z0), (X1 - C, Z0), (X1, Z0 + C), (X1, Z1 - C), (X1 - C, Z1), (X0 + C, Z1), (X0, Z1 - C), (X0, Z0 + C)],
+                         0.08, 'leaf', 8)                                    # the course's mown green
+        # the pond, the stream and the pool, a hand over the paving
+        rowed(ground_poly([(PX, 0.11, PZ)] + [(PX + PR * math.cos(q * math.pi / 6), 0.11, PZ + PR * math.sin(q * math.pi / 6)) for q in range(12)],
+                          [(0, 1 + (q + 1) % 12, 1 + q) for q in range(12)], WATER), 10)
+        rowed(ground_poly([(SX - 0.6, 0.11, SZ0), (SX + 0.6, 0.11, SZ0), (SX + 0.6, 0.11, SZ1), (SX - 0.6, 0.11, SZ1)], [(0, 1, 2, 3)], WATER), 10)
+        rowed(ground_poly([(SX, 0.11, SZ1)] + [(SX + 1.1 * math.cos(q * math.pi / 4), 0.11, SZ1 + 1.1 * math.sin(q * math.pi / 4)) for q in range(8)],
+                          [(0, 1 + (q + 1) % 8, 1 + q) for q in range(8)], WATER), 10)
+        holes(True)
+        # the walks out of the gates: to the bend's path, and up to the grove's
+        playground_path(((30.2, -53.0), (28.2, -56.4), (25.0, GZ)), w=2.0, y=0.13, step=2.0)
+        playground_path(((6.0, -38.0), (7.6, -43.5), (GX, Z1 - 0.8)), w=2.0, y=0.13, step=2.0)
+    def holes(prints):
+        golf_lane(((22.5, -53.8), (3.0, -53.8), (3.0, -59.0)), prints)
+        golf_lane(((2.5, -62.8), (SX - 1.6, -62.8), (SX + 1.6, -62.8), (22.0, -62.8)), prints, gap=(SX - 1.6, SX + 1.6))
+        golf_lane(((22.5, -71.2), (2.5, -71.2)), prints)
+    draped('floor', floor)
+    holes(False)
+    golf_hump(15.5, -53.8)
+    golf_hump(9.5, -53.8)
+    # the stone rims of the pond and the pool, the humpback bridge over the stream between
+    torus(PR + 0.15, 0.3, (PX, 0.1, PZ), 'grey', segs=12)
+    torus(1.25, 0.26, (SX, 0.1, SZ1), 'grey', segs=10)
+    for q in range(5):                                                  # the bridge: five planks, rising to the middle
+        f = (q - 2) / 2.0
+        box((0.66, 0.16, GOLF_W), (SX + (q - 2) * 0.62, 0.38 + 0.32 * (1 - f * f), -62.8), PLAY_TIMBER)
+    for s in (-1, 1):
+        box((3.4, 0.65, 0.26), (SX, 0.625, -62.8 + s * (GOLF_W / 2 + 0.15)), PLAY_TIMBER)   # its parapets
+        box((0.3, 0.5, GOLF_W + 0.5), (SX + s * 1.55, 0.15, -62.8), 'grey')                # its abutments
+    golf_windmill(15.5, -71.2, LITE)
+    # the fence, gates in it to the bend's path and the grove's walk
+    runs = [((X1, Z1 - 2.0), (X1, GZ + 1.3)), ((X1, GZ - 1.3), (X1, Z0 + 2.0)), ((X1, Z0 + 2.0), (X1 - 2.0, Z0)), ((X1 - 2.0, Z0), (X0 + 2.0, Z0)),
+            ((X0 + 2.0, Z0), (X0, Z0 + 2.0)), ((X0, Z0 + 2.0), (X0, Z1 - 2.0)), ((X0, Z1 - 2.0), (X0 + 2.0, Z1)), ((X0 + 2.0, Z1), (GX - 1.2, Z1)),
+            ((GX + 1.2, Z1), (X1 - 2.0, Z1)), ((X1 - 2.0, Z1), (X1, Z1 - 2.0))]
+    for run in runs:
+        bld_fence(bld_run(run, 6.0 if LITE else 3.0), 'garden', h=1.0, rails=(0.75,) if LITE else (0.45, 0.85), step=6.0 if LITE else 3.0, sunk=0.1)
+    for gx, gz in ((X1, GZ + 1.3), (X1, GZ - 1.3), (GX - 1.2, Z1), (GX + 1.2, Z1)):
+        box((0.3, 1.5, 0.3), (gx, 0.65, gz), PLAY_YELLOW)
+    # the putters' hut by the gate, its hatch to the walk, a striped awning
+    HX, HZ = 28.6, -62.2
+    box((2.6, 2.4, 2.4), (HX, 1.1, HZ), PLAY_TIMBER)
+    cyl(2.3, 1.5, (HX, 2.3, HZ), PLAY_BLUE, r2=0.2, segs=4, yaw=math.pi / 4)
+    box((1.4, 0.8, 0.1), (HX - 0.2, 1.4, HZ + 1.22), 'dark')
+    box((1.8, 0.12, 0.5), (HX - 0.2, 1.0, HZ + 1.4), 'white')
+    for k in range(4):
+        box((0.45, 0.08, 1.0), (HX - 0.875 + k * 0.45, 2.05, HZ + 1.6), (PLAY_RED, 'white')[k % 2], pitch=-0.35)
+    # the sign: a golf ball on its tee as tall as the hut
+    cyl(0.12, 1.6, (27.6, 0.0, -55.0), PLAY_RED, r2=0.5, segs=8, stem=True)
+    sphere(0.75, (27.6, 2.3, -55.0), 'white', subdiv=2, flat=False)
+    playground_lamp(26.6, -60.4, 0.0)
+    if not LITE:
+        bench((X1 + 1.6, 0.0, -66.5), yaw=-math.pi / 2)
+        bench((X0 + 1.4, 0.0, -66.0), yaw=math.pi / 2)
+    playground_bin(26.4, -64.6)
+    lie_on_land()
+
+@piece(REAL)
+def crazy_golf():
+    crazy_golf_build()
+
 # ---- CLOVERLEAF: the park's bedding on the hills ------------------------------------
 # What a town park plants on a bank that faces its visitors: a floral clock
 # on the face of the hill outside the top bend, and a long bed of carpet
@@ -18982,6 +19385,8 @@ lite_too('skull-trail')
 lite_too('storm-containers', 'storm-containers-b', 'storm-containers-c')
 # Pretzel's lone oaks and avenue and Cloverleaf's first grove: the box's trees (trees_lite).
 lite_too('avenue-oaks', 'swing-oak', 'picnic-oak', 'hay-wain-oak', 'blossom-grove')
+# Cloverleaf's carousel, maze and crazy golf: what each builder leaves out under LITE.
+lite_too('park-carousel', 'hedge-maze', 'crazy-golf')
 # ...and Riptide's baths on two lane ropes and plainer huts, no rail to the road, its bandstand's audience in one row.
 lite_too('lido', 'seafront-bandstand', 'riptide-lagoon-beach')
 # Round 24: the seafront is the lap's heaviest vista on the box, so what stands

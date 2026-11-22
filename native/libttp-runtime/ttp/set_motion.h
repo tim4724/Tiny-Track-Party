@@ -38,7 +38,8 @@
 // on its own terrain (SET_GROUND) stands on the ground as the renderer draws
 // it, lifted by the land under its pivot over the piece's foot as the `drape`
 // parts round it are, so a flag stays on the top of its draped pole where the
-// grid's chords stray off the curve the piece was built on. Lengths are the
+// grid's chords stray off the curve the piece was built on; what rides it is
+// lifted with it (a carousel's horses on its turning deck). Lengths are the
 // node's own units (a GLB's grow and the placement's scale carry them); radii
 // are WORLD units, because they are about cars. Keys: a axis (x|y|z), w rad/s,
 // d degrees, p seconds, h height, r radius (watch, hop), c chain, o phase

@@ -372,10 +372,15 @@ void TtpRenderer::buildSetMovers() {
                 SetMover mv;
                 mv.rest = rest;
                 // A `drape` part stands where the ground is drawn, as the
-                // draped parts round it do (appendBaked).
+                // draped parts round it do (appendBaked), and what rides it
+                // goes up with it: left at its rest as built, a carousel's
+                // horses sank through their own deck.
                 if (motion.drape && mTrack && !motion.travels()) {
-                    mv.rest[3].y += groundSurfaceY(*mTrack, rest[3].x, rest[3].z) - baseY;
+                    mv.drape = groundSurfaceY(*mTrack, rest[3].x, rest[3].z) - baseY;
+                } else if (rides >= 0) {
+                    mv.drape = mSetMovers[(size_t) rides].drape;
                 }
+                mv.rest[3].y += mv.drape;
                 mv.toBake = skinned ? toNode : mat4f{};
                 mv.scale = length(rest[0].xyz);
                 const float inv = mv.scale > 0 ? 1.0f / mv.scale : 1.0f;
