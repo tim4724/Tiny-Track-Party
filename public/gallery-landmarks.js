@@ -11,11 +11,12 @@ import { storedVolume } from './display/audio/bus.js';
 
 // This page's own memory. gallery-common's state is shared by every gallery
 // page, and a track or view picked here means nothing on the others.
+// Sound is not remembered: every visit opens silent.
 const STATE_KEY = 'tinytrack_gallery_landmarks_v2';
 const state = (() => {
   const d = { track: '', players: 1, view: 'race', res: 'sharp', speed: 'normal', help: false, tab: 'review',
-              tier: 'full', sort: 'size', item: '', sound: true };
-  try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (_) { return d; }
+              tier: 'full', sort: 'size', item: '', sound: false };
+  try { return { ...d, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}'), sound: false }; } catch (_) { return d; }
 })();
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
 
@@ -1065,6 +1066,9 @@ for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () =>
 function init(h) {
   lm = h;
   syncSound();
+  // A click in the stage builds its audio bus at full volume (main.js's own
+  // window listener, registered first), so the level is set again after it.
+  for (const ev of ['pointerdown', 'keydown']) frame.contentWindow.addEventListener(ev, () => syncSound());
   frame.contentWindow.addEventListener('keydown', onKey);
   frame.contentWindow.addEventListener('keyup', onKeyUp);
   // Grouped by cup, in catalogue order; once, a Res reload keeps it.
