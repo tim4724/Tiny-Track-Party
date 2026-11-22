@@ -24,18 +24,20 @@ permissions:
 concurrency:
   group: hetzner-deploy
 
+env:
+  # The commit Tests ran on; github.sha would be main's newest.
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
 jobs:
-  deploy:
+  # npm ci runs every dependency's install scripts, so the build stays out of
+  # the job that holds the deploy key.
+  build:
     # A manual run could start from any branch, and deploys main as it is.
     if: >-
       github.ref_name == 'main'
       && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      HOST: tinytrack-main.paperballoon.games
-      # The commit Tests ran on; github.sha would be main's newest.
-      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -52,6 +54,37 @@ jobs:
         env:
           GIT_SHA: ${{ env.SHA }}
         run: npm run build:site
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: site
+          include-hidden-files: true   # .htaccess and .well-known/
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Holds the SFTP secrets; only main may use it.
+    environment: hetzner
+    timeout-minutes: 15
+    env:
+      HOST: tinytrack-main.paperballoon.games
+    steps:
+      # For scripts/deploy-mtimes.mjs, which needs only Node's own modules.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: site
 
       - name: Install lftp
         run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
