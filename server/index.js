@@ -12,7 +12,6 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const zlib = require('zlib');
 const site = require('./site.js');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
@@ -36,7 +35,7 @@ function detectLocalSha() {
       .toString().trim();
   } catch (_) { return ''; }
 }
-const GIT_SHA = String(process.env.GIT_SHA || '').trim() || detectLocalSha();
+const GIT_SHA = detectLocalSha();
 
 // Relay override (dev/E2E): RELAY_URL=ws://… points every served page at a
 // local relay — injected into each HTML's <meta name="relay-url"> (read by
@@ -95,30 +94,6 @@ const MIME_TYPES = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
-}
-
-// Brotli for the text-ish types plus the engine wasm, which is the whole cold
-// load (3.5 MB raw, ~3x smaller compressed). Compressed once per file content
-// and kept; the Buffer.equals check makes the cache safe against on-disk edits
-// without a stat, and quality 5 keeps the one-time cost tens of ms rather than
-// the seconds quality 11 would take on the wasm. The GLBs and the Filament
-// materials are binary but NOT compressed formats (vertex buffers, shader
-// blobs): they shrink 4-5x, and every boot fetches dozens of them. Media types
-// stay raw — they are already compressed formats, and they're the ones that
-// get range requests.
-const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm', '.txt', '.md', '.glb', '.filamat']);
-const brotliCache = new Map(); // filePath -> { src, encoded }
-function brotliFor(filePath, data) {
-  const hit = brotliCache.get(filePath);
-  if (hit && hit.src.equals(data)) return hit.encoded;
-  const encoded = zlib.brotliCompressSync(data, {
-    params: {
-      [zlib.constants.BROTLI_PARAM_QUALITY]: 5,
-      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length
-    }
-  });
-  brotliCache.set(filePath, { src: data, encoded });
-  return encoded;
 }
 
 function getLocalIP() {
@@ -336,13 +311,6 @@ const server = (TLS ? require('https').createServer.bind(null, TLS) : http.creat
       return;
     }
 
-    if (COMPRESSIBLE.has(ext)) {
-      headers['Vary'] = 'Accept-Encoding';
-      if (data.length > 1024 && /\bbr\b/.test(req.headers['accept-encoding'] || '')) {
-        data = brotliFor(filePath, data);
-        headers['Content-Encoding'] = 'br';
-      }
-    }
     headers['Content-Length'] = data.length;
     res.writeHead(200, headers);
     res.end(data);
