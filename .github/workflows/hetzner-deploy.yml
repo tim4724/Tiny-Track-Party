@@ -1,21 +1,19 @@
 name: Hetzner Deploy
 
-# Uploads site/ (scripts/build-site.mjs) to Hetzner Webhosting over SFTP on
-# every push to main, into public_html/tinytrack-main.paperballoon.games on the
-# account that also hosts paperballoon.games (account setup: that repo's
-# README). Until there is a production deploy, tinytrack.paperballoon.games,
-# the host the TV apps and the Paper Balloon launcher use, serves that same
-# folder (konsoleH points both subdomains at it). Branches get a k8s preview
-# instead (preview.yml).
+# Uploads site/ (scripts/build-site.mjs) to Hetzner Webhosting over SFTP, into
+# public_html/tinytrack-main.paperballoon.games on the account that also hosts
+# paperballoon.games (account setup: that repo's README). Until there is a
+# production deploy, tinytrack.paperballoon.games, the host the TV apps and
+# the Paper Balloon launcher use, serves that same folder (konsoleH points both
+# subdomains at it). Branches get a k8s preview instead (preview.yml).
+#
+# Runs once Tests has passed on main, not on the push itself: what goes up is
+# what players get, so a commit that fails them stays off the server.
 on:
-  push:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
     branches: [main]
-    # The upload is the web app only, and native/ reaches it as the checked-in
-    # artifact under public/.
-    paths-ignore:
-      - 'shells/**'
-      - 'native/**'
-      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -28,15 +26,21 @@ concurrency:
 
 jobs:
   deploy:
-    # A manual run could start from any branch.
-    if: github.ref_name == 'main'
+    # A manual run could start from any branch, and deploys main as it is.
+    if: >-
+      github.ref_name == 'main'
+      && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 15
     env:
       HOST: tinytrack-main.paperballoon.games
+      # The commit Tests ran on; github.sha would be main's newest.
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
 
       - uses: actions/setup-node@v7
         with:
@@ -45,16 +49,18 @@ jobs:
       # Node builtins only, so no npm ci.
       - name: Build site
         env:
-          GIT_SHA: ${{ github.sha }}
+          GIT_SHA: ${{ env.SHA }}
         run: npm run build:site
 
       - name: Install lftp
         run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
 
-      # Every file goes up as .in.<name> and is renamed over the old one, so a
-      # request sees the old or the new file, never a half-written one (a fresh
-      # checkout makes every file look newer, so all of them go up each time,
-      # and a truncated asset would then answer 304 to every revalidation).
+      # Only what changed goes up: scripts/deploy-mtimes.mjs gives every file
+      # the time its content was first uploaded, from the manifest the last
+      # upload left (none on the first run, and then everything goes up), so
+      # mirror skips the rest and an unchanged asset keeps its Last-Modified.
+      # Each file goes up as .in.<name> and is renamed over the old one, so a
+      # request sees the old or the new file, never a half-written one.
       # Passes in order, stopping at the first failure:
       #  1. Everything the pages use, so a visitor never gets a page whose
       #     files aren't on the server yet.
@@ -77,9 +83,11 @@ jobs:
           install -m 600 /dev/null "$RUNNER_TEMP/sftp_key"
           printf '%s\n' "$SFTP_KEY" > "$RUNNER_TEMP/sftp_key"
           printf '%s\n' "$SFTP_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+          CONNECT="set sftp:connect-program 'ssh -a -x -i $RUNNER_TEMP/sftp_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes'; set net:max-retries 2"
+          lftp -u "$SFTP_USER," "sftp://$SFTP_HOST" -e "$CONNECT; get $REMOTE/.deploy.json -o $RUNNER_TEMP/deployed.json; bye" || echo "No manifest from an earlier upload: everything goes up."
+          node scripts/deploy-mtimes.mjs site "$RUNNER_TEMP/deployed.json"
           lftp -u "$SFTP_USER," "sftp://$SFTP_HOST" -e "
-            set sftp:connect-program 'ssh -a -x -i $RUNNER_TEMP/sftp_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes'
-            set net:max-retries 2
+            $CONNECT
             set cmd:fail-exit yes
             set xfer:use-temp-file yes
             mirror --reverse --no-perms --parallel=4 --exclude-glob '*.html' --exclude-glob .htaccess site $REMOTE
@@ -97,6 +105,6 @@ jobs:
             curl -fsS -o /dev/null "https://$host/health"
             # The page names this commit, so this is the upload just made.
             PAGE=$(curl -fsS "https://$host/")
-            grep -q "(#${GITHUB_SHA:0:7})" <<< "$PAGE"
+            grep -q "(#${SHA:0:7})" <<< "$PAGE"
             echo "Deployed https://$host" >> "$GITHUB_STEP_SUMMARY"
           done
