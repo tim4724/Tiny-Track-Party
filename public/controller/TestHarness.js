@@ -11,6 +11,7 @@ import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderReadyFoot, motionHelpCopy, NEXT_RACE_NOTE } from './ui.js';
 import { renderResultsBoard } from './resultsBoard.js';
+import { syncFeedbackAsk, openPane, markSent } from './feedback.js';
 import { linkCopy, showConn } from './linkStatus.js';
 import { setInputMode } from './driveSurface.js';
 import { syncCloseButton } from './closeButton.js';
@@ -162,19 +163,21 @@ export function runControllerScenario(opts) {
   const ME = 1;   // this phone's peerIndex in the synthesized board; also the host
   const showBoard = (order, { over, series, settled }) => {
     show('results');
-    renderResultsBoard(
-      { over, series, settled, order: order.map((o, i) => {
+    const board = { over, series, settled, order: order.map((o, i) => {
         const row = { finished: true, racePlace: i + 1, ...o, playerId: o.me ? ME : 100 + i };
         // off racePlace, not the array index: a cup board is in CUP order, so
         // indexing here would hand the quickest lap to whoever leads the cup.
         if (row.finished && row.time == null) row.time = 28.4 + (row.racePlace - 1) * 2.3;
         return row;
-      }) },
+      }) };
+    const roomState = over ? ROOM_STATE.RESULTS : ROOM_STATE.PLAYING;
+    renderResultsBoard(board,
       // The room state the board rides in on: an `over` board here is the TV's
       // landed one, so the footer's controls show (resultsBoard.js renderFoot).
-      { meId: ME, hostPeerIndex: ME, amHost: true, liveryOf: (i) => COLORS[i] || '#888',
-        roomState: over ? ROOM_STATE.RESULTS : ROOM_STATE.PLAYING }
+      { meId: ME, hostPeerIndex: ME, amHost: true, liveryOf: (i) => COLORS[i] || '#888', roomState }
     );
+    // The cup's one question rides the same board, as it does live (main.js).
+    syncFeedbackAsk(board, roomState, ME, { car: 'Carve', cupId: 'beach', cupName: series && series.cupName });
   };
 
   // Latency chip preview — no relay here, so feed it a static reading.
@@ -468,7 +471,12 @@ export function runControllerScenario(opts) {
       break;
 
     case 'cup-podium':
-    case 'cup-podium-settled': {
+    case 'cup-podium-settled':
+    case 'feedback-form':
+    case 'feedback-typing':
+    case 'feedback-whats-sent':
+    case 'feedback-thanks':
+    case 'feedback-sent': {
       // The cup's last board, in its two states. Before the TV has revealed the
       // cup this screen is still about the RACE; `settled` is the display's cue
       // that the reveal has landed and it can report the cup instead.
@@ -488,9 +496,15 @@ export function runControllerScenario(opts) {
           colorIndex: (color + i) % COLORS.length, ai: true, points: [22, 15, 9, 4][i - 4]
         }))
       ], {
-        over: true, settled: scenario === 'cup-podium-settled',
+        over: true, settled: scenario !== 'cup-podium',
         series: { final: true, raceIndex: 3, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName }
       });
+      // The feedback layer over that settled board, one pane per scenario, entered
+      // the way a player enters it: by a face on the board. Nothing here sends.
+      const pane = { 'feedback-form': 'form', 'feedback-typing': 'typing', 'feedback-whats-sent': 'sent', 'feedback-thanks': 'thanks' }[scenario];
+      if (pane) el('result-ask-faces').children[3].click();
+      if (pane === 'thanks' || scenario === 'feedback-sent') markSent();
+      if (pane && pane !== 'form') openPane(pane);
       break;
     }
 

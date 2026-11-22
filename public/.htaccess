@@ -72,7 +72,7 @@ Header always set X-Robots-Tag "noindex, nofollow" "expr=%{HTTP_HOST} != 'tinytr
 # admits WebAssembly only (the engine), not JS eval. connect-src: the relay
 # (STUN is UDP, which CSP does not govern). Only the display and the controller
 # may be framed, by the galleries on the same host.
-Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' wss://ws.paperballoon.games https://ws.paperballoon.games; img-src 'self' data:; object-src 'none'; frame-src 'self'; frame-ancestors 'none'"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' wss://ws.paperballoon.games https://ws.paperballoon.games https://paperballoon.games; img-src 'self' data:; object-src 'none'; frame-src 'self'; frame-ancestors 'none'"
 <If "%{REQUEST_FILENAME} =~ m#/(display|controller)/index\.html$#">
   Header always edit Content-Security-Policy "frame-ancestors 'none'" "frame-ancestors 'self'"
 </If>

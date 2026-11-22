@@ -223,7 +223,94 @@
       <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
       <div id="result-wait" class="result-wait hidden"></div>
     </div>
+    <!-- The one question a cup ends on, alone on the board's white right half
+         (feedback.js). Its faces open the form below. -->
+    <div id="result-ask" class="result-ask hidden">
+      <span id="result-ask-label" class="result-ask__label">How much fun was that?</span>
+      <div id="result-ask-faces" class="fb-faces" role="radiogroup" aria-labelledby="result-ask-label"></div>
+      <span id="result-ask-done" class="result-ask__done hidden"><span class="fb__mark"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Thanks for the feedback!</span>
+    </div>
   </section>
+
+  <!-- Feedback: a frost layer over the cup's last board, one pane at a time.
+       Typing has a pane of its own because the keyboard takes the lower half of
+       a landscape phone: the field has to be all that is left above it. -->
+  <div id="feedback-overlay" class="fb hidden" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+    <div id="fb-form" class="fb__pane">
+      <div class="fb__head">
+        <h2 id="fb-title" class="fb__title">How was that?</h2>
+        <button id="fb-close" class="icon-btn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="fb__body">
+        <div class="fb__ratings">
+          <div class="fb-rate">
+            <span id="fb-fun-label" class="fb-rate__name">Fun</span>
+            <div id="fb-faces" class="fb-faces" role="radiogroup" aria-labelledby="fb-fun-label" data-set="fun"></div>
+          </div>
+          <div class="fb-rate">
+            <span id="fb-controls-label" class="fb-rate__name">Controls</span>
+            <div class="seg seg--3" role="radiogroup" aria-labelledby="fb-controls-label" data-set="controls">
+              <button type="button" class="seg__opt" role="radio" aria-checked="false" data-value="awkward">Awkward</button>
+              <button type="button" class="seg__opt" role="radio" aria-checked="false" data-value="okay">Okay</button>
+              <button type="button" class="seg__opt" role="radio" aria-checked="false" data-value="great">Great</button>
+            </div>
+          </div>
+          <div class="fb-rate">
+            <span id="fb-bots-label" class="fb-rate__name">Bots</span>
+            <div class="seg seg--3" role="radiogroup" aria-labelledby="fb-bots-label" data-set="bots">
+              <button type="button" class="seg__opt" role="radio" aria-checked="false" data-value="too-easy">Too easy</button>
+              <button type="button" class="seg__opt" role="radio" aria-checked="false" data-value="just-right">Just right</button>
+              <button type="button" class="seg__opt" role="radio" aria-checked="false" data-value="too-hard">Too hard</button>
+            </div>
+          </div>
+        </div>
+        <div class="fb__texts">
+          <button type="button" class="fb-field" data-field="liked">
+            <span class="fb-field__label">What did you like?</span>
+            <span id="fb-liked" class="fb-field__value"></span>
+          </button>
+          <button type="button" class="fb-field" data-field="disliked">
+            <span class="fb-field__label">What bugged you?</span>
+            <span id="fb-disliked" class="fb-field__value"></span>
+          </button>
+        </div>
+      </div>
+      <div class="fb__foot">
+        <button id="fb-stats" type="button" class="fb-check" role="switch" aria-checked="true">
+          <span class="fb-check__box"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+          Include race stats
+        </button>
+        <button id="fb-whats" type="button" class="fb-link">What's sent?</button>
+        <span id="fb-error" class="fb__error" role="status"></span>
+        <button id="fb-send" type="button" class="btn btn--brand" disabled>Send</button>
+      </div>
+    </div>
+
+    <div id="fb-typing" class="fb__pane hidden">
+      <div class="fb__head">
+        <label id="fb-input-label" class="fb__title" for="fb-input">What did you like?</label>
+        <span id="fb-count" class="fb__count">0 / 300</span>
+        <button id="fb-done" type="button" class="btn btn--brand fb__done">Done</button>
+      </div>
+      <textarea id="fb-input" class="fb__input" maxlength="300" rows="2" enterkeyhint="done" autocapitalize="sentences"></textarea>
+    </div>
+
+    <div id="fb-whatsent" class="fb__pane hidden">
+      <div class="fb__head">
+        <button id="fb-back" class="icon-btn" type="button" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h2 class="fb__title">Race stats</h2>
+      </div>
+      <dl id="fb-sent-list" class="fb__stats"></dl>
+      <p class="fb__note">No names, no room code, nothing that says who you are.
+        <span id="fb-sent-off" class="fb__off hidden">Race stats are off: none of this will be sent.</span></p>
+    </div>
+
+    <div id="fb-thanks" class="fb__pane fb__pane--thanks hidden">
+      <span class="fb__mark"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      <h2 class="fb__title">Sent. Thanks!</h2>
+      <p class="fb__note">It helps us make the game better.</p>
+    </div>
+  </div>
 
   <!-- Connection overlay — screen-agnostic. Covers the phone whenever the relay
        link drops so the player isn't tapping a dead surface: "Reconnecting…" while

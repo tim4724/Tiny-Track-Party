@@ -84,6 +84,9 @@ export class ControllerNet extends GameNet {
     this.onJoined = opts.onJoined || (() => {});
     this.onStatus = opts.onStatus || (() => {}); // (state, info)
     this.onRtt = opts.onRtt || (() => {});       // (halfMs, viaFastlane); halfMs < 0 = no signal
+    // The direct link's life, for raceStats.js: ('none') no WebRTC here, ('open'),
+    // ('closed'), and ('path', 'lan' | 'nat') once an open channel's route is known.
+    this.onFastlane = opts.onFastlane || (() => {});
     this.roomCode = deriveRoomCode();
     this.instance = deriveInstance();
     const { id, fresh } = loadClientId(this.roomCode);
@@ -359,12 +362,32 @@ export class ControllerNet extends GameNet {
         // filtered against a belief formed before the channel died.
         this.gate.reset();
         this._scheduleFastlaneReopen();
+        this.onFastlane('closed');
       },
     });
     // A fresh (re)join starts the backoff over; closing the previous fastlane
     // above fired its onPeerClosed, which armed a retry at the old delay.
     this._cancelFastlaneReopen();
     if (this.fastlane) this.fastlane.open(0); // null with no WebRTC: relay only
+    else this.onFastlane('none');
+  }
+
+  // Whether the open channel stays on the local network ('lan': both ends chose
+  // a host candidate) or goes out through the router ('nat'). Only the KIND of
+  // route is read; no address leaves the browser's own stats.
+  async _reportFastlanePath() {
+    try {
+      const peer = this.fastlane && this.fastlane.peers.get(0);
+      const stats = await peer.pc.getStats();
+      let pair = null;
+      stats.forEach((r) => {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) pair = r;
+      });
+      if (!pair) return;
+      const kind = (id) => (stats.get(id) || {}).candidateType;
+      const local = kind(pair.localCandidateId), remote = kind(pair.remoteCandidateId);
+      if (local && remote) this.onFastlane('path', local === 'host' && remote === 'host' ? 'lan' : 'nat');
+    } catch (_) { /* stats are a courtesy; the link works without them */ }
   }
 
   _scheduleFastlaneReopen() {
@@ -383,6 +406,8 @@ export class ControllerNet extends GameNet {
   // The channel opened: stop any pending retry, but hold the backoff until the
   // channel has proved itself.
   _noteFastlaneOpen() {
+    this.onFastlane('open');
+    this._reportFastlanePath();
     clearTimeout(this._fastlaneRetryTimer);
     this._fastlaneRetryTimer = null;
     clearTimeout(this._fastlaneStableTimer);

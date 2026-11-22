@@ -31,7 +31,9 @@ import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, r
 import { initCloseButton, syncCloseButton } from './closeButton.js';
 import { initPauseMenu, setPauseOverlay, isPauseShown } from './pauseMenu.js';
 import { renderResultsBoard } from './resultsBoard.js';
-import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
+import { initDriveSurface, startDriving, stopDriving, isDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
+import { initRaceStats, resetRaceStats, noteJoined, noteRtt, noteLink, noteFastlane, noteRace } from './raceStats.js';
+import { initFeedback, syncFeedbackAsk, resetFeedback, feedbackOpen, closeFeedback } from './feedback.js';
 import { initOrientation, keyboardUp } from './orientation.js';
 import { initPressPaint } from './press.js';
 import { offerPlatform, showAppOffer, dropAppOffer } from './appOffer.js';
@@ -54,6 +56,7 @@ function show(name) {
   // Likewise the leave-cup question belongs to the screen that asked it: the
   // intermission board, or the pause menu over the race.
   if (name !== prev) closeLeaveCupPopup();
+  if (name !== 'results') closeFeedback();
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
@@ -74,7 +77,7 @@ function show(name) {
 // popup toggle and pause flip; setBackMode dedupes the transitions.
 function syncShellBack() {
   if (!inShell) return;
-  setBackMode(anyModalOpen() || isPauseShown() ? 'page'
+  setBackMode(anyModalOpen() || feedbackOpen() || isPauseShown() ? 'page'
     : currentScreen === 'game' ? 'off' : 'leave');
 }
 
@@ -138,8 +141,9 @@ const wakeLock = createWakeLock();
 const latencyEl = el('latency');
 
 const net = new ControllerNet({
-  onJoined: () => { setStatus(''); hideConn(); wakeLock.enable(); },
+  onJoined: () => { setStatus(''); hideConn(); wakeLock.enable(); noteJoined(); },
   onStatus: (state, info) => {
+    noteLink(state, info);
     // Any status callback means the clean join→lobby path didn't carry us all the
     // way through, so re-enable the join form. It's a no-op once we've moved off
     // the name screen (the button is hidden), but it prevents a player getting
@@ -165,7 +169,8 @@ const net = new ControllerNet({
     if (inRoom && conn) showConn(conn);
   },
   onMessage: handleMessage,
-  onRtt: (halfMs, viaFastlane) => applyLatencyChip(latencyEl, halfMs, viaFastlane)
+  onRtt: (halfMs, viaFastlane) => { applyLatencyChip(latencyEl, halfMs, viaFastlane); noteRtt(halfMs, viaFastlane); },
+  onFastlane: noteFastlane
 });
 
 // The way out — the close button, and the link overlay's "Exit to start". In
@@ -263,6 +268,8 @@ initModals({
   onModalToggle: syncShellBack
 });
 initDriveSurface({ tilt, buzz, haptics });
+initRaceStats({ isDriving, inputMode: () => inputMode, fastlaneUp: () => net._fastlaneUp() });
+initFeedback({ buzz, onToggle: syncShellBack });
 setInputMode(inputMode);
 initOrientation({ inShell });
 initPressPaint();
@@ -387,7 +394,7 @@ function syncRoom(data) {
   const mineDone = board && (board.over || (board.order || []).some((o) => o.playerId === net.peerIndex && o.finished));
 
   if (rs === ROOM_STATE.RESULTS || (midRace && !waitingForNextRace && mineDone)) {
-    if (board) { renderResults(board, rs); showResultsScreen(); }
+    if (board) { renderResults(board, rs, data.trackId); showResultsScreen(); }
   } else if (midRace && !waitingForNextRace) {
     // Drop into the live race (or the countdown — tilt streams so the display reacts).
     inResults = false;
@@ -399,11 +406,17 @@ function syncRoom(data) {
   } else if (waitingForNextRace && board && board.over) {
     // Late joiner and the FINAL board is up — it lists us as "Next race", so join
     // everyone on the results screen.
-    renderResults(board, rs); showResultsScreen();
+    renderResults(board, rs, data.trackId); showResultsScreen();
   } else {
     // Lobby proper, or waiting on the next race. May be reached FROM the game
     // screen (display reloaded mid-race), so shut the drive surface down.
-    if (rs === ROOM_STATE.LOBBY) { waitingForNextRace = false; inResults = false; lastStandings = null; }
+    if (rs === ROOM_STATE.LOBBY) {
+      waitingForNextRace = false; inResults = false;
+      // A new cup: its stats and its question start over. Once per return, or a
+      // lobby push would wipe a link reading taken while picking the next cup.
+      if (lastStandings) { resetRaceStats(); resetFeedback(); }
+      lastStandings = null;
+    }
     const entering = currentScreen !== 'lobby';
     stopDriving();
     setPauseOverlay(false);
@@ -423,8 +436,23 @@ function showResultsScreen() {
   show('results');
 }
 
-function renderResults(data, roomState) {
-  renderResultsBoard(data, { meId: net.peerIndex, hostPeerIndex, amHost, liveryOf, roomState });
+// The name of the car in `peerIndex`'s seat, off the roster and catalogue the
+// snapshot carries (a board row names a player, never their car).
+function carOf(peerIndex) {
+  const p = roster.find((r) => r.peerIndex === peerIndex);
+  const car = p && carCatalog[p.carIndex];
+  return car ? car.name : null;
+}
+
+function renderResults(data, roomState, trackId) {
+  const meId = net.peerIndex;
+  renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf, roomState });
+  if (data.over && roomState === ROOM_STATE.RESULTS) noteRace(data, { meId, trackId, carOf });
+  const s = data.series;
+  syncFeedbackAsk(data, roomState, meId, {
+    car: carOf(meId),
+    cupId: (s && s.cupId) || (displayMode && displayMode.mode), cupName: s && s.cupName
+  });
 }
 
 function applyLivery() {
@@ -848,7 +876,7 @@ el('leavecup-btn').addEventListener('click', () => {
 // settings); a paused race continues. Those are the only states syncShellBack
 // maps to 'page', so the false is a backstop: it hands the exit to the launcher.
 installBackHook(() => {
-  if (closeTopModal()) return true;
+  if (closeTopModal() || closeFeedback()) return true;
   if (isPauseShown()) { net.send(MSG.RESUME_GAME); return true; }
   return false;
 });

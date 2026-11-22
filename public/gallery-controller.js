@@ -37,7 +37,12 @@ var CONTROLLER_CARDS = [
   { key: 'intermission',    title: 'Cup intermission', perColor: true },
   { key: 'leave-cup',       title: 'New game mid-cup (confirm)', perColor: true },
   { key: 'cup-podium',      title: 'Cup last race',   perColor: true },
-  { key: 'cup-podium-settled', title: 'Cup final (TV settled)', perColor: true },
+  { key: 'cup-podium-settled', title: 'Cup final (TV settled), asks for feedback', perColor: true },
+  { key: 'feedback-form',       title: 'Feedback form', perColor: true },
+  { key: 'feedback-typing',     title: 'Feedback: typing an answer', perColor: true },
+  { key: 'feedback-whats-sent', title: 'Feedback: what\'s sent', perColor: true },
+  { key: 'feedback-thanks',     title: 'Feedback: sent, thanks', perColor: true },
+  { key: 'feedback-sent',       title: 'Cup final after feedback', perColor: true },
   { key: 'conn-lost',        title: 'Connection lost' },
   { key: 'conn-screen-gone', title: 'Big screen gone' },
   { key: 'conn-replaced',    title: 'Seat replaced' }

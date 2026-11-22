@@ -48,6 +48,8 @@ export function startDriving(playerName) {
   });
 }
 
+export const isDriving = () => !!steerRaf;
+
 export function stopDriving() {
   _tilt.stop();
   _haptics.stopLoop(); // never leave the motor humming if BRAKE was held at race end

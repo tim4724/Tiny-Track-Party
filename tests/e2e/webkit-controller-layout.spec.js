@@ -282,3 +282,31 @@ test('webkit: with the keyboard up, the name form sits inside the visible strip 
     }
   }
 });
+
+// The feedback form is flex and grid sized by its content, the kind of layout
+// the two engines have resolved differently on this page before. feedback.spec.js
+// measures the same fit on Chromium.
+test('webkit 568x270: the cup question and the feedback form sit inside the screen', async ({ page }) => {
+  const vp = { width: 568, height: 270 };
+  await page.setViewportSize(vp);
+  await page.goto('/controller/index.html?scenario=cup-podium-settled&color=0');
+  const inView = async (sel) => {
+    const boxes = await page.$$eval(sel, (els) => els.filter((e) => e.offsetParent).map((e) => {
+      const r = e.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    }));
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const b of boxes) {
+      expect(b.top).toBeGreaterThanOrEqual(0);
+      expect(b.left).toBeGreaterThanOrEqual(0);
+      expect(b.bottom).toBeLessThanOrEqual(vp.height);
+      expect(b.right).toBeLessThanOrEqual(vp.width);
+    }
+  };
+  await inView('#results-title, #result-me, #newgame-btn, #result-ask .fb-face');
+  await page.locator('#result-ask .fb-face').nth(3).click();
+  await inView('#fb-form button, #fb-title');
+  // The three ratings stay one row each: a wrapped pill is the first thing to go.
+  const rows = await page.$$eval('#fb-form .seg--3', (segs) => segs.map((s) => new Set([...s.children].map((c) => Math.round(c.getBoundingClientRect().top))).size));
+  expect(rows).toEqual([1, 1]);
+});

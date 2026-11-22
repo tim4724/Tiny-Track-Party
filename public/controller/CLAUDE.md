@@ -23,7 +23,11 @@ display's retained snapshot. Everything self-contained sits beside it —
 `launcher.js` (the whole Paper Balloon shell contract, so the rest reads as a plain
 web page), `modals.js` (the popups plus the ordering rules that only make sense
 against each other), `driveSurface.js`, `linkStatus.js`, `resultsBoard.js`,
-`prefs.js`, `press.js`.
+`prefs.js`, `press.js`, and the pair behind the question a cup ends on:
+`raceStats.js` (what this phone saw of its cup) and `feedback.js` (the form,
+and the one place anything leaves the phone for a server that is not the
+relay). What those two send is the subject of the privacy policy on
+paperballoon.games, so a field changes there first.
 
 Add a new concern as its own file. The failure mode this split fixed was
 nineteen unrelated concerns sharing one module scope, which is a thing that
