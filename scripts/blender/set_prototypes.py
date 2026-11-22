@@ -15060,7 +15060,7 @@ def fete(lite):
             top = (CX, 6.6, CZ)
             r0 = (CX + math.cos(a0) * (CR + 0.4), 5.0, CZ + math.sin(a0) * (CR + 0.4))
             r1 = (CX + math.cos(a1) * (CR + 0.4), 5.0, CZ + math.sin(a1) * (CR + 0.4))
-            poly([top, r0, r1], [(0, 1, 2)], (RED, WHITE)[k % 2])
+            poly([top, r1, r0], [(0, 1, 2)], (RED, WHITE)[k % 2])                # wound to the sky (umbrella())
             box((0.12, 0.7, 2 * (CR + 0.4) * math.sin(math.pi / 12)), (CX + math.cos((a0 + a1) / 2) * (CR + 0.36), 4.75,
                 CZ + math.sin((a0 + a1) / 2) * (CR + 0.42)), (BLUE, YELLOW)[k % 2], yaw=-(a0 + a1) / 2)
         # the horses: the canyon's build (equine) in a gallopers' paint, a
@@ -17963,10 +17963,10 @@ def park_kiosk():
         cyl(0.9, 0.12, (tx, 1.0, tz), WHITE, segs=8)                                 # the table
         box((0.3, 1.0, 0.3), (tx, 0.5, tz), 'grey')
         box((0.22, 4.0, 0.22), (tx, 2.0, tz), WHITE)                                  # the parasol's pole
-        for k in range(8):
-            a0, a1 = k * math.pi / 4, (k + 1) * math.pi / 4
-            poly([(tx, 4.3, tz), (tx + 2.2 * math.cos(a0), 3.5, tz + 2.2 * math.sin(a0)),
-                  (tx + 2.2 * math.cos(a1), 3.5, tz + 2.2 * math.sin(a1))], [(0, 1, 2)], ((RED, WHITE), (WHITE, RED), (RED, WHITE))[i][k % 2])
+        for k in range(8):                                                           # its gores, wound to the sky as
+            a0, a1 = k * math.pi / 4, (k + 1) * math.pi / 4                         # umbrella()'s (the other way they
+            poly([(tx, 4.3, tz), (tx + 2.2 * math.cos(a1), 3.5, tz + 2.2 * math.sin(a1)),   # were lit as undersides: brown and grey)
+                  (tx + 2.2 * math.cos(a0), 3.5, tz + 2.2 * math.sin(a0))], [(0, 1, 2)], ((RED, WHITE), (WHITE, RED), (RED, WHITE))[i][k % 2])
         with plain_parts():
             for j in range(2):                                                       # two chairs, pushed back
                 a = 0.9 + i + j * 2.6

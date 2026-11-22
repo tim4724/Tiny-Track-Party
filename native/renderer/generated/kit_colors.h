@@ -202130,7 +202130,7 @@ inline const Model kModels[] = {
     { 8023422379990803666ull, 5u, k_set_park_carousel },  // set-park-carousel.glb
     { 7168726152790814737ull, 2u, k_set_park_halt_lite },  // set-park-halt-lite.glb
     { 14961335347531828308ull, 2u, k_set_park_halt },  // set-park-halt.glb
-    { 5338045492822999546ull, 1u, k_set_park_kiosk },  // set-park-kiosk.glb
+    { 14789835560959763246ull, 1u, k_set_park_kiosk },  // set-park-kiosk.glb
     { 17784625067755926058ull, 2u, k_set_park_rails_a },  // set-park-rails-a.glb
     { 9747291065037945996ull, 2u, k_set_park_rails_b },  // set-park-rails-b.glb
     { 588673814575855002ull, 2u, k_set_park_rails_c },  // set-park-rails-c.glb
@@ -202442,8 +202442,8 @@ inline const Model kModels[] = {
     { 12810938870098799961ull, 8u, k_set_tunnel_foothills },  // set-tunnel-foothills.glb
     { 7385982129482526418ull, 7u, k_set_village_church_lite },  // set-village-church-lite.glb
     { 13496811549167650240ull, 7u, k_set_village_church },  // set-village-church.glb
-    { 9917783007100674305ull, 4u, k_set_village_fete_lite },  // set-village-fete-lite.glb
-    { 5004402079718041322ull, 4u, k_set_village_fete },  // set-village-fete.glb
+    { 3171441185133108241ull, 4u, k_set_village_fete_lite },  // set-village-fete-lite.glb
+    { 8052243300490245322ull, 4u, k_set_village_fete },  // set-village-fete.glb
     { 10155368995457888922ull, 1u, k_set_village_street_b },  // set-village-street-b.glb
     { 6862900991677579811ull, 1u, k_set_village_street_c },  // set-village-street-c.glb
     { 10448198867497034061ull, 1u, k_set_village_street_d },  // set-village-street-d.glb
