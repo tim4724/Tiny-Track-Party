@@ -32,7 +32,7 @@ npm start          # serves on http://localhost:4000
 3. The first player to join is the host and starts the race.
 4. Tilt to steer, hold BRAKE to slow down. First across the line wins.
 
-> Phones need HTTPS for the tilt sensors — front the server with a tunnel or TLS cert when testing on real devices.
+> Phones need HTTPS for the tilt sensors — when testing on real devices, point `TLS_KEY` / `TLS_CERT` at a PEM key and certificate (e.g. a self-signed LAN cert) to serve over HTTPS, or front the server with a tunnel.
 
 `npm run setup` is the only command a fresh checkout needs, and it reports anything still missing. Rebuilding the engine itself is a separate, heavier step (`native/scripts/build-runtime-web.sh`) that needs a Filament fork and emsdk — the built wasm is checked in, so most work never needs it.
 
