@@ -71,6 +71,10 @@ export function resolveDestination({ sim = false, device } = {}) {
 /// it photographs anything — but a caller that walks the Home screen instead has
 /// no such protection, and one run of that did photograph the screensaver.
 export function assertAwake(deviceId) {
+  // A DUMMY PLUG CAN READ AS OFF WHILE THE BOX DRAWS (2026-11-22: "backlight is
+  // off" beside a bench at a steady 50 fps). TTP_ASSUME_AWAKE=1 skips the
+  // check for a run whose own output proves frames, as a bench's readouts do.
+  if (process.env.TTP_ASSUME_AWAKE === '1') return;
   let asleep = false;
   try {
     const out = sh('xcrun',
@@ -91,7 +95,8 @@ export function assertAwake(deviceId) {
       'the Apple TV reports its backlight is off, and nothing here can wake it '
       + '(launching the app does not turn the television on). Switch the set on '
       + '— and its input to the Apple TV — then re-run. Use --sim to measure '
-      + 'without a television at all.');
+      + 'without a television at all, or TTP_ASSUME_AWAKE=1 when a dummy plug '
+      + 'is what reads as off.');
   }
 }
 
