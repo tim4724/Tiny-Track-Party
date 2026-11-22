@@ -442,9 +442,11 @@ export const SET_GROUND = {
   // lies in, one plain per chord of its route, so it never steps where the
   // land rolls; its floor wider than a cell of the ground's grid (9 u), which
   // would otherwise draw its chords over the rails and leave the line in
-  // pieces with the train riding through the hill. The builder lays the
-  // rails on a smooth curve through the chords' ends (set_prototypes.py
-  // ore_line). A form's x/z is in its own turned frame
+  // pieces with the train riding through the hill. Round the east bend it
+  // keeps outside the grass berm under the raised road: a berm is no ground
+  // a drape lies on, so rails through it lay under it with the train. The
+  // builder lays the rails on a smooth curve through the chords' ends
+  // (set_prototypes.py ore_line). A form's x/z is in its own turned frame
   // (TtpRenderer::setupTerrain).
   'set-ore-line': [
     { kind: 'plain', yaw: 71.57, x: 0.16, z: 1.9, len: 2.85, r: 6, w: 5 },
@@ -454,10 +456,12 @@ export const SET_GROUND = {
     { kind: 'plain', yaw: -12.12, x: 13.68, z: 21.66, len: 7.89, r: 6, w: 5 },
     { kind: 'plain', yaw: -21.63, x: 17.72, z: 27.05, len: 8.12, r: 6, w: 5 },
     { kind: 'plain', yaw: -22.76, x: 18.33, z: 35.51, len: 9.51, r: 6, w: 5 },
-    { kind: 'plain', yaw: -7.1, x: 6.78, z: 49.23, len: 11.02, r: 6, w: 5 },
-    { kind: 'plain', yaw: 16.29, x: -15.51, z: 58.41, len: 10.95, r: 6, w: 5 },
-    { kind: 'plain', yaw: 39.19, x: -39.14, z: 58.28, len: 10.92, r: 6, w: 5 },
-    { kind: 'plain', yaw: 62.12, x: -60.89, z: 48.99, len: 11.08, r: 6, w: 5 }
+    { kind: 'plain', yaw: -21.65, x: 17.55, z: 45.36, len: 9.50, r: 6, w: 5 },
+    { kind: 'plain', yaw: 2.95, x: -4.90, z: 57.90, len: 10.06, r: 6, w: 5 },
+    { kind: 'plain', yaw: 25.78, x: -28.94, z: 60.71, len: 9.22, r: 6, w: 5 },
+    { kind: 'plain', yaw: 46.27, x: -49.98, z: 54.25, len: 6.39, r: 6, w: 5 },
+    { kind: 'plain', yaw: 68.67, x: -68.09, z: 36.56, len: 5.00, r: 6, w: 5 },
+    { kind: 'plain', yaw: 78.26, x: -73.65, z: 31.33, len: 8.28, r: 6, w: 5 }
   ]
 };
 
