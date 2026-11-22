@@ -9084,12 +9084,9 @@ def ski_lift(lite=False):
         snowcat(x, H(x, z), z)
     # pines on the flanks, clear of the lift line and the piste, the size of
     # the ambient ones
-    global FIR_LITE
-    FIR_LITE = lite
     for x, z, k in ((-50.0, -30.0, 1.9), (-12.0, 20.0, 1.8)):
         x, z = x * G, z * G
         pine((x, H(x, z) - 0.6, z), k)   # sunk past the grid's chords
-    FIR_LITE = False
 
 # Powder's second lift runs up the foothills over the start straight's
 # outside (tracks.js powder `land`, its forms `near` the kerb), so it stands
@@ -9287,22 +9284,20 @@ FORESTS = {
 
 # THE SNOW CUP'S ONE FIR (tree-snow-a/b/c, the scatter's tree, own_fir_faces):
 # the stands and every piece that plants a fir instance the same three models,
-# so a track has one make of tree. A lite stand (FIR_LITE) plants the fir's
-# lite build, the one the box's scatter draws.
-FIR_LITE = False
+# so a track has one make of tree, in both tiers.
 _FIRS = {}
 
 def snow_fir(kind, at, tall):
     """The fir `kind` (a, b or c) at `at`, `tall` units high, turned its own
     way (a hash of where it stands)."""
-    key = (kind, FIR_LITE)
+    key = kind
     if key in _FIRS:
         try:
             _FIRS[key].name                 # the scene is cleared between pieces: the mesh may be gone
         except ReferenceError:
             del _FIRS[key]
     if key not in _FIRS:
-        src = own_shell('fir', own_fir_faces(kind, FIR_LITE), smooth=True)
+        src = own_shell('fir', own_fir_faces(kind), smooth=True)
         _FIRS[key] = src.data
         bpy.data.objects.remove(src, do_unlink=True)
     o = bpy.data.objects.new('fir', _FIRS[key].copy())
@@ -9335,7 +9330,7 @@ def stump(x, g, z, k, yaw):
     box((0.1 * k, 0.4 * k, 0.12 * k), (x + 0.06 * k, g + 0.62 * k, z), 0x8a6a46, yaw=yaw, roll=0.35)
     snowy(box((0.26 * k, 0.06 * k, 0.26 * k), (x, g + 0.5 * k, z), 0xf3f7fb, yaw=yaw), 0.45)
 
-def forest(trees, lite=False):
+def forest(trees):
     """A stand of pines on the sampled ground, each trunk run on down through
     the hill to the plain (unseen, so unchamfered; it holds the tree up for
     set-check), and a patch of snow under the first one's skirt lying on the
@@ -9344,8 +9339,6 @@ def forest(trees, lite=False):
     block on a steep face stretches with it. A row may carry a form (0 pine,
     1 spruce, 2 a snapped trunk lying, 3 a stump, 4 a dark pine) and whether
     the lite build keeps it."""
-    global FIR_LITE
-    FIR_LITE = lite
     for i, t in enumerate(trees):
         x, z, g, k = t[:4]
         form = t[4] if len(t) > 4 else 0
@@ -9361,7 +9354,6 @@ def forest(trees, lite=False):
             dark_pine((x, g - 0.35 * k, z), k)
         top = g + 0.4 * k if form in (2, 3) else g      # a trunk or a stump is held from its break
         box((0.24 * k, top, 0.24 * k), (x, top / 2 - 0.35 * k, z), 0x7a5a3a if form in (2, 3) else 'salmon')['chamfer'] = 0   # the fir's own trunk, run on
-    FIR_LITE = False
     join_still('pines')
     x, z, _, k = trees[0][:4]
     draped('patch', lambda: box((0.5 * k, 0.1, 0.5 * k), (x, -0.06, z), 0xf3f7fb))
@@ -9392,15 +9384,10 @@ def darkened(name, trees):
     return tuple(t[:4] + (4,) + t[5:] if len(t) > 4 and t[4] == 0 and (t[3] >= 2.6 or (t[3] >= 1.4 and i % 3 == 0))
                  else t for i, t in enumerate(trees))
 
-# Flurry's stands on the far north-west ridge plant the lite fir in the full
-# tier too: fifty units from the nearest road a fir is a few pixels, and a
-# driver's still of the two builds side by side showed no difference.
-FAR_STANDS = ('flurry-forest-h', 'flurry-forest-i', 'flurry-forest-j', 'flurry-forest-k', 'flurry-forest-l', 'flurry-forest-m')
-
 for _name, _trees in FORESTS.items():
     _trees = darkened(_name, _trees)
     for _n, _t in ((_name, _trees), (_name + '-lite', lite_trees(_name, _trees))):
-        PIECES[_n] = (lambda trees, lite: lambda: forest(trees, lite))(_t, _n.endswith('-lite') or _name in FAR_STANDS)
+        PIECES[_n] = (lambda trees: lambda: forest(trees))(_t)
         GROW[_n] = 1.0
 
 def skater(x, y, z, coat, hat):
@@ -10079,7 +10066,6 @@ def flurry_hamlet_build(lite):
     # the lake's (set-frozen-lake), a hand over the plain. The lite build
     # keeps every third fir of the forest's edge and leaves the drying rack,
     # the tip-ups and the sledge of gear out.
-    global FIR_LITE
     G = flurry_hamlet_ground
     def foot(x, z, r):
         return min(G(x + dx, z + dz) for dx in (-r, 0, r) for dz in (-r, 0, r)) - 0.08
@@ -10120,11 +10106,9 @@ def flurry_hamlet_build(lite):
                                    (-12.6, -3.4, 1.9), (-13.6, 2.2, 1.6))):
         if lite and n % 3:
             continue
-        FIR_LITE = lite
         g = G(x, z)
         (spruce if n % 4 == 1 else pine)((x, g - 0.35 * k, z), k)
         box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
-    FIR_LITE = False
     join_still('hamlet')
     # what lies on the snow as drawn: the trodden paths, sleds and skis by the doors
     def lying():
@@ -10251,11 +10235,9 @@ def flurry_fields(lite=False):
     footbridge (set-flurry-stream), and the hamlet beyond it. The barn and
     the firs stand at the ground sampled under them (re-sample after moving
     the piece or the land); the rest drapes."""
-    global FIR_LITE
     bx, bz, bg = FIELDS_BARN
     flurry_stood(lambda: hay_barn(bg), bx, bz, 0.25, stood_post(bx, bz, bg - 0.05))
     if not lite:
-        FIR_LITE = False
         for x, z, g, k in FIELDS_FIRS:
             pine((x, g - 0.35 * k, z), k)
             box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
@@ -10292,7 +10274,6 @@ def flurry_farm(lite=False):
     the woodpile, a rail fence along the road with a gateway and the path
     in from it, firs at its back. The cabins and firs stand at the ground
     sampled under them; the rest drapes."""
-    global FIR_LITE
     for n, (x, z, g, k, yaw, smoke) in enumerate(FARM_CABINS):
         if lite and n:
             continue
@@ -10301,7 +10282,6 @@ def flurry_farm(lite=False):
     if not lite:
         flurry_stood(lambda: woodpile(0.0, 0.0, 0.3), -2.5, 3.5, 0.3, stood_post(-2.5, 3.5, 0.83))
         stood_post(-1.67, 3.75, 0.83)                                          # under its chopping block
-        FIR_LITE = False
         for x, z, g, k in FARM_FIRS:
             pine((x, g - 0.35 * k, z), k)
             box((0.24 * k, g, 0.24 * k), (x, g / 2 - 0.35 * k, z), 'salmon')['chamfer'] = 0
@@ -13671,11 +13651,11 @@ def plough_truck(x, z, yaw, k=1.0, y=0.0):
 
 @piece(1.0)
 def avalanche_gallery_loop_lite():
-    global WORKS_LITE, FIR_LITE
-    WORKS_LITE = FIR_LITE = True
+    global WORKS_LITE
+    WORKS_LITE = True
     with lite_parts(True):
         avalanche_gallery_loop()
-    WORKS_LITE = FIR_LITE = False
+    WORKS_LITE = False
 
 @piece(1.0)
 def avalanche_gallery_loop():
@@ -14718,8 +14698,9 @@ def hay_meadow():
 # toward the road. World units (a cow is a car long): barn, silo and herd read
 # as one scene, where a cow alone is a speck. Front (+X) to the road; on the
 # right at yaw 0. It DRAPES, the heads too (`drape`), on the bank as drawn.
-# The lite build (the Android TV's) keeps the heads still, in the one draped
-# part, and the fence a post every other stride under one rail.
+# Both tiers plant the plainer cows (flock()). The lite build (the Android
+# TV's) keeps their heads still, in the one draped part, and the fence a post
+# every other stride under one rail.
 def red_barn(x, z):
     RED, ROOF = 0xcf534f, 0x4f5260
     F = local(x, z, 0.0)
@@ -14757,7 +14738,7 @@ def cow_farm_build(lite):
         HERD = ((1.6, -1.6, H, JERSEY, None, JERSEY, 'graze'), (1.5, 1.5, -H, WHITE, PIED, WHITE, 'up'),
                 (1.7, 3.3, H, PIED, WHITE, WHITE, 'graze'), (0.2, -1.0, -H, WHITE, PIED, PIED, 'graze'),
                 (0.6, 2.4, H + 0.3, 'bark', None, WHITE, 'up'), (-0.4, 3.8, -H, PIED, WHITE, PIED, 'graze'))
-        with lite_parts(lite):
+        with lite_parts(True):                     # the plainer cows in both tiers, as the flock (flock())
             for k, (x, z, yaw, coat, patch, face, pose) in enumerate(HERD):
                 range_cow((x, 0, z), yaw, coat, patch, face, pose=pose, udder=True,
                           life=None if lite else 'anim_drape+sway:a=z:d=30:p=%.1f:r=0.75#c%d' % (6.6 + 0.9 * k, k))
@@ -14816,10 +14797,11 @@ def sheep(at, yaw, life, pose='graze'):
     fig_quad('sheep', at, yaw, pose=pose, life=life)
 
 def flock(spots, tag, lite=False):
-    # lite (the Android TV's build): the heads keep still, so the whole flock
-    # is in its piece's one draped part instead of a draw a sheep, and every
-    # third one stands looking up
-    with lite_parts(lite):
+    # Both tiers plant the plainer sheep (the box's build: the user liked it
+    # better beside the full one, 2026-11-22). The lite one's heads keep still,
+    # so the whole flock is in its piece's one draped part instead of a draw a
+    # sheep, and every third one stands looking up; the full one's graze.
+    with lite_parts(True):
         for k, (x, z, yaw) in enumerate(spots):
             if lite:
                 sheep((x, 0, z), yaw, None, 'up' if k % 3 == 1 else 'graze')
@@ -18957,12 +18939,12 @@ def lite_parts(on):
 def lite_too(*names):
     for n in names:
         def build(fn=PIECES[n]):
-            global LITE, FIR_LITE
-            LITE = FIR_LITE = True              # (and the fir the box's scatter draws: snow_fir)
+            global LITE
+            LITE = True
             try:
                 fn()
             finally:
-                LITE = FIR_LITE = False
+                LITE = False
         PIECES[n + '-lite'], GROW[n + '-lite'] = build, GROW[n]
         if n in FILE:
             FILE[n + '-lite'] = FILE[n] + '-lite'
@@ -28582,59 +28564,56 @@ def own_band(swatch, lo, hi, n, grp, phase=0.0, at=(0.0, 0.0)):
 # are the ramp's dark end, and one fir of the three is nearly all green.
 # With every kind mostly snow and its green from the ramp's light half, a
 # wooded slope across the valley was a pale mint wash.
-# Three snowfalls: `a` with snow lying on each tier down to a scalloped
-# line; `b` the dark one, green all but a thin roll of snow along each rim
-# and a cap on its point; `c` snowed right over, the green left only under
-# the rims. The full build's snow sits a third of the way down the snow
-# ramp, toward its blue: the approved (Kenney) fir's snow was a pale blue
-# grey, and at the ramp's white end a single fir read whiter than it.
-# The box's build (lite) is five sides, shaded round as well, and level
-# snow lines, each one ring (`b`'s snow lies under it, along the rim, on
-# the skirt's own slope); its point has no shoulder. Its snow line was a
-# saw, one slant to a side, on flat sides: from the road a stand of them
-# read as broken. (Six sides cost the box a fifth more triangles a fir, and
-# the scene budget counts triangles: sharing corners saves none of them.)
-# (the underside's y and its outer r, the rim's r and y); the last row is the point's shoulder and tip
+# Three snowfalls: `a` green up to a level snow line half way up each
+# skirt; `b` the dark one, green all but its snow along each rim, lying on
+# the skirt's own slope, and on its point; `c` snowed right over, the green
+# left only under the rims. Five sides, shaded round, each snow line one
+# level ring; the point has no shoulder. This was the box's (lite) build:
+# beside the full one (eight sides, scalloped snow lines, a cap on `b`'s
+# point) the user liked it better, and it is now the fir of both tiers
+# (2026-11-22). Its snow line was a saw, one slant to a side, on flat sides:
+# from the road a stand of them read as broken. (Six sides cost a fifth more
+# triangles a fir, and the scene budget counts triangles: sharing corners
+# saves none of them.)
+# (the underside's y and its outer r, the rim's r and y); then the tip
 OWN_FIR_TIERS = ((0.34, 0.54, 0.60, 0.41), (0.83, 0.41, 0.46, 0.885), (1.27, 0.32, 0.36, 1.315))
-OWN_FIR_POINT = ((0.15, 1.70), (0.0, 1.92))
+OWN_FIR_TIP = (0.0, 1.92)
 OWN_FIR_TALL = 1.92
 OWN_FIR_SLOPE = 0.6          # how far a skirt draws in for each unit it climbs
 
-def own_fir_faces(kind, lite):
-    n = 5 if lite else 8
+def own_fir_faces(kind):
+    n = 5
     G, S, T = 'green', 'snow', 'salmon'
     out = []
     def band(swatch, lo, hi, g):
         return own_band(swatch, lo, hi, n, g)
     # the trunk: light at its foot, dark up under the skirt
-    out += own_band(T, (0.2, 0.0, 4), (0.13, 0.36, 28), 4 if lite else 6, 'trunk', phase=0.4)
+    out += own_band(T, (0.2, 0.0, 4), (0.13, 0.36, 28), 4, 'trunk', phase=0.4)
     inner = 0.1
     for t, (yu, ru, rl, yl) in enumerate(OWN_FIR_TIERS):
         last = t == len(OWN_FIR_TIERS) - 1
         g = 'tier%d' % t
-        rim = not lite or kind != 'a'                                            # (the box's `a` shows green enough above its rim)
-        # (the box's `a`: a shallow cone straight to the rim, through the top of the skirt below so the tiers touch)
+        rim = kind != 'a'                                                        # (`a` shows green enough above its rim)
+        # (`a`: a shallow cone straight to the rim, through the top of the skirt below so the tiers touch)
         y0 = yu if rim else yu - (yl - yu) * inner / (rl - inner)
         # the underside, a fan in to the trunk's axis: inside the skirt below
         # (or the trunk) where that skirt comes up to meet it, so none of it
         # shows that an annulus in to the skirt would, at half its triangles
-        out += own_band(G, (0.0, y0, 31 if lite else 29), (ru, yu, 31 if lite else 29) if rim else (rl, yl, 31), n, g + 'under')
+        out += own_band(G, (0.0, y0, 31), (ru, yu, 31) if rim else (rl, yl, 31), n, g + 'under')
         if rim:
-            out += own_band(G, (ru, yu, 31 if lite else 29), (rl, yl, 29 if lite else 25), n, g + 'rim')        # under the rim: its own group, so the rim stays crisp
+            out += own_band(G, (ru, yu, 31), (rl, yl, 29), n, g + 'rim')        # under the rim: its own group, so the rim stays crisp
         if last:
-            (rt, yt), tip = OWN_FIR_POINT
-            if lite:
-                (rt, yt) = tip
+            (rt, yt) = OWN_FIR_TIP
         else:
             yt = OWN_FIR_TIERS[t + 1][0]
             rt = inner = rl - OWN_FIR_SLOPE * (yt - yl)
         at = lambda f: (rl + (rt - rl) * f, yl + (yt - yl) * f)                   # a point up the skirt
-        up = (lambda f: f * 0.72) if last and lite else (lambda f: f)             # (the box's top skirt runs on to the tip)
-        if kind == 'b' and lite:
-            # the box's: the snow along each rim up to a level line, lying on
-            # the skirt's own slope so each tier stays a cone (a roll stood out
-            # from the rim, the skirt flat off its top, made a far stand of
-            # them a pile of drums)
+        up = (lambda f: f * 0.72) if last else (lambda f: f)                      # (the top skirt runs on to the tip)
+        if kind == 'b':
+            # the snow along each rim up to a level line, lying on the skirt's
+            # own slope so each tier stays a cone (a roll stood out from the
+            # rim, the skirt flat off its top, made a far stand of them a pile
+            # of drums)
             gb = 25
             (r2, y2) = at(0.38) if last else (rt, yt)
             (rs, ys) = at(up(0.25))
@@ -28642,73 +28621,21 @@ def own_fir_faces(kind, lite):
             out += band(G, (rs, ys, gb), (r2, y2, gb - (11 if last else 13)), g + 'skirt')
             if last:
                 out += band(S, (r2, y2, 16), (rt, yt, 6), g + 'tip')
-        elif kind == 'b':
-            gb = 23
-            # a roll of snow along the rim: straight up off it (stood out over
-            # it, its face turned down into the shade and drew a grey band
-            # under a thin white one), then a shelf in to the skirt; a cap on
-            # the point alone (half the top skirt's white made it a snowy fir)
-            (r1, y1) = at(up(0.16 / (yt - yl) if not last else 0.24))
-            out += band(S, (rl, yl, 20), (rl + 0.005, yl + 0.1, 12), g + 'roll')
-            out += band(S, (rl + 0.005, yl + 0.1, 12), (r1, y1, 8), g + 'roll')
-            if last:
-                # the cap, the approved fir's: snow over the point, its foot
-                # tucked in under it against the skirt, out to a blunt band
-                # that overhangs the green, then a cone in to a small round
-                # top: convex all the way (a flared cone on a green lip read
-                # as a hat, a dome as a snowball). The skirt runs on up
-                # inside it.
-                out += band(G, (r1, y1, gb), at(0.78) + (gb - 12,), g + 'skirt')
-                cap = ((0.2, 1.572, 20), (0.232, 1.615, 15), (0.222, 1.685, 11), (0.11, 1.89, 8), (0.05, 1.94, 7), (0.0, 1.95, 6))
-                for lo, hi in zip(cap, cap[1:]):
-                    out += band(S, lo, hi, g + 'tip')
-            else:
-                out += band(G, (r1, y1, gb), (rt, yt, gb - 13), g + 'skirt')
-        elif kind == 'c' and lite:
-            out += band(S, (rl, yl, 28), (rt, yt, 10), g + 'snow')                # (the box's: no edge band, a third more faces on every far stand)
         elif kind == 'c':
-            (rc, yc) = at(0.05)                                                  # a dark green edge at the rim, the rest snow
-            out += band(G, (rl, yl, 27), (rc, yc, 25), g + 'edge')
-            out += band(S, (rc, yc, 30), (rt, yt, 15), g + 'snow')
-        elif lite:
-            # the box's `a`: the skirt green up to a level snow line half way up it
+            out += band(S, (rl, yl, 28), (rt, yt, 10), g + 'snow')                # (no edge band: a third more faces on every far stand)
+        else:
+            # `a`: the skirt green up to a level snow line half way up it
             (rs, ys) = at(up(0.48))
             out += band(G, (rl, yl, 29), (rs, ys, 21), g + 'skirt')
             out += band(S, (rs, ys, 20), (rt, yt, 6), g + 'snow')
-        else:
-            # the snow line low on the skirt in scallops, the approved fir's: a
-            # lobe of snow hanging round-bottomed across each side, a cusp of
-            # green up between two at each corner, steep near it and shallow
-            # under the lobe, as the approved fir's line runs (one broad tooth
-            # a side read as a saw, a flat-bottomed lobe as a row of teeth).
-            # Its mean is where the fix-final shares had it.
-            lo, hi = own_ring(rl, yl, n), own_ring(rt, yt, n)
-            L, sag = yt - yl, 0.1
-            LOBE = ((0.21, 0.28), (0.5, 0.0), (0.79, 0.28))                    # (w along a side, height over the lobe's foot in sags)
-            mean = 2 * (0.21 * 0.64 + 0.29 * 0.14)                               # (the line's rise over a side, in sags)
-            f = 0.22 + (0.05 - mean * sag) / L
-            rings = {h: own_ring(*at(f + h * sag / L), n) for h in (0.0, 0.28, 1.0)}
-            def line(w, h):                                                      # a point of the line, `w` along side i
-                a, b = rings[h][i], rings[h][j]
-                return tuple(a[k] + (b[k] - a[k]) * w for k in range(3))
-            cusp = rings[1.0]
-            for i in range(n):
-                j = (i + 1) % n
-                rad = (lo[i][0] + lo[j][0], 0.3, lo[i][2] + lo[j][2])
-                foot = [line(w, h) + (11 if h == 1.0 else 15,) for w, h in LOBE]  # corner i to corner j
-                out.append((G, own_facing([lo[j] + (22,), lo[i] + (22,), cusp[i] + (11,)] + foot + [cusp[j] + (11,)], rad), g + 'skirt'))
-                out.append((S, own_facing([cusp[i] + (20,), hi[i] + (8,), hi[j] + (8,), cusp[j] + (20,)]
-                                          + [q[:3] + (20 if q[3] == 11 else 22,) for q in foot[::-1]], rad), g + 'snow'))
-        if last and not lite and kind != 'b':
-            out += band(S, (rt, yt, 12), (tip[0], tip[1], 6), g + 'snow')
     return out
 
-def own_fir(kind, lite=False):
-    own_shell('tree', own_fir_faces(kind, lite), smooth=True)
+def own_fir(kind):
+    own_shell('tree', own_fir_faces(kind), smooth=True)
 
 for _k in 'abc':
-    own_model('tree-snow-' + _k)((lambda k: lambda: own_fir(k))(_k))
-    own_model('tree-snow-%s-lite' % _k)((lambda k: lambda: own_fir(k, True))(_k))
+    for _n in ('tree-snow-' + _k, 'tree-snow-%s-lite' % _k):   # one fir, both tiers (the lite file is the box's name for it)
+        own_model(_n)((lambda k: lambda: own_fir(k))(_k))
 
 # ---- the race's items: seen close, all race long ----
 
