@@ -1,0 +1,42 @@
+name: ccache-save
+description: >-
+  Prints the leg's ccache statistics and, on main when the key was not an exact
+  hit, saves the compiler cache trimmed to the entries this build used.
+
+# MAIN ONLY: a pull request's cache is visible to that pull request alone, and
+# what it would add, main saves once the change lands.
+#
+# TRIMMED TO THIS BUILD, so each saved cache is one build's worth (~15 MB)
+# instead of every object since the cache began: restored entries the build
+# did not touch are older than CCACHE_SINCE (the ccache action notes it after
+# the restore), and ccache stamps every entry it hits.
+
+inputs:
+  key:
+    description: The ccache action's key output.
+    required: true
+  hit:
+    description: The ccache action's hit output.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: ccache statistics
+      shell: bash
+      run: ccache --show-stats
+
+    - name: Trim the compiler cache to this build
+      if: github.ref == 'refs/heads/main' && inputs.hit != 'true'
+      shell: bash
+      run: |
+        set -eu
+        ccache --evict-older-than "$(( $(date +%s) - CCACHE_SINCE + 1 ))s"
+        ccache --show-stats | grep -i 'cache size' || true
+
+    - name: Save the compiler cache
+      if: github.ref == 'refs/heads/main' && inputs.hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ${{ inputs.key }}

@@ -9,6 +9,10 @@ name: Native conformance
 # conformance: android-full links the complete Android artifact, renderer
 # included, against the pinned Filament SDK for both shipped ABIs, and
 # release-android-sdk keeps release.yml's Filament cache warm from main.
+#
+# Every leg that compiles does so through ccache, its cache saved from main
+# (.github/actions/ccache and ccache-save say how, and why it is safe for a
+# tree whose fixtures are byte-exact: native/CMakeLists.txt's ccache notes).
 
 on:
   pull_request:
@@ -16,12 +20,14 @@ on:
       - 'native/**'
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
+      - '.github/actions/ccache*/**'
   push:
     branches: [main]
     paths:
       - 'native/**'
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
+      - '.github/actions/ccache*/**'
       # release-android-sdk's build, which release.yml shares.
       - '.github/actions/filament-android-sdk/**'
   # THE CACHE WARMER. GitHub drops a cache nothing has read for a week, and the
@@ -57,6 +63,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: conformance-${{ matrix.os }}
       - name: Configure (clang, strict FP)
         run: cmake -S native -B native/build/ci -DCMAKE_BUILD_TYPE=Release
         env:
@@ -64,6 +74,10 @@ jobs:
           CXX: clang++
       - name: Build
         run: cmake --build native/build/ci --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
       - name: Corpus + conformance tests
         run: ctest --test-dir native/build/ci --output-on-failure
 
@@ -75,6 +89,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: wasm
       - uses: emscripten-core/setup-emsdk@v16
         with:
           version: 6.0.9    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
@@ -82,6 +100,10 @@ jobs:
         run: emcmake cmake -S native -B native/build/wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)
       - name: Build
         run: cmake --build native/build/wasm --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
       - name: Corpus + conformance tests (Node)
         run: ctest --test-dir native/build/wasm --output-on-failure
       - name: Link-check the browser module (sim + party, no renderer)
@@ -110,6 +132,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: tvos-sim
       - name: Boot Apple TV simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for k,v in d.items() if 'tvOS' in k for dev in v))")
@@ -125,6 +151,10 @@ jobs:
             "-DCMAKE_CROSSCOMPILING_EMULATOR=$PWD/native/scripts/tvos-sim-spawn.sh;$UDID"
       - name: Build
         run: cmake --build native/build/tvos-sim --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
       - name: Corpus + conformance tests (Apple TV simulator)
         run: ctest --test-dir native/build/tvos-sim --output-on-failure
 
@@ -149,10 +179,18 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: android-ndk-${{ matrix.abi }}
       - name: Configure (NDK, ${{ matrix.abi }})
         run: cmake -S native -B native/build/android -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24
       - name: Build
         run: cmake --build native/build/android --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
 
   android-full:
     # The WHOLE Android artifact — renderer and display shim included — linked
@@ -214,6 +252,13 @@ jobs:
           cd ..
           mkdir filament-sdk
           cp -R filament-src/out/android-release/filament/. filament-sdk/
+      # AFTER the Filament build: Filament's CMake takes up ccache too when it
+      # is on PATH, and a pin bump's whole Filament build would land in this
+      # leg's cache.
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: android-full
       - name: Link the full runtime (both ABIs)
         run: |
           for abi in armeabi-v7a arm64-v8a; do
@@ -223,6 +268,10 @@ jobs:
               -DFILAMENT_SDK=$PWD/filament-sdk
             cmake --build native/build/android-$abi --target ttp_runtime_android --parallel
           done
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
 
   release-android-sdk:
     # THE RELEASE'S CACHE, kept warm from main. release.yml builds the store
