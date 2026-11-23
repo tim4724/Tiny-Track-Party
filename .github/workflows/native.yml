@@ -5,9 +5,10 @@ name: Native conformance
 # shared corpora/fixtures bit-for-bit on every leg of the platform matrix —
 # desktop clang (linux x64 + macOS arm64), emscripten/WASM under Node, the
 # tvOS simulator, and an Android NDK cross-compile. Acceptance for Track S
-# M4: every fixture byte-exact on every runnable target. The android-full leg
-# is the one non-conformance job: it links the complete Android artifact,
-# renderer included, against the pinned Filament SDK for both shipped ABIs.
+# M4: every fixture byte-exact on every runnable target. Two jobs are not
+# conformance: android-full links the complete Android artifact, renderer
+# included, against the pinned Filament SDK for both shipped ABIs, and
+# release-android-sdk keeps release.yml's Filament cache warm from main.
 
 on:
   pull_request:
@@ -21,6 +22,8 @@ on:
       - 'native/**'
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
+      # release-android-sdk's build, which release.yml shares.
+      - '.github/actions/filament-android-sdk/**'
   # THE CACHE WARMER. GitHub drops a cache nothing has read for a week, and the
   # path filters above let this workflow sit idle for longer than that — after
   # which the next push to touch native/ paid android-full's whole Filament
@@ -220,3 +223,35 @@ jobs:
               -DFILAMENT_SDK=$PWD/filament-sdk
             cmake --build native/build/android-$abi --target ttp_runtime_android --parallel
           done
+
+  release-android-sdk:
+    # THE RELEASE'S CACHE, kept warm from main. release.yml builds the store
+    # bundles on the Filament Android SDK cached under filament-android-<pin>,
+    # and only a run on main writes a cache a tag can restore. Before this job
+    # the only main runs that did were release dispatches, so after a pin bump,
+    # or once a week had passed without a release, the release itself sat in
+    # the cold build. This runs where a pin bump already lands (filament.pin
+    # is under native/) and on the schedule above, which keeps the cache read.
+    #
+    # THE SAME ACTION release.yml runs, not a copy and not android-full's
+    # cache: the key, the paths and the NDK have to be the release's to the
+    # letter or the release misses. android-full builds its SDK in one pass
+    # with whatever NDK the image carries, and caches it under other paths.
+    #
+    # MAIN ONLY: a pull request's cache is invisible to tags, so a build there
+    # would be wasted. A hit costs the fork fetch, the NDK install and the
+    # restore, and nothing waits on it.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # A miss is the release's whole Filament build; the cap is the job limit,
+    # as in release.yml.
+    timeout-minutes: 360
+    # One at a time, the later run WAITING, for android-full's reason: two
+    # cold runs minutes apart would each build Filament from scratch.
+    concurrency:
+      group: filament-android-release-sdk
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: The Filament Android SDK
+        uses: ./.github/actions/filament-android-sdk
