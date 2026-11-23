@@ -4389,28 +4389,33 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
     }
-    // EVERY MATERIAL, NOT THREE. vglbfade, vburst and voverlay each carried a
-    // prewarm of their own, added one at a time as someone felt its first-use
-    // compile as a hitch, on the theory that "every other material draws on the
-    // first frame after build, which compiles its programs while the lobby is
-    // still up". That theory is wrong: a Material compiles a PROGRAM PER
-    // VARIANT, and the lobby's single overview camera exercises a different
-    // variant set than a race does (chase cams, split cells, the depth and
-    // shadow passes). The rest of the set therefore compiles at GO, on
-    // Filament's BACKEND thread — which is why neither instrument could see it:
-    // the app thread records a frame in 1.5 ms and returns, the GPU timer
-    // measures only what executed, and the stall arrives as beginFrame refusing
-    // to hand out a drawable. Measured on an A10X solo at 4K: 7-40 fps for
-    // ~2.3 s from GO, with the GPU at 9 ms of a 16.7 ms budget throughout.
+    // EVERY MATERIAL, BUT ONLY THE VARIANTS THIS RENDERER DRAWS. A material's
+    // first draw compiles its program on Filament's BACKEND thread, where
+    // neither instrument sees it: the app thread records its frame and returns,
+    // the GPU timer measures only what executed, and the stall arrives as
+    // beginFrame refusing a drawable. Some first draws are gameplay moments
+    // (the box poof, the first rocket, the HUD overlay at the countdown), so
+    // every material compiles here, where a build is all headroom: compile()
+    // is async on a driver-side queue.
     //
-    // compile() is async on a driver-side queue, so a build is all headroom.
+    // Not every VARIANT, which is compile()'s default. Every material here is
+    // unlit with its fog filtered out, and nothing casts a Filament shadow or
+    // is picked, so a draw only ever asks for the standard variant. The
+    // default also queued the skinned one and a fog-keyed twin of each (the
+    // draw clears the fog key on a material built without fog; compile() does
+    // not), four programs where one is drawn: on a GL driver that links from
+    // source, most of the launch's compile CPU. The one skinned draw is the set
+    // pieces' movers, vcolor in full only (TtpRendererMotion.cpp, THE SKIN).
     for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial,
                          mRoadMaterial, mGlbMaterial, mGlbFadeMaterial, mGlbFlatMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
                          mBurstMaterial, mEsmMaterial,
                          mPresentMaterial, mOverlayMaterial,
                          mVisMaterial }) {
-        if (m) m->compile(Material::CompilerPriorityQueue::HIGH);
+        if (!m) continue;
+        const bool skinned = m == mMaterial && !mLite;
+        m->compile(Material::CompilerPriorityQueue::HIGH,
+                skinned ? UserVariantFilterMask(UserVariantFilterBit::SKINNING) : 0);
     }
     mEngine->flush(); // start any prewarm compiles queued above immediately
     // Between frames — the present material only lands now. Gated exactly
