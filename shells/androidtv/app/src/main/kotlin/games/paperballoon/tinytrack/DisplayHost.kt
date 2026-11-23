@@ -60,6 +60,15 @@ class DisplayHost(
          *  black where the paper used to be, so it waits for a few. */
         private const val SHOWING_PRESENTS = 3
 
+        /** How long a covered scene keeps drawing ([covered]): past the board's
+         *  fade-in, and long enough for a held field's chase rig to close on the
+         *  parked car, whose settled frame is what shows through the frost. */
+        private const val COVER_SETTLE_NANOS = 500_000_000L
+
+        /** Presents of the CURRENT scene and buffer before a covered scene may
+         *  stop drawing, or the frost would show the old one, or nothing. */
+        private const val FRESH_FRAMES_TO_IDLE = 2
+
         /**
          * The CEILING, in buffer lines — what a panel is worth rendering at all.
          * Only bites on a panel taller than 4K; every TV this ships to is capped
@@ -237,6 +246,37 @@ class DisplayHost(
      */
     var onSlowTick: (() -> Unit)? = null
 
+    /**
+     * Whether a full-screen board hides the 3D right now: a frost (pause, the
+     * display's link, a results board over a held field) or an opaque info page.
+     * Read at every tick rather than told on a change, so the tick after a board
+     * comes down already draws.
+     *
+     * **A SCENE UNDER A BOARD DOES NOT DRAW**, the web's and tvOS's hidden-scene
+     * idle (`Stage._hiddenIdle`, tvOS `DisplayHost.setCovered`). Through the
+     * 0.94 wash ([Sticker.frost]) the ambient motion is not readable, and a frame
+     * costs the GPU the same either way. The loop keeps ticking UNDRAWN
+     * (`ttp_display_advance`), so the first frame drawn when the board lifts is
+     * the one drawing throughout would have shown. Nothing is presented
+     * meanwhile and nothing has to be: SurfaceFlinger keeps the layer's last
+     * buffer on the glass until a new one is queued.
+     */
+    var covered: () -> Boolean = { false }
+
+    /** When [covered] last went true, in frame-time nanos; 0 while it is false. */
+    private var coveredSince = 0L
+
+    /** Presents since the last build or buffer resize (see [FRESH_FRAMES_TO_IDLE]). */
+    private var freshFrames = 0
+
+    /**
+     * Whether the last tick stepped undrawn. [Scenarios] reads it as a shot's
+     * readiness alongside [framesPresented], which stops counting under a
+     * board; the first drawn tick after it drops the perf window.
+     */
+    var idling = false
+        private set
+
     init {
         view.holder.addCallback(this)
         // THE ENGINE STARTS NOW, NOT AT THE SURFACE: it needs no window until its
@@ -286,6 +326,7 @@ class DisplayHost(
             }
             usingVulkan = vulkan
             hasSurface = true
+            freshFrames = 0
             surfaceWidth = width
             surfaceHeight = height
             // NO FULL-SCREEN ANTIALIAS PASS ON THIS PLATFORM. Measured on the
@@ -339,6 +380,7 @@ class DisplayHost(
         } else if (width != surfaceWidth || height != surfaceHeight) {
             surfaceWidth = width
             surfaceHeight = height
+            freshFrames = 0
             Ttp.ttp_display_resize(width, height)
             // `ttp_perf.h`'s resize case. The readout CARRIES the buffer size it
             // was measured at, so a window that straddles a resize is labelled
@@ -489,6 +531,21 @@ class DisplayHost(
                 // labels this row `ttp_update`, and the cadence arithmetic above is
                 // not that. It lands in `other`, which is where it belongs.
                 val simNs = System.nanoTime() - tSim
+                // Under a board ([covered]): the frame's CPU half and no draw,
+                // and nothing a drawn frame feeds — no present, no tags, no perf
+                // sample and no scale poll, so the rule never reads the gap as
+                // frames. The slow tick below still runs.
+                val idle = undrawn(frameTimeNanos)
+                if (idle) {
+                    idling = true
+                    pendingDt = 0.0
+                    Ttp.ttp_display_advance(dt)
+                    writeReadyBlobs()
+                } else if (idling) {
+                    // Back in view: the window holds the frames from before the board.
+                    idling = false
+                    PerfMonitor.reset()
+                }
                 // A CHOREOGRAPHER CALLBACK IS NOT A PRESENT, and everything that
                 // measures this platform hangs off that distinction. Filament's
                 // beginFrame declines when the buffer queue is still full — the GPU
@@ -502,8 +559,10 @@ class DisplayHost(
                 // sees a perfect cadence and never rescues anything. The web is not
                 // exposed to this (rAF is throttled by presentation) and neither is
                 // tvOS (the display link is), so this is Android's alone.
-                vsyncCount++
-                pendingDt += dt
+                if (!idle) {
+                    vsyncCount++
+                    pendingDt += dt
+                }
                 var presented = false
                 if (pendingW != 0) {
                     // A resize is armed. PERFORM IT AT THE TOP OF THIS CALLBACK
@@ -529,6 +588,7 @@ class DisplayHost(
                         if (TtpSurface.nativeSetBufferSize(pendingW, pendingH)) {
                             surfaceWidth = pendingW
                             surfaceHeight = pendingH
+                            freshFrames = 0
                         } else {
                             // No window, or a driver that will not take the
                             // geometry. `setFixedSize` still gets there, at one
@@ -544,7 +604,7 @@ class DisplayHost(
                         pendingW = 0; pendingH = 0; pendingSent = false
                     }
                 }
-                if (pendingW == 0 && vsyncCount % vsyncInterval == 0L) {
+                if (!idle && pendingW == 0 && vsyncCount % vsyncInterval == 0L) {
                     Trace.beginSection("ttp:render")
                     presented = Ttp.ttp_display_frame(pendingDt) != 0
                     Trace.endSection()
@@ -572,6 +632,7 @@ class DisplayHost(
                     writeReadyBlobs()
                     if (presented) {
                         framesPresented++
+                        freshFrames++
                         if (++surfacePresents == SHOWING_PRESENTS) onSurfaceShowing?.invoke(true)
                     }
                     // A Vulkan boot that gets a frame onto the glass clears its
@@ -620,6 +681,7 @@ class DisplayHost(
                 // ONE WINDOW, TWO READERS: the readout draws it and the scale
                 // rule steers off it. The fold answers both series, so the tick
                 // cadence below is all this callback owes either of them.
+                if (idle) return
                 if (tickMs > 0) {
                     // `callback` stops HERE, so the monitor's own fold and
                     // `adaptScale` are outside it — an instrument must not be in
@@ -639,6 +701,22 @@ class DisplayHost(
     private fun stop() {
         frameCallback?.let { Choreographer.getInstance().removeFrameCallback(it) }
         frameCallback = null
+    }
+
+    /**
+     * Whether this tick may skip the draw ([covered]). The holds that keep the
+     * frozen picture honest: the board has settled ([COVER_SETTLE_NANOS]), the
+     * first paint has happened (it lifts the boot cover), the current scene's
+     * frames are through the GPU (`ttp_display_settled`, or the last one queued
+     * may sit behind a pipeline compile), the glass holds fresh frames of the
+     * current scene and buffer, and no resize is armed — that one pairs with a
+     * render, because `setBuffersGeometry` frees the buffer on the glass.
+     */
+    private fun undrawn(nowNanos: Long): Boolean {
+        if (!covered()) { coveredSince = 0L; return false }
+        if (coveredSince == 0L) coveredSince = nowNanos
+        return hasScene && hasPainted && pendingW == 0 && freshFrames >= FRESH_FRAMES_TO_IDLE
+                && nowNanos - coveredSince >= COVER_SETTLE_NANOS && Ttp.ttp_display_settled() != 0
     }
 
     /**
@@ -687,6 +765,7 @@ class DisplayHost(
             biome = SceneStaging.build(trackId, roster, this, store, blobs)
             this.trackId = trackId
             hasScene = true
+            freshFrames = 0
             // The tags name cars by SLOT, and a build is the one thing that can
             // change what a slot is (a re-roster refuses id changes). Latched here
             // so the frame path never parses JSON.

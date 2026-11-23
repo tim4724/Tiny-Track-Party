@@ -1058,7 +1058,9 @@ Three consequences of that:
   a scene lands (`ttp_display_frame` answers 0 throughout), so every card whose
   dressing ran a few seconds past the build came back as a perfect HUD over a BLACK
   surface. `DisplayHost.framesPresented` is what the harness waits on, and its
-  timeout has to OUTLAST that stall rather than expire inside it. This is the
+  timeout has to OUTLAST that stall rather than expire inside it. A scene under
+  a full-screen board stops presenting once it has settled (`DisplayHost.covered`),
+  so `DisplayHost.idling` answers the wait too. This is the
   "frames presented counter" the tvOS harness names in its own comment as the
   honest fix and does not have.
 - **IT PHOTOGRAPHS WHATEVER IS INSTALLED**, because it never builds and never

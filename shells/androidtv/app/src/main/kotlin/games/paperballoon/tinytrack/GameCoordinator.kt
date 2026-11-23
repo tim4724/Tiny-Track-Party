@@ -972,6 +972,15 @@ class GameCoordinator(
 
         display.onFrame = { dt -> frame(dt) }
         display.onSlowTick = { slowTick() }
+        // The boards [RootScreen] stands over the whole 3D: the display's link
+        // anywhere, an info page over the lobby, the pause overlay or a results
+        // board over the race. The results board lands after `endFlourish` has
+        // held the field and leaves at the launch that builds the next scene,
+        // so like the pause it covers a still picture.
+        display.covered = {
+            state.link != null || state.infoPath.isNotEmpty()
+                || (state.screen == GameState.Screen.RACE && (state.paused || state.results != null))
+        }
         // Fires once, when a built scene first reaches the glass. At boot the
         // preview pick lands long before the pixels do, so without this nothing
         // ever re-asks and the boot cover would stay up for the whole lobby —

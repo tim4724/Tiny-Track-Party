@@ -273,11 +273,15 @@ object Scenarios {
         }
     }
 
-    /** Wait until the engine has presented [n] more frames; false if it never did. */
+    /**
+     * Wait until the engine has presented [n] more frames; false if it never did.
+     * A scene idling under a board ([DisplayHost.covered]) presents nothing more,
+     * and counts as presented: it idles only once its settled frame is on the glass.
+     */
     private fun presented(game: GameCoordinator, n: Int, then: (Boolean) -> Unit) {
         val target = game.display.framesPresented + n
         waitFor("$n presented frames", PRESENT_TIMEOUT_MS,
-            { game.display.framesPresented >= target }) { ok -> then(ok) }
+            { game.display.framesPresented >= target || game.display.idling }) { ok -> then(ok) }
     }
 
     /** What [apply] answers: the screen is standing, and whether it owns 3D. */
