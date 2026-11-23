@@ -285,6 +285,16 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    `check:tvos-party` and `check:androidtv-party` assert the same room, seat and
    all, after Home.
 
+   **The screen is held awake while a party exists, and only then.** A race is
+   minutes with no input on the TV, so a shell keeps the OS from dimming it, but
+   an empty lobby is an attract loop nobody is watching, so the screensaver may
+   have it (and with it the room, on a platform where that is a background).
+   `ttp_net_keep_awake` is the answer; a shell asks it on every roster render
+   and flips its platform switch only on a change (Android FLAG_KEEP_SCREEN_ON,
+   tvOS `isIdleTimerDisabled`, the web's Screen Wake Lock). Anything that keeps
+   the box from idling once the app is OFF screen goes with the frame loop: an
+   audio output left open in the background holds a wake lock of its own.
+
    **Boot must not hold the first frame hostage.** Whatever the shell's boot does
    — configure, stage assets, build the preview track, dial the relay — it runs
    somewhere, and if that somewhere is the UI thread then the first layout pass

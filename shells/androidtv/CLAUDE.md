@@ -830,7 +830,10 @@ blob's reads land on the frame beat).
 
 ## Audio
 
-**Every cue is mixed here, in Kotlin, into one always-open `AudioTrack`.**
+**Every cue is mixed here, in Kotlin, into one `AudioTrack`, open while the app
+is on screen.** It closes on `onStop` and reopens on `onStart`: an open track,
+silent or not, keeps AudioFlinger's output out of standby and holds an `AudioMix`
+partial wake lock charged to the app.
 `AudioMixer` is the port of the render half of tvOS's `AudioDevice.swift` and
 `CueBank` is the port of its `CueBank.swift`; read those two Swift files for the
 reasoning behind the DSP, which is not repeated in the Kotlin.

@@ -663,6 +663,12 @@ scene.onFrame = (dt) => {
 
 // ---- net ----
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
+// The display is held awake while a party exists (net.keepAwake, asked on every
+// roster render below): a race is minutes with no input on this machine, but an
+// empty lobby is an attract loop nobody is watching, so the OS may sleep it.
+// Re-acquired on tab return; no-op where unsupported. Gallery/test surfaces are
+// dev previews and never take it.
+const wakeLock = createWakeLock();
 const net = new DisplayNet({
   // The room state machine, relay framing and fastlane netcode all run on the
   // C++ party layer; DisplayNet has no JS fallback to choose from.
@@ -859,6 +865,7 @@ function renderRoster(rosterSize, hostPeerIndex) {
   // A bigger roster means someone joined (renames/car picks keep the count) —
   // greet them with the join plink. Lobby only; mid-race arrivals are reconnects.
   sfx(audioDecide.roster(rosterSize, net.roomState === ROOM_STATE.LOBBY));
+  if (!_isTestMode && net.keepAwake) wakeLock.enable(); else wakeLock.disable();
   renderSeats(el('players'), ui.rosterSeatsFromRoom(net.flow.handle, hostPeerIndex));
   renderPick();   // the pre-pick cup slot names the host — track joins/renames
   // Reflect joins/leaves/car-picks in the attract demo at once. No debounce:
@@ -1427,13 +1434,6 @@ el('joinbox').addEventListener('click', async () => {
   if (!currentJoinUrl) return;
   showToast(await copyText(currentJoinUrl) ? 'Copied' : 'Copy failed');
 });
-
-// Keep the display awake for the whole session — the lobby IS the join screen
-// (QR + attract demo), so the screen sleeping there is as bad as mid-race.
-// Re-acquired on tab return; no-op where unsupported. Gallery/test surfaces are
-// dev previews and skip it.
-const wakeLock = createWakeLock();
-if (!_isTestMode) wakeLock.enable();
 
 // Gallery / test mode: any ?scenario=… skips the relay and lets the
 // TestHarness drive a single screen from fake data. Normal play connects.

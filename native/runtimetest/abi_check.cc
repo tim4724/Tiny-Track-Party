@@ -4171,7 +4171,17 @@ void netWalksMatchMultiCallPath() {
     Value watchdog = bareEffect("arm-create-watchdog");
     watchdog.set("delayMs", Value::Num(8000));
 
+    // The screen stays awake while a party exists, and only then: the rule is
+    // session.h's, gathered over the live roster.
+    const auto awake = [](int room, bool want, const char* what) {
+      const RoomFlow* f = ttp_room_flow(room);
+      check(ttp_net_keep_awake(room) == (ns::keep_screen_awake(f ? f->size() : 0) ? 1 : 0),
+            "keep-awake: the export agrees with the rule");
+      check(ttp_net_keep_awake(room) == (want ? 1 : 0), what);
+    };
+
     ttp_net_on_protocol_json(bg, "created", "{\"room\":\"BGRM\"}", 0);
+    awake(bg, false, "keep-awake: an empty lobby lets the screen sleep");
     // An empty lobby: the relay deletes a memberless room, so it ends as ever.
     literalEffects(walkOf(ttp_net_on_background_json(bg), "background empty"),
                    ops({bareEffect("shutdown")}), "background/empty-room");
@@ -4179,6 +4189,7 @@ void netWalksMatchMultiCallPath() {
 
     ttp_net_on_protocol_json(bg, "peer_joined", "{\"index\":1}", 0);
     ttp_room_events_json(bg);
+    awake(bg, true, "keep-awake: a seated phone keeps the screen on");
     literalEffects(walkOf(ttp_net_on_background_json(bg), "background seated"),
                    ops({bareEffect("detach-socket"), reconnecting}),
                    "background/seated");
@@ -4204,6 +4215,7 @@ void netWalksMatchMultiCallPath() {
                    "background/dead-room-ends-the-party");
     check(std::strcmp(ttp_room_list_json(bg), "[]") == 0,
           "background: no seat survives a dead room");
+    awake(bg, false, "keep-awake: the party ending lets the screen sleep again");
 
     // Mid-race, a phone that left while we were away is RESERVED on the
     // rejoin, as its peer_left would have reserved it, not freed.
@@ -4225,6 +4237,9 @@ void netWalksMatchMultiCallPath() {
     check(reserved && ttp_room_flow(mid)->has(PeerId::Num(2)) &&
               ttp_room_flow(mid)->isDisconnected(PeerId::Num(2)),
           "background: a racer who left meanwhile keeps a reserved seat");
+    ttp_net_on_protocol_json(mid, "peer_left", "{\"index\":1}", 0);
+    ttp_room_events_json(mid);
+    awake(mid, true, "keep-awake: a race whose every racer dropped is still a party");
     ttp_room_dispose(mid);
 
     // A seat that is only RESERVED holds no relay socket, so it keeps nothing.
@@ -4232,6 +4247,7 @@ void netWalksMatchMultiCallPath() {
     ttp_net_on_protocol_json(bg, "peer_joined", "{\"index\":3}", 0);
     ttp_room_flow(bg)->markDisconnected(PeerId::Num(3));
     ttp_room_events_json(bg);
+    awake(bg, true, "keep-awake: a reserved seat is still a party");
     literalEffects(walkOf(ttp_net_on_background_json(bg), "background reserved only"),
                    ops({bareEffect("shutdown")}), "background/reserved-seats-only");
     ttp_room_dispose(bg);

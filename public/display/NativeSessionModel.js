@@ -56,6 +56,7 @@ export async function init() {
     initPick: c('ttp_net_init_pick', null, ['number', 'string', 'number', 'number']),
     clearPick: c('ttp_net_clear_pick', null, ['number']),
     pickJson: c('ttp_net_pick_json', 'string', ['number']),
+    keepAwake: c('ttp_net_keep_awake', 'number', ['number']),
     liveness: c('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
     onSeen: c('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
     hostChangeApply: c('ttp_net_host_change_apply_json', 'string', ['number', 'string']),
@@ -178,6 +179,7 @@ export function initPick(roomHandle, defaultTrackId, hasBag, bagSeed) {
 }
 export function clearPick(roomHandle) { fn.clearPick(roomHandle | 0); }
 export function pick(roomHandle) { return JSON.parse(fn.pickJson(roomHandle | 0)); }
+export function keepAwake(roomHandle) { return fn.keepAwake(roomHandle | 0) === 1; }
 export function liveness(roomHandle, sessionHandle, nowMs) {
   return fn.liveness(roomHandle | 0, sessionHandle | 0, nowMs);
 }

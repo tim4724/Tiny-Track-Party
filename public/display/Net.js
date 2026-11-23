@@ -415,6 +415,9 @@ export class DisplayNet extends GameNet {
   // The stored pick ({mode,cupId,randomRaces,trackId}), read where it lives.
   // One crossing per ask, at button-press frequency.
   get pick() { return session.pick(this.flow.handle); }
+  // Whether the screen is held awake: while a party exists (session.h's
+  // keep_screen_awake over the roster).
+  get keepAwake() { return session.keepAwake(this.flow.handle); }
   // Field projections of the same read — the E2E surface (window.__net.mode
   // and friends) predates the stored pick and stays stable. Prefer `pick` in
   // game code: one crossing for all four fields.

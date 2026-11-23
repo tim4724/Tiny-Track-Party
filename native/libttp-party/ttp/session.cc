@@ -360,6 +360,10 @@ bool keep_room_on_background(bool inRoom, bool anyConnected) {
   return inRoom && anyConnected;
 }
 
+bool keep_screen_awake(std::size_t seats) {
+  return seats > 0;
+}
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 ClaimPlan claim_plan(double fromId, const Value* rejoinToken, bool hasOld,

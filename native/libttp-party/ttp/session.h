@@ -355,6 +355,13 @@ LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double
 // always did. The web never asks — closing a tab is the party ending.
 bool keep_room_on_background(bool inRoom, bool anyConnected);
 
+// Whether the display holds its screen awake (Android FLAG_KEEP_SCREEN_ON, the
+// tvOS idle timer, the web's Screen Wake Lock): only while a PARTY exists, which
+// is a seat on the roster, connected or reserved. That covers a live race too —
+// a racer's seat stays reserved until the room is back in the lobby. An empty
+// lobby is an attract loop nobody is watching, and the OS may dream over it.
+bool keep_screen_awake(std::size_t seats);
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 // A different DEVICE claims a dropped seat by carrying its old peerIndex as the

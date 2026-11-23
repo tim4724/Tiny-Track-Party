@@ -91,11 +91,6 @@ class MainActivity : ComponentActivity() {
         // the one board with nothing else to blame it on.
         Legal.load(assets)
 
-        // A race is minutes of no input at all from the TV's point of view — every
-        // button is on a phone — so without this the box dims and then sleeps
-        // mid-race.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         // THE PANEL'S OWN LATENCY. Everything this shell can measure ends at
         // SurfaceFlinger's present; the television then runs its picture
         // processing on top, tens of milliseconds on most sets, unless the
@@ -137,6 +132,11 @@ class MainActivity : ComponentActivity() {
         }
 
         game = GameCoordinator(this, surfaceView)
+        // Only while a party exists: GameCoordinator.syncKeepAwake says why.
+        game.onKeepAwake = { on ->
+            if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         // NOTHING SWITCHES THE PERF READOUT ON HERE, on purpose: it is off until a
         // developer asks for it, by property or by key. `PerfOverlay.kt` carries
         // the argument, and this line used to be `if (!Scenarios.active)

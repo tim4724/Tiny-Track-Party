@@ -16,7 +16,8 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * The mix: every cue this shell makes, summed into one always-open stream.
+ * The mix: every cue this shell makes, summed into one stream, open while the
+ * app is on screen ([release]).
  *
  * The Swift twin is the `render` half of
  * `shells/tvos/TinyTrackParty/Audio/AudioDevice.swift`, and this is its port —
@@ -226,6 +227,12 @@ class AudioMixer(private val bank: CueBank) {
         } catch (t: Throwable) {
             Log.w(TAG, "could not open the mix stream", t); return
         }
+        // A RESTART comes back silent: the voices a stopped stream was holding and
+        // the commands queued while it was down belong to a scene nobody heard.
+        // Both are safe to touch here: the old thread has been joined, and the
+        // new one starts below, after these writes.
+        for (v in slots) reset(v)
+        tail.set(head.get())
         track = t
         running = true
         t.play()
@@ -239,6 +246,13 @@ class AudioMixer(private val bank: CueBank) {
         }, "ttp-mix").also { it.start() }
     }
 
+    /**
+     * Close the stream and join the thread. Called when the app leaves the screen
+     * as well as when it goes away: an open track keeps AudioFlinger's output
+     * thread out of standby, and that thread holds a PARTIAL wake lock (`AudioMix`
+     * in `dumpsys power`) charged to this app for as long as it plays, silence
+     * included. [start] opens a fresh one.
+     */
     fun release() {
         running = false
         // STOP BEFORE THE JOIN. `running` is only read at the top of the loop, and

@@ -168,10 +168,22 @@ class AudioDevice(
      * which is the exact situation `ttp_audio.h` says `ttp_audio_stop_voices` exists
      * for. Draining here is what makes the call arrive.
      */
-    fun silence() {
+    private fun silence() {
         stopVoices()
         drain()
     }
+
+    /**
+     * The app left the screen: silence the decisions, then close the mix stream
+     * so the box can idle ([AudioMixer.release] says what an open one holds).
+     * [resume] reopens it on the way back.
+     */
+    fun suspend() {
+        silence()
+        mixer.release()
+    }
+
+    fun resume() = mixer.start()
 
     fun stopCar(id: EngineId) = Ttp.ttp_audio_stop_car(TtpJson.arg(id.json))
 

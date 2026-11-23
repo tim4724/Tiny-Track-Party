@@ -1007,6 +1007,11 @@ const char* ttp_net_on_background_json(int roomHandle) {
   return answer(g_bufBackground, std::move(effects));
 }
 
+int ttp_net_keep_awake(int roomHandle) {
+  const RoomFlow* flow = ttp_room_flow(roomHandle);
+  return ns::keep_screen_awake(flow ? flow->size() : 0) ? 1 : 0;
+}
+
 const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
                                          const char* fromJson, const char* msgJson,
                                          int isSignal, double nowMs) {

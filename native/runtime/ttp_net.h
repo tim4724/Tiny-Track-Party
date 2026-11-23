@@ -335,6 +335,12 @@ TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int re
  * the party below. The web never calls this: pagehide is the party ending. */
 TTP_ABI const char* ttp_net_on_background_json(int roomHandle);
 
+/* 1 while the display should hold its screen awake (session.h's
+ * keep_screen_awake over this room's roster): Android's FLAG_KEEP_SCREEN_ON,
+ * tvOS's isIdleTimerDisabled, the web's Screen Wake Lock. A shell re-asks on
+ * every roster movement and changes its platform state only on a change. */
+TTP_ABI int ttp_net_keep_awake(int roomHandle);
+
 /* The overlay's RECONNECT button. Answers effects only from the gave-up state
  * (`set-link` disconnected WITH a button): reset the kit's attempt counter so
  * the full budget runs again, raise the heading-only reconnecting overlay,
