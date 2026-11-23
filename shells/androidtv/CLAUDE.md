@@ -1125,6 +1125,13 @@ thing that needs to be remembered. What it wraps:
   APK. This is the shell's answer to what `npm run check:artifact` is for the web
   (root rule 6). `-PttpNoEngine` is how the CI leg says it has no engine on
   purpose.
+- **The engine exports only what the VM binds by name** (`native/runtime/
+  ttp_android.map`): `JNI_OnLoad` and the `Java_*` surface natives. So the
+  shipped `.so` names none of its own functions, and anything that symbolizes
+  it — a tombstone, a profile — reads the unstripped link the script keeps per
+  build id under `native/build/android-symbols/` (a store build's are a
+  `release.yml` artifact): `ndk-stack -sym native/build/android-symbols -i
+  <tombstone>` picks the right one by the build id each frame carries.
 
 **NEVER `./gradlew install<Variant>`. Assemble, then `adb -s "$SERIAL" install`.**
 Gradle's install task installs on EVERY attached device, and this tree is worked

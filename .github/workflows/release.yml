@@ -206,6 +206,17 @@ jobs:
             ${{ env.PHONE_AAB }}
           if-no-files-found: error
 
+      # The engine .so ships exporting only its JNI entry points, so a tombstone
+      # from a store install names no function until it meets these: the
+      # unstripped links of THIS run, one per ABI, named by build id
+      # (build-runtime-android.sh). `ndk-stack -sym <this folder> -i <tombstone>`.
+      - name: Upload the engine's native symbols
+        uses: actions/upload-artifact@v7
+        with:
+          name: tinytrack-android-symbols
+          path: native/build/android-symbols/
+          if-no-files-found: error
+
       # TAGS ONLY, unlike the artifact above. A dispatch is a build — the
       # end-to-end test and the cache warmer — and a build is not a release, so
       # it must not be able to put anything in front of a tester. Dispatch means

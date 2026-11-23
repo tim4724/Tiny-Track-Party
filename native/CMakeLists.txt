@@ -1294,6 +1294,15 @@ if(ANDROID)
   if(TARGET ttp_renderer)
     list(APPEND TTP_ANDROID_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_android.cc)
     add_library(ttp_runtime_android SHARED ${TTP_ANDROID_SOURCES})
+    # EXPORTS ONLY WHAT THE VM RESOLVES BY NAME (runtime/ttp_android.map).
+    # Everything else exported by default — every Filament, libc++ and ttp
+    # symbol — is a GC root the linker must keep and a dynsym entry the loader
+    # must hash, about a megabyte per ABI. The function names a tombstone loses
+    # with them come back from the unstripped copy build-runtime-android.sh
+    # keeps per build id.
+    set(TTP_ANDROID_MAP ${CMAKE_CURRENT_SOURCE_DIR}/runtime/ttp_android.map)
+    target_link_options(ttp_runtime_android PRIVATE "-Wl,--version-script=${TTP_ANDROID_MAP}")
+    set_property(TARGET ttp_runtime_android APPEND PROPERTY LINK_DEPENDS ${TTP_ANDROID_MAP})
   else()
     # NO SDK, NO .so — an OBJECT library instead, and the difference is not
     # cosmetic. The generated bridge takes the ADDRESS of every export in its

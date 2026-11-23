@@ -139,6 +139,8 @@ say "regenerate the JNI bridge"
 node "$ROOT/scripts/gen-jni.mjs"
 
 JNILIBS="$ROOT/shells/androidtv/app/src/main/jniLibs"
+SYMBOLS="$NATIVE/build/android-symbols"
+LLVM_BIN="$NDK/toolchains/llvm/prebuilt/$(uname -s | tr '[:upper:]' '[:lower:]')-x86_64/bin"
 
 build_abi() {
   local abi="$1"
@@ -175,13 +177,28 @@ build_abi() {
   say "build $abi"
   cmake --build "$dir" --target ttp_runtime_android --parallel
 
-  # STRIPPED on the way in. Unstripped it is ~35 MB of Filament debug symbols
+  # STRIPPED on the way in. Unstripped it is ~50 MB of Filament debug symbols
   # per ABI, which Gradle would happily package into the APK.
   mkdir -p "$JNILIBS/$abi"
-  "$NDK/toolchains/llvm/prebuilt/$(uname -s | tr '[:upper:]' '[:lower:]')-x86_64/bin/llvm-strip" \
+  "$LLVM_BIN/llvm-strip" \
     -o "$JNILIBS/$abi/libttp_runtime_android.so" \
     "$dir/libttp_runtime_android.so"
   ls -l "$JNILIBS/$abi/libttp_runtime_android.so" | awk '{printf "    %s  %s\n", $5, $9}'
+
+  # THE UNSTRIPPED COPY, KEPT BY BUILD ID. The .so exports only the JNI entry
+  # points (runtime/ttp_android.map), so a tombstone's frames carry no function
+  # names of their own; the build id every frame does carry is what ndk-stack
+  # matches against this directory, whatever the files are called:
+  #   ndk-stack -sym native/build/android-symbols -i tombstone.txt
+  # release.yml uploads it beside the bundles. Only the newest builds are kept
+  # here: the perf loop links one per iteration.
+  local id
+  id=$("$LLVM_BIN/llvm-readelf" -n "$dir/libttp_runtime_android.so" | awk '/Build ID:/ {print $3}')
+  mkdir -p "$SYMBOLS"
+  cp "$dir/libttp_runtime_android.so" "$SYMBOLS/libttp_runtime_android-$abi-$id.so"
+  # shellcheck disable=SC2012  # names are ours: no spaces, no newlines
+  ls -t "$SYMBOLS" | tail -n +21 | while read -r old; do rm -f "$SYMBOLS/$old"; done
+  echo "    symbols  $SYMBOLS/libttp_runtime_android-$abi-$id.so"
 }
 
 case "$WHICH" in
