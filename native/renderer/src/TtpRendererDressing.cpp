@@ -3075,6 +3075,7 @@ void TtpRenderer::buildDressingMerge() {
 void TtpRenderer::fillObstacles(ttp::rt::Obstacles& out) {
     out = {};
     if (!mScene || !mEngine) return;
+    const auto t0 = std::chrono::steady_clock::now();
     // What lies on the land is no obstacle, and a shot along the road would
     // graze it: a face counts only where it stands kClear over the ground.
     // A face longer than kBackdrop is the room or the horizon, not scenery.
@@ -3141,6 +3142,11 @@ void TtpRenderer::fillObstacles(ttp::rt::Obstacles& out) {
     family(mPropAssets, mPropInstances, false);
     family(mSetAssets, mSetInstances, true);
     out.seal();
+    // Which build or frame paid for it: the lobby's builds should, a race's not.
+    char line[64];
+    std::snprintf(line, sizeof line, "ttp obstacles: %.1f ms", std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - t0).count());
+    utils::slog.i << line << utils::io::endl;
 }
 
 void TtpRenderer::addCut(utils::Entity e, float size, bool sheet) {

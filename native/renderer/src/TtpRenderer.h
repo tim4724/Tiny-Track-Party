@@ -332,8 +332,9 @@ public:
     // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
     const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
     // The built scene's standing scenery as solid volume (ttp/obstacles.h),
-    // filled into `out` off the triangles it is drawn from. Asked once per
-    // build, inside it: the fill is too slow for a drawn frame on a TV box.
+    // filled into `out` off the triangles it is drawn from. Asked at most once
+    // per static scene, by the lobby's build (ttp_display_core.cc fillScenery):
+    // the fill is too slow for a drawn frame on a TV box.
     void fillObstacles(ttp::rt::Obstacles& out);
 
     // Slot i as the name tags see it (ttp/name_tags.h), measured off the model

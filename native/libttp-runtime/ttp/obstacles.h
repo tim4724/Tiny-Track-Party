@@ -3,7 +3,7 @@
 //
 // A coarse voxel shell of every scattered model, prop and set piece the
 // renderer placed, filled from the triangles it draws (TtpRenderer::
-// fillObstacles, inside the scene build) and handed to the frame builder like
+// fillObstacles, inside the lobby's scene build) and handed to the frame builder like
 // the ground grid is.
 // Voxels and not a box per piece: a gate, an arch or a pier bridge stands OVER
 // the road, and its box would ban the road under it.

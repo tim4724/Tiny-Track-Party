@@ -618,6 +618,9 @@ export class Stage {
             this.display.showcase(!!this._showcase); // latched; see showcase()
             this.display.bench(this._bench || '');   // …and see bench()
             for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
+            // The cells before the build, as both TV shells latch them: a build
+            // with none is the lobby's, and fills what its cameras read then.
+            this._syncCells();
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;
             this._rosterSig = rosterSig;

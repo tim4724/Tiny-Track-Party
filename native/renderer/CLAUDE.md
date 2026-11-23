@@ -497,8 +497,12 @@ memory until another track builds or the renderer goes.
   from inside it.** They know scenery only as the voxels that function fills
   from the drawn triangles (`ttp/obstacles.h`; `LensPlan` in `ttp/camera.h` is
   the reader), so a new family of standing geometry joins its list. It is
-  filled inside `ttp_display_build`, never on a frame: it costs tens of
-  milliseconds, which on a TV box would be a visible hitch.
+  filled inside a `ttp_display_build` with no cells, never on a frame by
+  design: it costs tens of milliseconds, which on a TV box would be a visible
+  hitch. A race's build leaves it unfilled, because only the lobby's cameras
+  read it; a frame fills it only if a lobby camera films a scene no lobby
+  build has (`fillScenery`), so it must stay a pure function of the static
+  scene, whatever frames have done to it since.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and
   `buildField` each log their phases (`PhaseLog`).
 - **A bake never `flushAndWait`s**: its GPU time belongs behind the thread that

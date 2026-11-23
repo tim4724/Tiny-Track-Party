@@ -560,6 +560,36 @@ void testHold(const GameTrack& track) {
 }
 
 // ---------------------------------------------------------------------------
+// 4a. WHICH FRAMES READ THE SCENERY (filmsScenery). A race's build leaves the
+//     lens's obstacles and the loop shots unfilled, and a frame fills them the
+//     first time this says yes — so a yes it misses films the lobby from
+//     inside a house, and a yes too many is a race frame that hitches.
+// ---------------------------------------------------------------------------
+void testFilmsScenery(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  DisplayState d = freshState();
+  d.roster = {P0, P1, P2};
+  d.camMode = TTP_CAM_COVERAGE;
+  check(rt::filmsScenery(d, &game), "the lobby's coverage over a field reads the scenery");
+  d.camMode = TTP_CAM_FOLLOW;
+  check(rt::filmsScenery(d, &game), "…and so does the follow cam");
+  for (const int mode : { TTP_CAM_STILL, TTP_CAM_ORBIT, TTP_CAM_BBOX, TTP_CAM_FREE }) {
+    d.camMode = mode;
+    check(!rt::filmsScenery(d, &game), "camera mode " + std::to_string(mode) + " reads no scenery");
+  }
+  d.camMode = TTP_CAM_COVERAGE;
+  check(!rt::filmsScenery(d, nullptr), "no field to film: coverage holds its wide shot");
+  d.cells = {P0};
+  check(!rt::filmsScenery(d, &game), "a cell car drawn: the race's chase rigs read none");
+  d.cells = {GHOST};
+  check(rt::filmsScenery(d, &game), "a cell whose car is not in the field is the overview again");
+  d.cells.clear();
+  rt::buildFrame(d, &game, DT, caseAspect(d));   // a live frame to hold
+  d.hold = true;
+  check(rt::filmsScenery(d, nullptr), "a held field is filmed with no session behind it");
+}
+
+// ---------------------------------------------------------------------------
 // 4b. THE CHASE RIG FOLLOWS THE HELD PICTURE, NOT THE SIM. The end-of-race hold
 //     is taken at the flag and the sim then runs ON — the AI to the flag, the
 //     just-finished human around a victory lap — so a rig fed the LIVE pose
@@ -2938,6 +2968,7 @@ int main() {
   testDriftHop();
   testCarsAndRoster(bt.game);
   testHold(bt.game);
+  testFilmsScenery(bt.game);
   testHeldChaseCam(bt.game);
   testOverviewViews(bt.game);
   testFollowView(bt.game);

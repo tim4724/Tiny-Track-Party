@@ -13,6 +13,7 @@
 
 #include "ttp/frame_builder.h"
 #include "ttp/name_tags.h"
+#include "ttp/trackbuilder.h"
 
 #include <string>
 
@@ -27,6 +28,12 @@ namespace rt {
 struct DisplayCore : DisplayState {
     TtpRenderer* renderer = nullptr;
     bool built = false;
+
+    // The static scene's `obstacles` and `loops` are still to be filled
+    // (fillScenery), out of the renderer's scene and these samples of its road.
+    bool sceneryPending = false;
+    std::vector<OutSample> scenerySamples;
+    float sceneryLap = 0;
 
     // The last drawn frame's name tags (ttp_display_name_tags), and the
     // covered/clear fade they carry across frames, one per (view, car). Worked
