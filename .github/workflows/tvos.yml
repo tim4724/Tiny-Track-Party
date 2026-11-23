@@ -130,24 +130,6 @@ jobs:
             brew list --formula "$f" >/dev/null 2>&1 || brew install "$f"
           done
 
-      # OUTSIDE THE WORKSPACE, like release.yml's: a 1.6 GB tree inside the repo
-      # makes every `git status --porcelain` dirty, and build.sh stamps that
-      # string into the version the DEBUG lobby shows.
-      #
-      # FILAMENT_SRC is an allowed override of filament-checkout.sh's
-      # version-addressed default, but only AT the pinned commit — which is why
-      # this fetches the commit itself rather than a branch.
-      - name: Fetch the pinned Filament fork
-        run: |
-          set -eu
-          SRC="$RUNNER_TEMP/filament"
-          mkdir -p "$SRC"
-          git -C "$SRC" init -q
-          git -C "$SRC" remote add origin "${{ steps.pin.outputs.remote }}"
-          git -C "$SRC" fetch -q --depth 1 origin "${{ steps.pin.outputs.commit }}"
-          git -C "$SRC" checkout -q --detach FETCH_HEAD
-          echo "FILAMENT_SRC=$SRC" >> "$GITHUB_ENV"
-
       # KEYED ON THE PIN AND NOTHING ELSE, and no restore-keys: a near-miss
       # would restore a DIFFERENT Filament's headers and libs, and a
       # MATERIAL_VERSION mismatch surfaces as a material that fails to parse on
@@ -177,6 +159,37 @@ jobs:
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
             ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
           key: filament-tvos-${{ steps.pin.outputs.commit }}
+
+      # OUTSIDE THE WORKSPACE, like release.yml's: a 1.6 GB tree inside the repo
+      # makes every `git status --porcelain` dirty, and build.sh stamps that
+      # string into the version the DEBUG lobby shows.
+      #
+      # FILAMENT_SRC is an allowed override of filament-checkout.sh's
+      # version-addressed default, but only AT the pinned commit — which is why
+      # this fetches the commit itself rather than a branch.
+      #
+      # AFTER THE RESTORE, because a hit needs no source. Everything the app
+      # build reads from this tree is then the restored out/ trees and HEAD, so
+      # the fetch is blobless and nothing is checked out (seconds, against the
+      # better part of a minute for the full tree). A miss builds Filament and
+      # gets the whole tree. Checked on a Mac: the app and the device slice
+      # build against such a tree, and the slice's objects are byte-identical
+      # to a build against the full checkout.
+      - name: Fetch the pinned Filament fork
+        run: |
+          set -eu
+          SRC="$RUNNER_TEMP/filament"
+          mkdir -p "$SRC"
+          git -C "$SRC" init -q
+          git -C "$SRC" remote add origin "${{ steps.pin.outputs.remote }}"
+          if [ "${{ steps.filament-cache.outputs.cache-hit }}" = true ]; then
+            git -C "$SRC" fetch -q --depth 1 --filter=blob:none origin "${{ steps.pin.outputs.commit }}"
+            git -C "$SRC" update-ref --no-deref HEAD FETCH_HEAD
+          else
+            git -C "$SRC" fetch -q --depth 1 origin "${{ steps.pin.outputs.commit }}"
+            git -C "$SRC" checkout -q --detach FETCH_HEAD
+          fi
+          echo "FILAMENT_SRC=$SRC" >> "$GITHUB_ENV"
 
       # TWO STEPS, and the second is the one that is easy to miss:
       # `build.sh -i` installs the XCFRAMEWORK ROOT only, and the per-SDK trees
