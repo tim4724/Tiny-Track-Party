@@ -74,17 +74,14 @@ cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
 # lobby seat show the car the player actually picked rather than a shape
 # standing in for one.
 #
-# THE TURNTABLE STRIPS ARE DELIBERATELY LEFT BEHIND. `<model>.strip.png` is a
-# 24-frame sprite sheet, ~800 KB each and 3.4 MB for the set — thirteen times
-# the stills — to make the seats rotate in lockstep. That is a lovely thing on
-# the web, where it costs one lazy request; in an .ipa it is 3.4 MB of bundle
+# THE TURNTABLE STRIPS ARE DELIBERATELY LEFT BEHIND (they are `.strip.webp`,
+# so the *.png below skips them). Each is a 24-frame sprite sheet, several
+# times the stills, to make the seats rotate in lockstep. That is a lovely
+# thing on the web, where it costs one lazy request; in an .ipa it is bundle
 # for motion behind a board nobody is looking at yet. If it is ever wanted, the
 # assets exist and `carThumbs.js` documents the frame count and rate.
 mkdir -p "$OUT/toycar/thumbs"
-for png in "$ROOT/public/assets/toycar/thumbs"/*.png; do
-  case "$png" in *.strip.png) continue;; esac
-  cp "$png" "$OUT/toycar/thumbs/"
-done
+cp "$ROOT/public/assets/toycar/thumbs"/*.png "$OUT/toycar/thumbs/"
 
 # The item icons: the SHARED SVGs, byte-for-byte (ledger item 10). ItemIcon
 # substitutes the two CSS custom properties (--icon-accent, --icon-car) and

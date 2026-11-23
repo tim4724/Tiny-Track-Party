@@ -93,12 +93,10 @@ cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
 
 # Each car's front-3/4 HERO STILL — what makes a lobby seat show the car the
 # player actually picked rather than a shape standing in for one. The 24-frame
-# turntable strips are left behind for the reason the tvOS script gives: ~800 KB
-# each, to make seats rotate behind a board nobody is looking at yet.
-for png in "$ROOT/public/assets/toycar/thumbs"/*.png; do
-  case "$png" in *.strip.png) continue;; esac
-  cp "$png" "$OUT/toycar/thumbs/"
-done
+# turntable strips (`.strip.webp`, so the *.png skips them) are left behind for
+# the reason the tvOS script gives: bundle bytes to make seats rotate behind a
+# board nobody is looking at yet.
+cp "$ROOT/public/assets/toycar/thumbs"/*.png "$OUT/toycar/thumbs/"
 
 # The item icons, as the SHARED SVGs byte for byte (ledger item 11). The two CSS
 # custom properties they are recoloured through (--icon-accent from

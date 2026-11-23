@@ -15,9 +15,9 @@
        Nothing draws until it lands and main.js awaits it at boot, so start the
        glue early rather than let it be discovered deep in the module graph
        (modulepreload doesn't follow a module's own imports). The .wasm itself is
-       deliberately NOT preloaded: the glue fetches it with credentials
-       'same-origin', which a `preload as=fetch crossorigin` request would not
-       match — the browser would download all 2.7 MB of it twice.
+       deliberately NOT preloaded: WebKit downloads a preloaded one twice, and a
+       preload without `crossorigin` misses the glue's credentials 'same-origin'
+       fetch in every browser. boot.js asks for it before anything else instead.
        scripts/build-site.mjs renames the folder in this path. -->
   <link rel="modulepreload" href="/display/engine/native/ttp_runtime.mjs" />
   <!-- The phone landing's picture (#device-choice) is its largest paint, and as

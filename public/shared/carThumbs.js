@@ -5,8 +5,10 @@
 // offline by rendering each GLB (front-3/4 hero + a full spin), matching the
 // in-race toy-plastic look:
 //   <model>.png        — front-3/4 hero still (universal PNG)
-//   <model>.strip.png  — horizontal sprite strip of the turntable (SPIN_FRAMES
-//                        frames). Animated by stepping background-position.
+//   <model>.strip.webp — horizontal sprite strip of the turntable (SPIN_FRAMES
+//                        frames), lossless. Animated by stepping
+//                        background-position. A browser without WebP (Safari
+//                        before 14) never loads it and keeps the still.
 //
 // Spin sync: ALL spinning cars are driven by ONE shared clock, so they read the
 // same frame index every tick and rotate in lockstep (the display shows several
@@ -21,7 +23,7 @@ import { assetUrl } from './assetUrl.js';
 const BASE = assetUrl('/assets/toycar/thumbs/');
 
 const carStill = (model) => BASE + model + '.png';
-const carStrip = (model) => BASE + model + '.strip.png';
+const carStrip = (model) => BASE + model + '.strip.webp';
 
 // Turntable cell count — the one source: carThumbNode() writes the overlay's
 // background-size from it and the bake (scripts/capture-car-thumbs.js) defaults

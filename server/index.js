@@ -266,7 +266,10 @@ const server = (TLS ? require('https').createServer.bind(null, TLS) : http.creat
   // Directory-traversal guard. The trailing separator is load-bearing.
   if (!filePath.startsWith(baseDir + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
 
-  fs.readFile(filePath, (err, data) => {
+  // A content-named file's brotli copy (scripts/build-site.mjs), sent in its
+  // place as public/.htaccess sends it.
+  const br = /\bbr\b/.test(req.headers['accept-encoding'] || '') && fs.existsSync(filePath + '.br');
+  fs.readFile(br ? filePath + '.br' : filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not Found'); return; }
 
     const ext = path.extname(filePath).toLowerCase();
@@ -275,6 +278,7 @@ const server = (TLS ? require('https').createServer.bind(null, TLS) : http.creat
     const contentType = path.basename(filePath) === 'apple-app-site-association'
       ? 'application/json' : MIME_TYPES[ext] || 'application/octet-stream';
     const headers = { 'Content-Type': contentType };
+    if (br) Object.assign(headers, { 'Content-Encoding': 'br', Vary: 'Accept-Encoding' });
 
     if (ext === '.html') {
       data = Buffer.from(site.renderHtml(data.toString('utf8'), { sha: GIT_SHA, relayUrl: RELAY_URL_OVERRIDE }));
