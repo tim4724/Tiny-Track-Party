@@ -2416,15 +2416,23 @@ private:
     // …and what the last assetPlan said each name WOULD be a function of, so the
     // provideAsset that answers it can stamp the tag without a second crossing.
     std::unordered_map<std::string, std::string> mAssetWantTag;
-    // A model's images[].uri list, by ASSET NAME. The texture step needs it and
+    // A likeness of the first bytes ever provided under each tag (bytesPrint),
+    // which later bytes must match to be stamped with it: a tag is trusted to
+    // NAME its bytes (memoKey, glbKey), so a provide that contradicts one keeps
+    // none. Engine-lifetime, one entry per kit model.
+    std::unordered_map<std::string, uint64_t> mTagPrint;
+    // What a memo about asset `name`'s bytes is kept under: "\x1f" + its tag,
+    // which outlives the slot (set3.glb is one track's rock and the next one's
+    // marble run, and a re-entered track hands its models over again), or,
+    // untagged or empty, its name, whose entries provideAsset drops.
+    std::string memoKey(const std::string& name) const;
+    // A model's images[].uri list, by memoKey. The texture step needs it and
     // used to get it by re-scanning a container the shell had just read — which
     // is exactly the read the plan above exists to skip.
     //
-    // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
-    // a byte-at-a-time FNV over the whole buffer, so consulting the cache
-    // re-read every model it was there to avoid re-reading, ~1.2 MB a build
-    // in play. The name is exact because provideAsset is the only place an
-    // asset's bytes change, and it drops the entry.
+    // NOT BY CONTENT HASH, which the first version did: hashing is a
+    // byte-at-a-time FNV over the whole buffer, so consulting the cache re-read
+    // every model it was there to avoid re-reading, ~1.2 MB a build in play.
     std::unordered_map<std::string, std::vector<std::string>> mAssetUriCache;
     std::vector<filament::MaterialInstance*> mSceneMatInstances;
 
@@ -2653,7 +2661,7 @@ private:
     bool mCarMergeDirty = false;
     bool mDressMergeDirty = false;
     bool mMergeOff = false;                 // kFeatNoMerge (ablation only)
-    std::vector<uint64_t> mCarModelKey;     // per slot: FNV of its GLB bytes
+    std::vector<uint64_t> mCarModelKey;     // per slot: glbKey of its GLB
     std::vector<uint64_t> mCarGhostKey;     // …and of its ghost twin's, for the pool
 
     // PARSED BODIES, KEPT BY MODEL — the same argument the sun bake and the
@@ -2712,7 +2720,7 @@ private:
     std::unordered_map<const filament::gltfio::FilamentAsset*, RestPose> mBodyRest;
     void snapshotRestPose(filament::gltfio::FilamentAsset* a);
     void restoreRestPose(filament::gltfio::FilamentAsset* a);
-    // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
+    // Parsed kit geometry, keyed by glbKey. Engine-lifetime — the kit's
     // bytes never change, so a cup's four scenes parse each model once.
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
     // The welded form of each flat prim drawn with vglbflat, keyed by the
@@ -2722,10 +2730,12 @@ private:
     std::unordered_map<const ttp::rt::GlbMeshPrim*, ttp::rt::FlatWeld> mFlatWelds;
     // Which parse an instanced dressing asset was loaded from (scene scope).
     std::unordered_map<const filament::gltfio::FilamentAsset*, uint64_t> mAssetMeshKey;
-    // The model identity of asset `name` (whose bytes are `glb`), memoised
-    // by name for the same reason mAssetUriCache is.
+    // The model identity of asset `name` (whose bytes are `glb`): its tag's
+    // hash, or its bytes' when it has none; memoised by name, which
+    // provideAsset drops.
     uint64_t glbKey(const std::string& name, const std::vector<uint8_t>& glb);
     std::unordered_map<std::string, uint64_t> mGlbKeyOf;
+    std::unordered_map<uint64_t, std::string> mKeyTag;   // a tag key's memoKey: no two share one
     const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
             const std::vector<uint8_t>& glb);
     // A parsed model's base colour per vertex (ttp/kit_colors.h), sampled from

@@ -2805,7 +2805,7 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     // the slots are the same in every instance.
     const utils::Entity* ents = insts[0]->getEntities();
     const auto spins = [&](size_t e) { return hangsUnder(asset, tcm, ents[e], isSpin); };
-    // The kit's colours for this model, keyed by the same bytes hash; a
+    // The kit's colours for this model, under the same glbKey; a
     // model it does not know keeps the instanced, live-lit draw.
     const ttp::kitcolors::Model* const colorModel = kitColors(keyIt->second);
     for (auto* in : insts) {

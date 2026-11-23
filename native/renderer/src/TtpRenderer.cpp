@@ -437,6 +437,22 @@ void TtpRenderer::updateCamera() {
             -aspect * ZOOM, aspect * ZOOM, -ZOOM, ZOOM, 0.0, 1.0);
 }
 
+static uint64_t fnv1a(const uint8_t* p, size_t n, uint64_t h = 14695981039346656037ull) {
+    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ull; }
+    return h;
+}
+
+// A cheap likeness of a buffer — its length and its two ends, which for a GLB
+// are the header and the start of its JSON (node names, counts) and the tail
+// of its binary chunk. Enough to tell one model from another; never a key.
+static uint64_t bytesPrint(const uint8_t* p, size_t n) {
+    constexpr size_t kEnd = 1024;
+    const uint64_t len = n;
+    uint64_t h = fnv1a(reinterpret_cast<const uint8_t*>(&len), sizeof len);
+    h = fnv1a(p, std::min(n, kEnd), h);
+    return fnv1a(p + n - std::min(n, kEnd), std::min(n, kEnd), h);
+}
+
 bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
         uint32_t len) {
     if (!name || (!bytes && len)) return false;
@@ -445,12 +461,27 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
     // handed over WITHOUT a plan (the .filamat blobs at boot) has no provenance
     // this class can vouch for, so it keeps none and a plan would always ask for
     // it again — which is the safe direction to be wrong in.
+    //
+    // NOR DOES ONE WHOSE BYTES CONTRADICT THE PLAN. The last plan is not always
+    // the one these bytes answer: a tvOS build overtaken while it fetches still
+    // hands over what it fetched, under the newer build's want. Bytes unlike the
+    // first ever provided under that tag keep no tag, because the memos below
+    // and glbKey trust a tag to name its bytes.
     const auto want = mAssetWantTag.find(name);
-    if (want != mAssetWantTag.end()) mAssetTag[name] = want->second;
+    bool vouched = want != mAssetWantTag.end();
+    if (vouched && len) {
+        const uint64_t print = bytesPrint(bytes, len);
+        vouched = mTagPrint.try_emplace(want->second, print).first->second == print;
+        if (!vouched) {
+            utils::slog.w << "provideAsset: " << name << " is not the bytes its tag named; kept untagged"
+                    << utils::io::endl;
+        }
+    }
+    if (vouched) mAssetTag[name] = want->second;
     else mAssetTag.erase(name);
-    // …and whatever was memoised ABOUT the old bytes goes with them. This is the
-    // one place an asset's content changes, which is what lets assetTextures and
-    // glbKey key their memos by name instead of by a hash of every byte.
+    // …and whatever was memoised ABOUT the old bytes BY NAME goes with them. This
+    // is the one place an asset's content changes, which is what lets
+    // assetTextures and glbKey key their memos by name for an untagged asset.
     mAssetUriCache.erase(name);
     mGlbKeyOf.erase(name);
     // The monster pools are built out of these two (buildField).
@@ -464,9 +495,13 @@ std::vector<std::string> TtpRenderer::assetPlan(const std::vector<AssetWant>& wa
     std::vector<std::string> need;
     for (const AssetWant& w : want) {
         if (w.name.empty()) continue;
-        mAssetWantTag[w.name] = w.tag;
+        // A derivative is other bytes than its source under the same tag (a
+        // ghost is its model's), so it is stamped apart. Every derivative is
+        // the one ghost transform (ttp_glb_ghost); a second would need its own.
+        const std::string tag = w.from.empty() ? w.tag : w.tag + "\x1f" "derived";
+        mAssetWantTag[w.name] = tag;
         const auto held = mAssetTag.find(w.name);
-        if (held != mAssetTag.end() && held->second == w.tag
+        if (held != mAssetTag.end() && held->second == tag
                 && mAssets.count(w.name)) {
             continue;
         }
@@ -489,9 +524,10 @@ std::vector<std::string> TtpRenderer::assetTextures() {
     for (const auto& [name, bytes] : mAssets) {
         if (bytes.empty()) continue;
         if (name.size() < 4 || name.compare(name.size() - 4, 4, ".glb") != 0) continue;
-        auto it = mAssetUriCache.find(name);
+        const std::string memo = memoKey(name);
+        auto it = mAssetUriCache.find(memo);
         if (it == mAssetUriCache.end()) {
-            it = mAssetUriCache.emplace(name,
+            it = mAssetUriCache.emplace(memo,
                     ttp::rt::glb_image_uris(bytes.data(), bytes.size())).first;
         }
         for (const std::string& uri : it->second) {
@@ -1668,14 +1704,35 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
 // TtpRendererDressing.cpp).
 // ---------------------------------------------------------------------------
 
+std::string TtpRenderer::memoKey(const std::string& name) const {
+    const auto tag = mAssetTag.find(name);
+    const auto bytes = mAssets.find(name);
+    if (tag == mAssetTag.end() || bytes == mAssets.end() || bytes->second.empty()) return name;
+    return "\x1f" + tag->second;   // no asset name starts with it
+}
+
 uint64_t TtpRenderer::glbKey(const std::string& name, const std::vector<uint8_t>& glb) {
-    // FNV-1a over the bytes: the same bytes are the same model, which is the
-    // whole grouping rule. Never 0 — every caller reserves 0 for "none".
-    // Memoised by name, which provideAsset drops with the bytes it replaces.
+    // One key is one model's bytes, which is the whole grouping rule. A
+    // tagged asset's bytes are what its tag names (provideAsset vouches), so
+    // its key is the TAG's hash, and a new track's models are not read for
+    // it; anything else is FNV-1a over the bytes. The top bit keeps the two
+    // apart. Two tags naming identical files get two keys: a parse each,
+    // never two models drawn as one. Never 0 — every caller reserves 0 for
+    // "none". Memoised by name, which provideAsset drops with the bytes it
+    // replaces.
+    constexpr uint64_t kTagBit = 1ull << 63;
     const auto it = mGlbKeyOf.find(name);
     if (it != mGlbKeyOf.end()) return it->second;
-    uint64_t key = 14695981039346656037ull;
-    for (const uint8_t b : glb) { key ^= b; key *= 1099511628211ull; }
+    const std::string memo = memoKey(name);
+    if (memo != name) {
+        const uint64_t key = fnv1a(reinterpret_cast<const uint8_t*>(memo.data()), memo.size()) | kTagBit;
+        // Two tags on one key would draw two models as one.
+        const auto [at, fresh] = mKeyTag.try_emplace(key, memo);
+        if (fresh || at->second == memo) return mGlbKeyOf[name] = key;
+        utils::slog.e << "glbKey: two tags hash alike; " << name << " is keyed by its bytes"
+                << utils::io::endl;
+    }
+    const uint64_t key = fnv1a(glb.data(), glb.size()) & ~kTagBit;
     return mGlbKeyOf[name] = key ? key : 1;
 }
 
