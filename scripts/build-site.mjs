@@ -17,9 +17,10 @@
 //     which has to stay one level below the root;
 //   - the classic scripts and stylesheets their pages name, each minified
 //     beside its source so a relative url() still holds.
-// Each of those files gets <name>.br beside it, brotli at quality 11, which
-// both hosts send in its place to a browser that takes br (public/.htaccess,
-// server/index.js). Apache's own on-the-fly brotli runs at quality 5.
+// Each of those files, and each of the kit's models, gets <name>.br beside it,
+// brotli at quality 11, which both hosts send in its place to a browser that
+// takes br (public/.htaccess, server/index.js). Apache's own on-the-fly brotli
+// runs at quality 5.
 // The galleries, the trailer editor and the licenses page keep loading the
 // sources, which is why those stay in the tree.
 //
@@ -127,12 +128,14 @@ for (const rel of fs.readdirSync(OUT, { recursive: true })) {
 // so it takes Apache's own quality and leaves every test run ~10 s sooner.
 const brotli = promisify(zlib.brotliCompress);
 const quality = relayUrl ? 5 : 11;
-const named = new Set([
+const compressed = new Set([
   ...engineFiles.map((name) => `display/engine/${engine}/${name}`),
   ...Object.keys(metafile.outputs).filter((out) => !out.endsWith('.map')),
-  ...[...hashed.values()].map((url) => url.slice(1))
+  ...[...hashed.values()].map((url) => url.slice(1)),
+  ...fs.readdirSync(path.join(OUT, 'assets', 'toycar')).filter((name) => name.endsWith('.glb'))
+    .map((name) => `assets/toycar/${name}`)
 ]);
-await Promise.all([...named].map(async (rel) => {
+await Promise.all([...compressed].map(async (rel) => {
   const data = fs.readFileSync(path.join(OUT, rel));
   const br = await brotli(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } });
   if (br.length < data.length) fs.writeFileSync(path.join(OUT, rel + '.br'), br);

@@ -266,8 +266,8 @@ const server = (TLS ? require('https').createServer.bind(null, TLS) : http.creat
   // Directory-traversal guard. The trailing separator is load-bearing.
   if (!filePath.startsWith(baseDir + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
 
-  // A content-named file's brotli copy (scripts/build-site.mjs), sent in its
-  // place as public/.htaccess sends it.
+  // A file's brotli copy (scripts/build-site.mjs), sent in its place as
+  // public/.htaccess sends it.
   const br = /\bbr\b/.test(req.headers['accept-encoding'] || '') && fs.existsSync(filePath + '.br');
   fs.readFile(br ? filePath + '.br' : filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not Found'); return; }

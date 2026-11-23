@@ -14,8 +14,9 @@ COPY partyplug/ ./partyplug/
 COPY public/ ./public/
 # The commit the pages name (preview.yml passes it).
 ARG GIT_SHA=
-# assets/ comes straight from the context below; build-site copies it verbatim.
-RUN node scripts/build-site.mjs && rm -rf site/assets
+# assets/ comes straight from the context below; build-site copies it verbatim,
+# so all that stays of it here is the models' brotli copies build-site made.
+RUN node scripts/build-site.mjs && find site/assets -type f ! -name '*.br' -delete
 
 # Runtime: Apache with public/.htaccess (httpd.conf sets up what Hetzner
 # Webhosting provides around it).
