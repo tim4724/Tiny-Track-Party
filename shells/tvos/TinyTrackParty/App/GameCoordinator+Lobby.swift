@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// The coordinator's lobby half: the seat grid, the host's pick, the reconnect
 /// cards, and the controller messages that drive them.
@@ -40,6 +41,15 @@ extension GameCoordinator {
         audio.roster(count: state.seats.filter { !$0.open }.count,
                      inLobby: state.screen == .lobby)
         if state.screen == .lobby { lobbyDemo.refresh() }
+
+        // THE SCREENSAVER waits while a party exists, and only then: the rule is
+        // session.h's keep_screen_awake, the same one Android's keep-screen-on
+        // and the web's wake lock ask (docs/native-port/shells.md).
+        let hold = ttp_net_keep_awake(net.roomHandle) != 0
+        if UIApplication.shared.isIdleTimerDisabled != hold {
+            UIApplication.shared.isIdleTimerDisabled = hold
+            print("[ttp] idle timer \(hold ? "held" : "released")")
+        }
 
         // The LAN record tracks OCCUPANCY too (CONTRACT.md §8): a room that just
         // filled goes off the air, and one a leaver reopened comes back. This is
