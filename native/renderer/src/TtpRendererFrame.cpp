@@ -3580,15 +3580,22 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
         // Undrawn, and done: the merge, the blob readbacks and the GPU frame
         // are a drawn frame's. The phases above still queued driver work (the
         // decal uniform writes, the ambient buffers) that no endFrame will
-        // retire. flush() hands them to the driver, but on a threaded backend
-        // only endFrame or a finish COMMITS the driver's command buffer: on
-        // Metal the uploads' blits piled into one uncommitted buffer until a
-        // cover board held ~100-270 s ran the GPU out of shared memory
-        // (IOGPUDeviceShmem, then abort). Renderer::skipFrame does not commit
-        // either. So every kUndrawnFinish-th undrawn frame finishes the queue;
-        // nothing is drawing, so the wait is the queue's few blits.
+        // retire, and two halves of retiring it are an endFrame's alone.
+        //
+        // THE BACKEND'S GARBAGE: Vulkan collects its staging buffers, retired
+        // command buffers and deferred destructions only in endFrame and in
+        // the driver tick, and only a Renderer frame call ticks it. So every
+        // undrawn frame is a skipFrame, Filament's own call for a frame the
+        // app chose not to draw: the tick, the frame-graph cache's skipped-
+        // frame eviction, and the command stream's flush.
+        //
+        // THE COMMIT: neither call commits Metal's command buffer, so the
+        // uploads' blits piled into one uncommitted buffer until a cover board
+        // held ~100-270 s ran the GPU out of shared memory (IOGPUDeviceShmem,
+        // then abort). So every kUndrawnFinish-th undrawn frame finishes the
+        // queue; nothing is drawing, so the wait is the queue's few blits.
+        mRenderer->skipFrame();
         if (++mUndrawnFrames % kUndrawnFinish == 0) mEngine->flushAndWait();
-        else mEngine->flush();
         mSkidCatchUp = true;   // the next drawn frame owes the rubber layer a full refresh
         mProfile[kProfTotal] = ttpNowMs() - tFrame0;
         return true;
