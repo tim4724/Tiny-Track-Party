@@ -61,6 +61,18 @@ four-way split's cell on a 1080 panel.
 gallery. `gen:*` derives text. Outputs land under `public/assets/<family>/`, and
 `artwork/` is for things a human takes away rather than things the game ships.
 
+## The kit's one GLB layout
+
+Every model under `public/assets/toycar/` stores its normals as normalized i8
+and its uvs as normalized u16 (KHR_mesh_quantization), positions float: those
+two need no dequantizing transform, so the node tree every reader walks (the
+car rig, the movers, `glbTriangles`) stays as built. A bake gets it by writing
+through `lib/glb-compose.mjs`'s `encodeGlb`; a model written any other way (the
+cars' Blender export) goes through `quantize-glbs.mjs`, and
+`tests/kit-glb-layout.test.js` fails on one that skipped it. The `glbmesh` ctest
+reads every kit model through the renderer's reader, because one it refused
+would draw unmerged and live-lit with nothing on the glass to say so.
+
 ## What guards each output
 
 Nothing here diffs pixels, on purpose: a pixel gate over a Filament scene under

@@ -1035,9 +1035,12 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
   are inherited, never re-implemented. The monster swap is PER CELL, so
   `renderCells` re-mirrors while one is on.
 - **Geometry comes from the same GLB bytes the shell provided**, through
-  `ttp/glb_mesh.h` (the `glbmesh` ctest executes it), and materials are SHARED
-  from the originals'. A model the reader cannot fully decode keeps drawing as
-  gltfio loaded it — the fallback is whole-model, never a partial merge.
+  `ttp/glb_mesh.h` (the `glbmesh` ctest executes it, and reads every kit model
+  through it), and materials are SHARED from the originals'. A model the reader
+  cannot fully decode keeps drawing as gltfio loaded it — the fallback is
+  whole-model, never a partial merge. It decodes the kit's quantized attributes
+  (KHR_mesh_quantization) the way gltfio's cgltf does, so the bake and the live
+  draw read one vertex.
 - **A merged group culls as ONE box.** Teardown order matters twice:
   `destroyCarSlot` kills the groups BEFORE the asset whose instances they share,
   and `releaseScene` destroys them while the source entities are still alive.

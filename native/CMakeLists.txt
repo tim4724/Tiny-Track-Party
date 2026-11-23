@@ -1010,7 +1010,8 @@ add_test(NAME wear COMMAND wear_check)
 add_executable(glbmesh_check runtimetest/glbmesh_check.cc)
 target_link_libraries(glbmesh_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(glbmesh_check)
-add_test(NAME glbmesh COMMAND glbmesh_check)
+add_test(NAME glbmesh
+  COMMAND glbmesh_check ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar)
 
 # The flat-body weld (ttp/flat_weld.h) the car bodies' merged draw uses —
 # header-inline for the same reason, and checked on the shipped roster too,

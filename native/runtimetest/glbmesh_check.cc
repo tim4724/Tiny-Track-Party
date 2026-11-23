@@ -7,6 +7,10 @@
 //     through tight and INTERLEAVED buffer views, u16 and u32 indices, node
 //     names, and the shared-mesh identity two nodes wearing one mesh carry
 //     (the per-side wheel pairs are the consumer that needs it).
+//   * QUANTIZED ATTRIBUTES (KHR_mesh_quantization: normalized i8 normals in a
+//     4-byte stride, normalized u16 uvs) decode as cgltf decodes them.
+//   * EVERY KIT MODEL DECODES, when the asset directory is given: one the
+//     reader refused would draw unmerged and live-lit, silently.
 //   * WHAT IT CANNOT READ refuses the WHOLE model — a sparse accessor, a
 //     truncated container, a non-triangle mode. The renderer's fallback is
 //     "keep drawing the gltfio originals", so a partial answer would be a
@@ -15,8 +19,12 @@
 // The GLB is synthesized here byte by byte, so the check needs no fixture and
 // cannot rot with the asset kit.
 
+#include <dirent.h>
+
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -66,9 +74,58 @@ std::vector<uint8_t> glb(std::string json, std::vector<uint8_t> bin) {
   return out;
 }
 
+std::vector<uint8_t> readFile(const std::string& path) {
+  std::ifstream f(path, std::ios::binary);
+  return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), {});
+}
+
+// One quantized triangle: float positions, i8 normals (stride 4), u16 uvs.
+void checkQuantized() {
+  std::vector<uint8_t> bin;
+  const float pos[9] = { 0, 0, 0, 1, 0, 0, 0, 1, 0 };
+  for (float f : pos) putF(bin, f);                          // 0..36
+  for (int n : { 0, 0, 127, -127, 0, 0, 0, 64, -1 }) {      // 36..48, padded per vertex
+    bin.push_back((uint8_t) (int8_t) n);
+    if (bin.size() % 4 == 3) bin.push_back(0);
+  }
+  for (int u : { 0, 65535, 32768, 0, 65535, 65535 }) {      // 48..60
+    bin.push_back((uint8_t) (u & 0xFF));
+    bin.push_back((uint8_t) (u >> 8));
+  }
+  for (int i : { 0, 1, 2 }) { bin.push_back((uint8_t) i); bin.push_back(0); }  // 60..66
+  const char* json =
+      "{\"asset\":{\"version\":\"2.0\"},"
+      "\"extensionsUsed\":[\"KHR_mesh_quantization\"],"
+      "\"buffers\":[{\"byteLength\":68}],"
+      "\"bufferViews\":["
+      "{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36},"
+      "{\"buffer\":0,\"byteOffset\":36,\"byteLength\":12,\"byteStride\":4},"
+      "{\"buffer\":0,\"byteOffset\":48,\"byteLength\":12},"
+      "{\"buffer\":0,\"byteOffset\":60,\"byteLength\":6}],"
+      "\"accessors\":["
+      "{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
+      "{\"bufferView\":1,\"componentType\":5120,\"normalized\":true,\"count\":3,\"type\":\"VEC3\"},"
+      "{\"bufferView\":2,\"componentType\":5123,\"normalized\":true,\"count\":3,\"type\":\"VEC2\"},"
+      "{\"bufferView\":3,\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}],"
+      "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"NORMAL\":1,\"TEXCOORD_0\":2},\"indices\":3}]}],"
+      "\"nodes\":[{\"name\":\"q\",\"mesh\":0}]}";
+  const std::vector<uint8_t> bytes = glb(json, bin);
+  const std::vector<GlbMeshNode> nodes = read_glb_meshes(bytes.data(), bytes.size());
+  expect(nodes.size() == 1 && nodes[0].prims.size() == 1, "a quantized model decodes");
+  if (nodes.size() != 1 || nodes[0].prims.size() != 1) return;
+  const auto& p = nodes[0].prims[0];
+  expect(p.normal.size() == 9 && p.uv.size() == 6, "quantized sizes");
+  if (p.normal.size() != 9 || p.uv.size() != 6) return;
+  expect(p.normal[2] == 1.0f && p.normal[3] == -1.0f && p.normal[7] == 64.0f / 127.0f
+          && p.normal[8] == -1.0f / 127.0f, "i8 normals read through the 4-byte stride, /127");
+  expect(p.uv[0] == 0.0f && p.uv[1] == 1.0f && p.uv[2] == 32768.0f / 65535.0f,
+      "u16 uvs, /65535");
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  checkQuantized();
   // BIN: one triangle, POSITION and NORMAL INTERLEAVED (stride 24) at offset 0,
   // then UV tight at 72, then u16 indices at 96, then u32 indices at 104.
   std::vector<uint8_t> bin;
@@ -155,6 +212,24 @@ int main() {
   expect(read_glb_meshes(lineBytes.data(), lineBytes.size()).empty(),
       "a non-triangle primitive refuses the whole model");
 
-  std::fprintf(stderr, "glbmesh_check: %d checks, %d failed\n", checked, failed);
+  // Every shipped kit model, when the asset directory is given.
+  int models = 0;
+  if (argc > 1) {
+    if (DIR* d = opendir(argv[1])) {
+      while (const dirent* e = readdir(d)) {
+        const std::string name = e->d_name;
+        if (name.size() < 5 || name.compare(name.size() - 4, 4, ".glb") != 0) continue;
+        const std::vector<uint8_t> model = readFile(std::string(argv[1]) + "/" + name);
+        expect(!read_glb_meshes(model.data(), model.size()).empty(),
+            (name + ": the reader refuses it, so it would draw unmerged").c_str());
+        models++;
+      }
+      closedir(d);
+    }
+    expect(models > 0, "kit models found under the asset directory");
+  }
+
+  std::fprintf(stderr, "glbmesh_check: %d checks, %d failed, %d kit models\n", checked, failed,
+      models);
   return failed ? 1 : 0;
 }

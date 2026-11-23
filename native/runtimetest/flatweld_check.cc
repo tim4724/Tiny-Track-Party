@@ -245,8 +245,8 @@ int main(int argc, char** argv) {
   // or the model changes.
   if (argc > 1) {
     const std::map<std::string, size_t> weldedAtMost = {
-        { "vehicle-gt", 480 }, { "vehicle-jeep", 305 }, { "vehicle-lemans", 468 },
-        { "vehicle-stock", 662 } };
+        { "vehicle-gt", 481 }, { "vehicle-jeep", 295 }, { "vehicle-lemans", 467 },
+        { "vehicle-stock", 664 } };
     int flatBodies = 0;
     for (const auto& [name, atMost] : weldedAtMost) {
       const char* car = name.c_str();

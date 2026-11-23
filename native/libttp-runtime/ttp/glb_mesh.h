@@ -12,11 +12,14 @@
 // which the renderer already links transitively (libttp_track → libttp_json).
 //
 // STRICT ABOUT WHAT IT ACCEPTS, EMPTY ABOUT EVERYTHING ELSE. The kit's GLBs are
-// float POSITION/NORMAL/TEXCOORD_0 with u8/u16/u32 indices in one embedded BIN
-// chunk; anything outside that (sparse accessors, external buffers, non-float
-// attributes) returns {} for the WHOLE model, and the caller keeps drawing the
-// asset the way gltfio loaded it. A partial read that silently dropped one
-// primitive would be a hole in a model with nothing to say so.
+// POSITION/NORMAL/TEXCOORD_0 with u8/u16/u32 indices in one embedded BIN chunk,
+// the attributes float or quantized (KHR_mesh_quantization: the kit writes
+// normalized i8 normals and u16 uvs, scripts/lib/glb-compose.mjs), decoded the
+// way gltfio's cgltf decodes them so the bake and the live draw agree; anything
+// outside that (sparse accessors, external buffers) returns {} for the WHOLE
+// model, and the caller keeps drawing the asset the way gltfio loaded it. A
+// partial read that silently dropped one primitive would be a hole in a model
+// with nothing to say so. The `glbmesh` ctest reads every kit model through it.
 //
 // GLB container layout: see ttp/glb.h. Chunk lengths are 4-byte padded by every
 // conforming exporter; a straggler is tolerated by rounding up.
@@ -68,8 +71,9 @@ struct AccessorView {
     const uint8_t* base = nullptr;
     size_t stride = 0;
     size_t count = 0;
-    uint32_t componentType = 0;   // 5121 u8, 5123 u16, 5125 u32, 5126 float
+    uint32_t componentType = 0;   // 5120 i8, 5121 u8, 5122 i16, 5123 u16, 5125 u32, 5126 float
     int components = 0;           // SCALAR 1, VEC2 2, VEC3 3
+    bool normalized = false;
 };
 
 inline int componentCount(const std::string& type) {
@@ -81,7 +85,9 @@ inline int componentCount(const std::string& type) {
 
 inline size_t componentBytes(uint32_t componentType) {
     switch (componentType) {
+        case 5120: return 1;   // BYTE
         case 5121: return 1;   // UNSIGNED_BYTE
+        case 5122: return 2;   // SHORT
         case 5123: return 2;   // UNSIGNED_SHORT
         case 5125: return 4;   // UNSIGNED_INT
         case 5126: return 4;   // FLOAT
@@ -113,6 +119,8 @@ inline bool accessorView(const Value& doc, size_t index,
     out.componentType = (uint32_t) ct->num;
     out.components = componentCount(ty->str);
     out.count = (size_t) cnt->num;
+    const Value* norm = a.find("normalized");
+    out.normalized = norm && norm->type == Value::BOOL && norm->b;
     const size_t cb = componentBytes(out.componentType);
     if (!cb || !out.components || !out.count) return false;
     const size_t element = cb * (size_t) out.components;
@@ -133,15 +141,42 @@ inline bool accessorView(const Value& doc, size_t index,
     return true;
 }
 
+// One integer component as cgltf's cgltf_component_read_float has it: a
+// normalized one divided by its type's maximum, any other as its value.
+inline float intComponent(const uint8_t* p, uint32_t componentType, bool normalized) {
+    switch (componentType) {
+        case 5120: return normalized ? (float) (int8_t) p[0] / 127.0f : (float) (int8_t) p[0];
+        case 5121: return normalized ? (float) p[0] / 255.0f : (float) p[0];
+        case 5122: {
+            const int16_t c = (int16_t) (uint16_t) (p[0] | (p[1] << 8));
+            return normalized ? (float) c / 32767.0f : (float) c;
+        }
+        default: {   // 5123, the only other type accessorView lets through here
+            const uint16_t c = (uint16_t) (p[0] | (p[1] << 8));
+            return normalized ? (float) c / 65535.0f : (float) c;
+        }
+    }
+}
+
 inline bool readFloats(const Value& doc, size_t accessor, int wantComponents,
         const uint8_t* bin, size_t binLen, std::vector<float>& out) {
     AccessorView v;
     if (!accessorView(doc, accessor, bin, binLen, v)) return false;
-    if (v.componentType != 5126 || v.components != wantComponents) return false;
+    if (v.componentType == 5125 || v.components != wantComponents) return false;
     out.resize(v.count * (size_t) wantComponents);
+    if (v.componentType == 5126) {
+        for (size_t i = 0; i < v.count; i++) {
+            std::memcpy(&out[i * wantComponents], v.base + i * v.stride,
+                    sizeof(float) * (size_t) wantComponents);
+        }
+        return true;
+    }
+    const size_t cb = componentBytes(v.componentType);
     for (size_t i = 0; i < v.count; i++) {
-        std::memcpy(&out[i * wantComponents], v.base + i * v.stride,
-                sizeof(float) * (size_t) wantComponents);
+        for (int c = 0; c < wantComponents; c++) {
+            out[i * wantComponents + c] = intComponent(v.base + i * v.stride + c * cb,
+                    v.componentType, v.normalized);
+        }
     }
     return true;
 }

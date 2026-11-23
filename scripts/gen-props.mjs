@@ -15,6 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { encodeGlb } from './lib/glb-compose.mjs';
+
 const OUT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/assets/toycar');
 
 // Flat palette cells (pixel centres in Textures/colormap.png).
@@ -133,23 +135,7 @@ function writeGlb(name, mesh) {
     buffers: [{ byteLength: bin.length }],
   };
 
-  let jsonBuf = Buffer.from(JSON.stringify(json));
-  const jsonPad = (4 - (jsonBuf.length % 4)) % 4;
-  jsonBuf = Buffer.concat([jsonBuf, Buffer.alloc(jsonPad, 0x20)]);
-  const binPad = (4 - (bin.length % 4)) % 4;
-  const binBuf = Buffer.concat([bin, Buffer.alloc(binPad)]);
-
-  const total = 12 + 8 + jsonBuf.length + 8 + binBuf.length;
-  const head = Buffer.alloc(12 + 8);
-  head.writeUInt32LE(0x46546c67, 0); // glTF
-  head.writeUInt32LE(2, 4);
-  head.writeUInt32LE(total, 8);
-  head.writeUInt32LE(jsonBuf.length, 12);
-  head.writeUInt32LE(0x4e4f534a, 16); // JSON
-  const binHead = Buffer.alloc(8);
-  binHead.writeUInt32LE(binBuf.length, 0);
-  binHead.writeUInt32LE(0x004e4942, 4); // BIN
-  const out = Buffer.concat([head, jsonBuf, binHead, binBuf]);
+  const out = encodeGlb(json, bin);
   fs.writeFileSync(path.join(OUT_DIR, `${name}.glb`), out);
   console.log(`  ${name}.glb  ${out.length} bytes, ${idx.length / 3} tris`);
 }
