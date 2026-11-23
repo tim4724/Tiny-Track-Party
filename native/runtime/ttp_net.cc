@@ -57,8 +57,10 @@ namespace ns = ttp::session;
 namespace {
 
 // The one piece of state in this ABI, and the header says why. Unset, its three
-// keys simply do not appear in a snapshot.
+// keys simply do not appear in a CHOOSER. Its revision is taken once, here, so
+// no publish hashes 6 KB.
 Value g_chooser = Value::Obj();
+double g_chooserRev = ns::chooser_rev(g_chooser);
 
 // One scratch buffer per string-returning export rather than one shared: a
 // shell reads the join URL and then the claim URL built from it on the same
@@ -151,6 +153,7 @@ int ttp_net_configure(const char* chooserJson) {
   ttp::clear_error();
   if (!chooserJson || !*chooserJson) {
     g_chooser = Value::Obj();
+    g_chooserRev = ns::chooser_rev(g_chooser);
     return 1;
   }
   bool ok = false;
@@ -161,6 +164,7 @@ int ttp_net_configure(const char* chooserJson) {
     return 0;
   }
   g_chooser = std::move(v);
+  g_chooserRev = ns::chooser_rev(g_chooser);
   return 1;
 }
 
@@ -189,6 +193,7 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
+  input.set("chooserRev", Value::Num(g_chooserRev));
   // The host's Performance/Quality choice, read off the display's one render-scale
   // controller — ABSENT unless this device has proved it cannot hold the
   // anchor (offersHalfRate), which is what keeps the phone's row hidden on
@@ -1094,9 +1099,20 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
           effects.push(std::move(e));
         }
       }
-      // No unicast reply: the phone recovers its whole state from the retained
-      // room snapshot (announce republishes it, and the relay replayed it
-      // right after `joined`). welcome-item only relights the per-owner ITEM,
+      // The one unicast reply: the chooser content, unless the phone already
+      // holds this revision (a rename, a re-HELLO). It goes BEFORE the announce,
+      // so the snapshot that seats a new phone finds its picker filled. A HELLO
+      // with no rev (an older controller) is answered too, and harmlessly: that
+      // phone ignores the type and reads a snapshot with no chooser in it.
+      if (!strictEquals(orUndef(mfind(msg, "chooserRev")), Value::Num(g_chooserRev))) {
+        Value e = effectOp("send-to");
+        e.set("to", fromV);
+        e.set("data", ns::chooser_message(g_chooser, g_chooserRev));
+        effects.push(std::move(e));
+      }
+      // Everything else the phone recovers from the retained room snapshot
+      // (announce republishes it, and the relay replayed it right after
+      // `joined`). welcome-item only relights the per-owner ITEM,
       // and only when the live race holds this seat's car — the predicate the
       // shell used to answer through its inRace callback. On a cross-device
       // claim the car is still keyed to the CLAIMED seat at this point (the

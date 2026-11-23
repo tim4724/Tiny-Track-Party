@@ -448,8 +448,8 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
 
   // 1. THE TOP-LEVEL SCHEMA. Every key syncRoom reads, and nothing it does not.
   assert.deepEqual(Object.keys(snap).sort(), [
-    'cars', 'colors', 'cupId', 'hostPeerIndex', 'mode', 'paused', 'players',
-    'progress', 'randomRaces', 'roomState', 'soundOn', 'standings', 'trackId', 'tracks', 'type',
+    'chooserRev', 'cupId', 'hostPeerIndex', 'mode', 'paused', 'players',
+    'progress', 'randomRaces', 'roomState', 'soundOn', 'standings', 'trackId', 'type',
   ], 'the snapshot schema is the contract; renaming or dropping a key is silent');
   assert.equal(snap.type, MSG.LOBBY_UPDATE, 'routed by the shared type tag');
   assert.equal(typeof snap.soundOn, 'boolean',
@@ -536,24 +536,15 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
     const now = lastLobby(ada);
     assert.equal(now.roomState, phase,
       'the phase C++ publishes is the exact string protocol.js told the phone to expect');
-    // 4b. THE CHOOSER PAYLOAD, which is phase-dependent in ONE direction only.
-    //     `cars` and `colors` ride EVERY snapshot on purpose — a phone that
-    //     joins mid-race is a late joiner picking a car for the next race, and
-    //     an empty picker is a silent dead end. `tracks` are the bulk and ride
-    //     the LOBBY only, which is what keeps the whole blob inside the relay's
-    //     16 KiB cap. Both halves are one rule in ttp::session::lobby_snapshot,
-    //     and scripts/wire-mutate.mjs found this suite blind to the first half:
-    //     gating `cars` on the lobby broke nothing.
-    assert.ok(Array.isArray(now.cars) && now.cars.length,
-      `cars must ride the ${phase} snapshot — the late-joiner picker has nothing else`);
-    assert.ok(Array.isArray(now.colors) && now.colors.length,
-      `colors must ride the ${phase} snapshot — a phone's livery dots come from it`);
-    if (phase === ROOM_STATE.LOBBY) {
-      assert.ok(Array.isArray(now.tracks), 'the track chooser rides the lobby snapshot');
-    } else {
-      assert.equal(now.tracks, null,
-        `the bulky track schematics must NOT ride the ${phase} snapshot (the 16 KiB cap)`);
+    // 4b. THE CHOOSER PAYLOAD rides NO snapshot: it went to each phone once as
+    //     the CHOOSER (its own test below), and every phase names the revision
+    //     the phone has to hold to read it — the one it does hold.
+    for (const k of ['cars', 'colors', 'tracks']) {
+      assert.ok(!(k in now), `${k} must not ride the ${phase} snapshot — it is the CHOOSER's`);
     }
+    assert.equal(typeof now.chooserRev, 'number', 'the chooser revision is a NUMBER');
+    assert.equal(now.chooserRev, ada.net.chooserRev,
+      `the ${phase} snapshot names the chooser the phone holds`);
   }
   assert.equal(net.roomState, ROOM_STATE.LOBBY);
 
@@ -568,6 +559,142 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   ada.net.disconnect();
   bo.net.disconnect();
   cy.net.disconnect();
+});
+
+// Every snapshot ControllerNet handed the page names the chooser the phone held
+// at that moment: the hold in _onSnapshot, seen from main.js's side.
+function assertSnapshotsFollowTheirChooser(phone, who) {
+  let held = null;
+  for (const m of phone.seen.message) {
+    if (m.type === 'chooser') held = m.rev;
+    else if (m.type === 'lobby_update') {
+      assert.equal(m.chooserRev, held, `${who} was handed a snapshot before the chooser it names`);
+    }
+  }
+}
+const choosersOf = (phone) => phone.seen.message.filter((m) => m && m.type === 'chooser');
+
+test('wire: the CHOOSER goes once per phone, ahead of every snapshot that needs it', async () => {
+  // The picker content (~6 KB in the shipping catalogue) used to ride every
+  // snapshot to every phone. It is static while the display runs, so the HELLO
+  // walk sends it once and the snapshot carries only its revision; a phone holds
+  // back any snapshot naming a revision it does not have.
+  //
+  // WHAT THIS BREAKS AT A REAL PARTY: a phone that routes a snapshot before its
+  // CHOOSER draws an empty car picker (a late joiner mid-race has nothing else
+  // to pick from), and one that never asks again after the display's catalogue
+  // moves keeps a picker for tracks the display no longer has.
+  const { MSG, ROOM_STATE } = H.kit().protocol;
+  const { relay, net, room } = await bringUpRealDisplay();
+  const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'ch-a' });
+
+  const [first] = choosersOf(ada);
+  assert.ok(first, 'the HELLO was answered with a CHOOSER');
+  assert.deepEqual(Object.keys(first).sort(), ['cars', 'colors', 'rev', 'tracks', 'type']);
+  assert.deepEqual(first.cars, net.carChooser, 'cars cross verbatim');
+  assert.deepEqual(first.colors, net.colorPalette, 'the livery palette crosses verbatim');
+  assert.deepEqual(first.tracks, net.trackChooser, 'the track chooser crosses verbatim');
+  assert.equal(ada.net.chooserRev, first.rev, 'the phone holds the revision it was sent');
+  assert.equal(lastLobby(ada).chooserRev, first.rev, 'and the snapshot names that same revision');
+
+  // Nothing re-sends it to a phone that holds it: not a rename (a HELLO), not a
+  // lobby push, not a dropped link that comes back (another HELLO).
+  ada.net.rename('Ada Two');
+  await H.flush();
+  ada.net.send(MSG.SET_CAR, { carIndex: 1 });
+  await H.flush();
+  ada.net.suspend();
+  ada.net.resume();
+  await H.flush();
+  assert.equal(lastLobby(ada).players.find((p) => p.peerIndex === ada.net.peerIndex).name, 'Ada Two');
+  assert.equal(choosersOf(ada).length, 1, 'one CHOOSER for the whole session so far');
+
+  // A LATE JOINER mid-race: the replayed snapshot arrives before the CHOOSER, so
+  // it is held, and the first snapshot the page sees comes with cars to pick.
+  assert.equal(net.flow.transitionTo(ROOM_STATE.COUNTDOWN), true);
+  assert.equal(net.flow.transitionTo(ROOM_STATE.PLAYING), true);
+  await H.flush();
+  const cy = await bringUpPhone(relay, room, { name: 'Cy', clientKey: 'ch-c' });
+  assert.equal(choosersOf(cy).length, 1);
+  assert.ok(choosersOf(cy)[0].cars.length, 'the late joiner has cars to pick from');
+  assert.equal(lastLobby(cy).roomState, ROOM_STATE.PLAYING);
+
+  // The display's catalogue moves mid-room: the next snapshot names a new
+  // revision, each phone asks once, and nothing reaches the page in between.
+  const tracks = [{ id: 'lagoon', name: 'Lagoon', cup: 'beach' }];
+  net.setChooser({ tracks });
+  await H.flush();
+  for (const [phone, who] of [[ada, 'Ada'], [cy, 'Cy']]) {
+    assert.equal(choosersOf(phone).length, 2, `${who} asked for the new chooser once`);
+    assert.deepEqual(choosersOf(phone).at(-1).tracks, tracks);
+    assert.equal(lastLobby(phone).chooserRev, choosersOf(phone).at(-1).rev);
+    assertSnapshotsFollowTheirChooser(phone, who);
+  }
+
+  ada.net.disconnect();
+  cy.net.disconnect();
+});
+
+test('wire: a current phone reads an older display that puts the chooser on every snapshot', async () => {
+  // VERSION SKEW. The TV apps embed their engine and ship through the stores;
+  // phones load this controller from the site, so a phone is routinely NEWER
+  // than the display it joins. An older display sends no CHOOSER and no
+  // chooserRev — the content rides each snapshot — and the phone must route
+  // that snapshot at once rather than wait for a CHOOSER that never comes.
+  const { MSG, ROOM_STATE } = H.kit().protocol;
+  const { relay, host, seen, room } = await bringUpDisplay();
+  const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'old-a' });
+  const hello = seen.message.find((m) => m.data && m.data.type === MSG.HELLO);
+  assert.ok('chooserRev' in hello.data && hello.data.chooserRev === null,
+    'the HELLO says the phone holds no chooser, which an older display ignores');
+
+  const old = { type: MSG.LOBBY_UPDATE, roomState: ROOM_STATE.LOBBY, hostPeerIndex: 1, paused: false,
+    players: [{ peerIndex: 1, name: 'Ada', colorIndex: 0, carIndex: 0, connected: true, ready: false, inRace: false }],
+    cars: [{ id: 'vehicle-gt', name: 'Dash' }], colors: ['#e6492d'], tracks: [{ id: 'tidepool', name: 'Tidepool' }] };
+  host.setState(old);
+  await H.flush();
+  assert.deepEqual(lastLobby(ada), old, 'the older snapshot reached the page untouched, unheld');
+  assert.equal(choosersOf(ada).length, 0);
+  // ...and the phone did not keep asking for what this display cannot send.
+  const hellos = seen.message.filter((m) => m.data && m.data.type === MSG.HELLO);
+  assert.equal(hellos.length, 1, 'no re-HELLO for a snapshot with no revision');
+
+  ada.net.disconnect();
+  host.close();
+});
+
+test('wire: a phone whose HELLO went unanswered asks again on its ping tick', async (t) => {
+  // A display that reloads onto its own socket raises no peer_joined, so the
+  // HELLO the old one never answered is the only ask the phone made. Without a
+  // re-ask, every snapshot naming a revision it lacks is held for good: the
+  // phone never leaves its joining screen.
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const { MSG, ROOM_STATE, LIVENESS } = H.kit().protocol;
+  const { relay, host, seen, room } = await bringUpDisplay();
+  const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'lost-a' });
+  const hellos = () => seen.message.filter((m) => m.data && m.data.type === MSG.HELLO);
+  assert.equal(hellos().length, 1);
+
+  host.setState({ type: MSG.LOBBY_UPDATE, roomState: ROOM_STATE.LOBBY, hostPeerIndex: 1, paused: false,
+    players: [], chooserRev: 7 });
+  await H.flush();
+  assert.equal(lastLobby(ada), undefined, 'held: it names a chooser the phone lacks');
+  assert.equal(hellos().length, 1, 'the join HELLO is still out, so no second ask yet');
+
+  t.mock.timers.tick(LIVENESS.PING_INTERVAL_MS);
+  await H.flush();
+  assert.equal(hellos().length, 2, 'the tick asked again');
+  assert.equal(hellos()[1].data.chooserRev, null);
+
+  host.sendTo(ada.net.peerIndex, { type: MSG.CHOOSER, rev: 7, cars: [{ id: 'vehicle-gt' }], colors: ['#e6492d'], tracks: [] });
+  await H.flush();
+  assert.equal(lastLobby(ada).chooserRev, 7, 'the CHOOSER released the held snapshot');
+  t.mock.timers.tick(LIVENESS.PING_INTERVAL_MS);
+  await H.flush();
+  assert.equal(hellos().length, 2, 'nothing held, so the tick asks nothing');
+
+  ada.net.disconnect();
+  host.close();
 });
 
 test('wire: a live rename republishes the roster AND raises the rename signal', async () => {
@@ -848,11 +975,11 @@ test('wire: a snapshot over the cap is REFUSED, and the room silently keeps the 
   const phone = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'cap-1' });
   const good = lastLobby(phone);
   assert.ok(good, 'the small snapshot went through');
-  assert.equal(good.tracks.length, 1);
+  assert.equal(good.progress.cups.length, 1);
 
-  // Now the display's chooser content grows past the cap — 20 tracks with
-  // unreduced schematics, which is exactly what display/main.js:67's "reduced
-  // schematics (~24 pts) so the whole catalog fits 16 KiB" exists to prevent.
+  // Now the one chooser key that still rides the snapshot grows past the cap: a
+  // progress record for hundreds of cups. (The track schematics, which used to
+  // be the risk here, go to each phone once as the CHOOSER instead.)
   //
   // JUST past it, on purpose. ttp_framing_encode_set_state takes its argument as
   // a cwrap 'string', which emscripten copies onto the 64 KiB wasm STACK, so a
@@ -860,11 +987,9 @@ test('wire: a snapshot over the cap is REFUSED, and the room silently keeps the 
   // shipped (Filament) build and CI's sim-only build even disagree on where it
   // starts to go wrong. The relay cap is what keeps the display far away from
   // that, and this fixture stays on the relay's side of it deliberately.
-  const fat = [];
-  for (let i = 0; i < 20; i++) {
-    const pts = [];
-    for (let p = 0; p < 80; p++) pts.push([Math.round(Math.cos(p) * 1000) / 10, Math.round(Math.sin(p) * 1000) / 10]);
-    fat.push({ id: 'track-' + i, name: 'Track Number ' + i, cup: 'cup-' + (i % 5), svg: pts });
+  const fat = { cups: [], stars: { earned: 0, total: 900 } };
+  for (let i = 0; i < 300; i++) {
+    fat.cups.push({ id: 'cup-number-' + i, stars: i % 4, locked: i > 0, unlockDone: i, unlockNeed: i + 3 });
   }
   const fatBytes = Buffer.byteLength(JSON.stringify(fat));
   assert.ok(fatBytes > MAX_STATE_BYTES, `the fixture really is oversize (${fatBytes} B)`);
@@ -875,11 +1000,11 @@ test('wire: a snapshot over the cap is REFUSED, and the room silently keeps the 
   // the boundary on every publish), so replacing it goes through the setter that
   // re-configures it. The publish it triggers is the one under test.
   const before = phone.seen.message.length;
-  net.setChooser({ tracks: fat });
+  net.setChooser({ progress: fat });
   await H.flush();
 
   assert.equal(phone.seen.message.length, before, 'the phone received NOTHING — no error, no update');
-  assert.equal(relay.rooms.get(room).state.tracks.length, 1, 'the relay still retains the OLD snapshot');
+  assert.equal(relay.rooms.get(room).state.progress.cups.length, 1, 'the relay still retains the OLD snapshot');
   assert.deepEqual(relay.log.filter((e) => e.dir === 's2c' && e.text.includes('State too large')).length, 1,
     'the only sign anything went wrong is one error frame to the display');
 

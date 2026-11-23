@@ -114,6 +114,11 @@ export class ControllerNet extends GameNet {
     // written down twice.
     this._suspended = false;
     this._terminal = false;
+    // The CHOOSER revision this phone holds (null: none yet), whether a HELLO
+    // asking for one is out, and the snapshot waiting on it (_onSnapshot).
+    this.chooserRev = null;
+    this._chooserAsked = false;
+    this._heldSnapshot = null;
   }
 
   // Ask the relay whether the room is there (GET /room/:code), so a gone or full
@@ -166,7 +171,7 @@ export class ControllerNet extends GameNet {
         // rejoinToken claims a dropped seat when this is a cross-device rejoin
         // (harmless otherwise — the display ignores a token that matches our own
         // fresh slot or names a seat that's no longer waiting).
-        this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
+        this._hello();
         this._startPing();
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
@@ -191,7 +196,7 @@ export class ControllerNet extends GameNet {
         // seat's name, and re-open the fastlane right away instead of waiting
         // for the retry tick. The snapshot it republishes clears any
         // "waiting for the big screen" overlay.
-        this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
+        this._hello();
         this._cancelFastlaneReopen();   // a fresh display starts the backoff over
         if (this.fastlane) this.fastlane.open(0);
       }
@@ -200,6 +205,7 @@ export class ControllerNet extends GameNet {
       if (from !== 0 || !data) return;
       if (this._isSignal(from, data)) return;
       if (data.type === MSG.PONG) { this._handlePong(data); return; }
+      if (data.type === MSG.CHOOSER) { this._onChooser(data); return; }
       this.onMessage(data);
     };
     // Retained host snapshot (the display's set_state): the lobby roster, pushed
@@ -207,7 +213,7 @@ export class ControllerNet extends GameNet {
     // so a (re)join catches up on roster/track before our HELLO round-trips. The
     // payload carries the same type tag a relayed message would (LOBBY_UPDATE),
     // so it funnels into the one handler.
-    this.party.onState = (data) => { if (data && data.type) this.onMessage(data); };
+    this.party.onState = (data) => { if (data && data.type) this._onSnapshot(data); };
     this.party.onClose = (attempt, max, meta) => {
       this._stopPing();
       this.gate.reset(); // link down: what the display holds is no longer knowable
@@ -292,8 +298,44 @@ export class ControllerNet extends GameNet {
   rename(name) {
     this.playerName = name || this.playerName;
     if (this.party && this.peerIndex != null) {
-      this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
+      this._hello();
     }
+  }
+
+  // The one introduction, on join, on the display's return, on a rename, and
+  // when a snapshot names a chooser we do not hold. chooserRev tells the display
+  // whether to answer with a CHOOSER.
+  _hello() {
+    this._chooserAsked = true;
+    this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken,
+                           chooserRev: this.chooserRev });
+  }
+
+  // A snapshot names the chooser revision it was composed against, and one this
+  // phone does not hold is HELD until the CHOOSER lands: main.js never routes a
+  // snapshot without the picker content it means. One HELLO asks, unless one is
+  // already out (the join's, whose answer is on its way); the ping tick asks
+  // again while one is still held, so a lost answer heals. An older display names
+  // no revision and carries the content in every snapshot, so it passes straight
+  // through.
+  _onSnapshot(data) {
+    if (!('chooserRev' in data) || data.chooserRev === this.chooserRev) {
+      this._chooserAsked = false;
+      this._heldSnapshot = null;
+      this.onMessage(data);
+      return;
+    }
+    this._heldSnapshot = data;
+    if (!this._chooserAsked) this._hello();
+  }
+
+  _onChooser(data) {
+    this.chooserRev = data.rev;
+    this._chooserAsked = false;
+    this.onMessage(data);
+    const held = this._heldSnapshot;
+    this._heldSnapshot = null;
+    if (held) this._onSnapshot(held);
   }
 
   // Send to the display. FASTLANE_TYPES messages ride the WebRTC DataChannel
@@ -437,6 +479,10 @@ export class ControllerNet extends GameNet {
     this._pingTimer = setInterval(() => {
       if (!this.party) return;
       this.send(MSG.PING, { t: Date.now() });
+      // A snapshot still held at a tick: its ask may have gone to a display
+      // that never answered it (one reloading onto its own socket, which
+      // raises no peer_joined to re-HELLO on), so ask again.
+      if (this._heldSnapshot) this._hello();
       if (Date.now() - this._lastPong > PONG_TIMEOUT_MS && !this._fastlaneUp()) {
         this.onRtt(-1, false);
       }

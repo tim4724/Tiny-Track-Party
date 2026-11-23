@@ -172,15 +172,25 @@ export const CPP_MUTATIONS = [
     expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
   },
   {
-    // The chooser payload the dumb controller renders from. `cars` rides every
-    // snapshot on purpose (the late-joiner picker needs it mid-race); dropping
-    // it leaves a phone that joined during a race with nothing to pick from.
-    name: 'session/chooser-cars-go-lobby-only',
+    // The chooser payload the dumb controller renders from, sent once per phone.
+    // A CHOOSER that loses `cars` leaves every phone, the mid-race late joiner
+    // included, with nothing to pick from.
+    name: 'session/chooser-drops-cars',
     file: 'native/libttp-party/ttp/session.cc',
-    kind: 'gate an always-present chooser key on the lobby',
-    find: '  copyKey(out, chooser, "cars");',
-    replace: '  if (lobby) copyKey(out, chooser, "cars");',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+    kind: 'drop a key the phone renders from',
+    find: 'const char* const kChooserKeys[] = {"cars", "colors", "tracks"};',
+    replace: 'const char* const kChooserKeys[] = {"colors", "tracks"};',
+    expect: 'the CHOOSER goes once per phone',
+  },
+  {
+    // The HELLO walk is the CHOOSER's only sender. Answering nobody leaves every
+    // phone holding a snapshot it may never route.
+    name: 'net/hello-sends-no-chooser',
+    file: 'native/runtime/ttp_net.cc',
+    kind: 'silently skip a reply',
+    find: '      if (!strictEquals(orUndef(mfind(msg, "chooserRev")), Value::Num(g_chooserRev))) {',
+    replace: '      if (false) {',
+    expect: 'the CHOOSER goes once per phone',
   },
   {
     name: 'roomflow/state-renamed',
@@ -308,14 +318,13 @@ export const JS_MUTATIONS = [
   {
     // The chooser catalogue is the shell's to plug in, and it is handed over ONCE
     // at construction. Never plugging it in leaves every phone's car picker empty
-    // — including the late joiner's, mid-race, which is the case the always-on
-    // `cars` key exists for.
+    // — including the late joiner's, mid-race, who has no other way to a car.
     name: 'display/chooser-cars-unplugged',
     kind: 'fail to plumb a chooser catalogue into the model',
     file: 'public/display/Net.js',
     find: '    this.carChooser = opts.carChooser || [];',
     replace: '    this.carChooser = [];',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+    expect: 'the CHOOSER goes once per phone',
   },
   {
     // What is left mutable on the JS side of the walk layer: the shell may not

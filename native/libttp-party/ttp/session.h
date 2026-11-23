@@ -71,14 +71,17 @@ Value roster_rows(const Value& roster, const Value& inRace);
 // The room's single outbound message (LOBBY_UPDATE over the relay's set_state).
 // The relay retains it, pushes it live to every controller and replays it right
 // after `joined`, so a (re)joining phone recovers its whole state — identity,
-// roster, selection, results and the chooser content — from the replay alone.
-// There is no per-phone WELCOME.
+// roster, selection, results — from the replay alone. There is no per-phone
+// WELCOME.
 //
-// `input` carries the room's live fields; `chooser` is the display-authoritative
-// content the dumb controller renders from and is OPAQUE here — this layer never
-// looks inside it, which is what lets the corpus carry a synthetic one. Its
-// `tracks` are LOBBY-ONLY: they are the bulk of the blob, the picker is only
-// shown there, and the whole snapshot must fit the relay's 16 KiB cap.
+// `input` carries the room's live fields, `chooserRev` among them: the REVISION of
+// the chooser content (chooser_rev), passed through so a phone can tell whether
+// the cars/colors/tracks it holds are the ones this snapshot means. The content
+// itself rides chooser_message, once per phone, because it is ~6 KB that does
+// not change while the display runs and every push used to carry it to every
+// phone. `chooser` here is the configured payload, OPAQUE bar its `progress`,
+// which does change at runtime (a banked cup) and so stays on the snapshot,
+// LOBBY-ONLY like the picker it dresses.
 //
 // KEY ORDER IS NOT A CONTRACT, and this header used to say it was the wire's.
 // The only shipping caller (runtime/ttp_net.cc's ttp_net_lobby_frame) frames
@@ -86,6 +89,17 @@ Value roster_rows(const Value& roster, const Value& inRace);
 // the composed order has never reached a phone. Emit it with whatever the
 // caller emits everything else with.
 Value lobby_snapshot(const Value& input, const Value& chooser);
+
+// The chooser's static keys — cars, colors, tracks — as the CHOOSER message a
+// phone is sent in answer to its HELLO, stamped with `rev`. Absent keys stay
+// absent, as everywhere in the snapshot.
+Value chooser_message(const Value& chooser, double rev);
+
+// The revision a phone matches its held chooser against: FNV-1a over the
+// canonical text of exactly the keys chooser_message carries, so a recomposed
+// `progress` leaves it alone and a reloaded display with the same catalogue
+// answers the same number.
+double chooser_rev(const Value& chooser);
 
 // ---- the display-name cap ---------------------------------------------------
 

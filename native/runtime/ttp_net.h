@@ -51,22 +51,25 @@ extern "C" {
 
 /* ---- the chooser ---------------------------------------------------------- */
 
-/* The display-authoritative content the dumb controller renders from, carried
- * inside every room snapshot:
- *   {"cars":   [{"id","name","stats":{...}}, ...],   always (tiny; the
- *                                                    late-joiner picker needs it
- *                                                    mid-race)
- *    "colors": ["#rrggbb", ...],                     the livery palette
- *    "tracks": [{"id","name","cup",...,"svg"}, ...]} the reduced schematics,
- *                                                    LOBBY ONLY (the bulk) —
+/* The display-authoritative content the dumb controller renders from:
+ *   {"cars":     [{"id","name","stats":{...}}, ...],
+ *    "colors":   ["#rrggbb", ...],                   the livery palette
+ *    "tracks":   [{"id","name","cup",...,"svg"}, ...] the reduced schematics —
  *                                                    ttp_ui_chooser_tracks_json
+ *    "progress": {...}}                              the couch's stars/locks
+ *
+ * The first three go to each phone ONCE, as the CHOOSER the HELLO walk answers
+ * with (~6 KB, static while the display runs); the snapshot carries only their
+ * revision, so a phone holding another one asks again. `progress` changes at
+ * runtime and rides the lobby snapshot itself.
  *
  * OPAQUE: this layer never looks inside it, which is what lets the conformance
  * corpus carry a synthetic one. Set once at boot for the same reason
  * ttp_ui_configure is — it is authored data that changes when the game ships,
  * not while it runs, and re-sending ~4 KB of it on every rename would be parse
  * for nothing. Returns 1 when the text parsed. A later call replaces it
- * wholesale; unset, the three keys simply do not appear. */
+ * wholesale (and the next snapshot's revision tells the phones); unset, the
+ * keys simply do not appear. */
 TTP_ABI int ttp_net_configure(const char* chooserJson);
 
 /* ---- the retained room snapshot ------------------------------------------- */
@@ -98,12 +101,12 @@ TTP_ABI int ttp_net_configure(const char* chooserJson);
  * through ttp_room.h. Measured in the browser at the 4-player cap: 169.6 us ->
  * 44.4 us per publish.
  *
- * WHAT MADE IT EXPENSIVE WAS NOT THE ROSTER. The snapshot is ~7 KB and ~5.9 KB
- * of that is the `tracks` chooser payload, which ttp_net_configure sets ONCE and
+ * WHAT MADE IT EXPENSIVE WAS NOT THE ROSTER. The snapshot was ~7 KB and ~5.9 KB
+ * of that was the `tracks` chooser payload, which ttp_net_configure sets ONCE and
  * nothing here ever looks inside; the roster is ~431 bytes. The round trip was
- * re-parsing an immutable 6 KB blob on every rename and ready toggle. A
- * microbenchmark that builds its own snapshot has no chooser in it and will
- * under-read this by about 3x.
+ * re-parsing an immutable 6 KB blob on every rename and ready toggle. The
+ * payload has since left the snapshot for the per-phone CHOOSER (see
+ * ttp_net_configure), so a benchmark of this path no longer needs it.
  *
  * The frame is canonical, exactly as ttp_framing_encode_set_state's is — the
  * snapshot's model key order never survived framing and never has. */

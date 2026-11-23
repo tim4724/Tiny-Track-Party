@@ -37,7 +37,7 @@ inline const std::vector<std::pair<std::string, std::string>> MSG = {
     {"SELECT_MODE", "select_mode"}, {"SERIES_NEXT", "series_next"},
     {"SET_SOUND", "set_sound"}, {"SET_FRAME_RATE", "set_frame_rate"},
     {"PING", "ping"},
-    {"LOBBY_UPDATE", "lobby_update"}, {"ITEM", "item"},
+    {"LOBBY_UPDATE", "lobby_update"}, {"CHOOSER", "chooser"}, {"ITEM", "item"},
     {"PONG", "pong"},           {"COUNTDOWN", "countdown"},
     // Display -> its own slot; never reaches a controller. See protocol.js.
     {"HEARTBEAT", "_heartbeat"},

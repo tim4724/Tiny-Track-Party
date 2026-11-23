@@ -136,19 +136,33 @@ Value lobby_snapshot(const Value& input, const Value& chooser) {
   copyKey(out, input, "trackId");
   copyKey(out, input, "standings");
 
-  // The chooser is opaque passthrough. An absent key stays absent (JS reads
-  // undefined off a missing chooser and JSON.stringify drops it); `tracks` is
-  // lobby-gated and becomes an explicit null everywhere else.
-  copyKey(out, chooser, "cars");
-  copyKey(out, chooser, "colors");
-  if (lobby) copyKey(out, chooser, "tracks");
-  else out.set("tracks", Value::Null());
+  // The chooser CONTENT rides chooser_message; the snapshot names its revision.
+  copyKey(out, input, "chooserRev");
   // The couch's progression (per-cup stars/locked), composed by the display
   // off the ui catalogue. Lobby-gated like `tracks` — it dresses
   // the picker — but simply absent elsewhere: phones cache it, and there is no
   // pre-progression reader expecting an explicit null.
   if (lobby) copyKey(out, chooser, "progress");
   return out;
+}
+
+namespace {
+const char* const kChooserKeys[] = {"cars", "colors", "tracks"};
+}  // namespace
+
+Value chooser_message(const Value& chooser, double rev) {
+  Value out = Value::Obj();
+  for (const auto& kv : protocol::MSG)
+    if (kv.first == "CHOOSER") out.set("type", Value::Str(kv.second));
+  out.set("rev", Value::Num(rev));
+  for (const char* k : kChooserKeys) copyKey(out, chooser, k);
+  return out;
+}
+
+double chooser_rev(const Value& chooser) {
+  Value keys = Value::Obj();
+  for (const char* k : kChooserKeys) copyKey(keys, chooser, k);
+  return static_cast<double>(fnv1a(canonical_stringify(keys)));
 }
 
 // ---- URLs -------------------------------------------------------------------

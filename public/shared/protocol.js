@@ -37,13 +37,16 @@ var STUN_URL = 'stun:stun.paperballoon.games:3478';
 // The controller is a dumb renderer: it holds NO game state or content of its own.
 // Almost everything display→controller is the retained room SNAPSHOT (LOBBY_UPDATE
 // over set_state) — replayed on every (re)join and pushed on every change, so a
-// reconnecting phone recovers its whole state (screen, roster, selection, results,
-// AND the chooser content: cars/tracks/colors) from the replay alone, with no
-// per-phone WELCOME to miss. Only two things stay transient messages: COUNTDOWN
-// (a momentary haptic cue) and ITEM (per-owner, changes too often for the blob).
+// reconnecting phone recovers its whole state (screen, roster, selection, results)
+// from the replay alone. The one thing too big and too static to ride every push
+// is the chooser content (cars/colors/tracks): CHOOSER carries it once, in answer
+// to a HELLO, and the snapshot names the revision it was composed against. The
+// other transient messages: COUNTDOWN (a momentary haptic cue) and ITEM (per-owner,
+// changes too often for the blob).
 var MSG = {
   // Controller -> Display (intents)
-  HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
+  HELLO: 'hello',               // {name?, rejoinToken?, chooserRev?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=);
+                                // chooserRev is the CHOOSER rev this phone holds (null: none), answered with a CHOOSER unless it is the display's
   CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping], h: ACTION held[0|1]} — hot path, sensor-rate gated, fastlane.
                                 // `h` is level state: a banana used while it is 1 trails the car and drops when it goes 0.
                                 // The display derives ttp_process_input's presence MASK from which fields arrived (bit1 s:number,
@@ -74,7 +77,9 @@ var MSG = {
                                 //   has landed — the phone's cue to stop reporting the race and report the cup. It is the ONLY
                                 //   difference between the two pushes of that board; ahead of it the phones would crown the champion
                                 //   while the TV was still counting points towards it.
-                                //   cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]|null (lobby only),
+                                //   chooserRev: the CHOOSER rev this snapshot was composed against — a phone holding another one
+                                //   asks (HELLO) and applies no snapshot until the CHOOSER lands. An older display carries no rev and
+                                //   puts cars/colors/tracks on every snapshot instead (tracks lobby only, null elsewhere).
                                 //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}],stars:{earned,total}} (lobby only; absent, not null, elsewhere —
                                 //   the couch's DERIVED star record, composed display-side off the wasm catalogue; phones draw it, never re-derive it),
                                 //   frameRate:{half,fullHz,halfHz} (ABSENT unless the display could not hold 1080@60 — the host's
@@ -83,6 +88,9 @@ var MSG = {
                                 //   on change, replayed to each (re)joiner right after `joined`. Car images load by id from the web host.
 
   // Display -> specific controller (transient — not room state)
+  CHOOSER: 'chooser',           // {rev, cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]} — the
+                                //   picker content, static while the display runs, so it goes once per phone (the HELLO answer)
+                                //   instead of in every snapshot. rev is a digest of the three keys; the snapshot's chooserRev names it.
   ITEM: 'item',                 // {item} — lights the controller's ITEM button; sent on change + once on (re)connect (held-item is per-owner, so it stays OFF the shared room snapshot)
   PONG: 'pong',
 

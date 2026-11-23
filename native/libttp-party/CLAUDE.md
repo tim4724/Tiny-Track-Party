@@ -18,8 +18,27 @@ plain data, which is what lets the corpus replay with no room machine at all.
 Returns are plain `Value` trees and their key order means nothing: the snapshot's
 only caller frames it, and the frame encoder canonicalizes, so the composed order
 has never reached a phone. One piece of configured state (the chooser payload) is
-set once and stays opaque to the model, bar the rule that tracks ride the LOBBY
-snapshot only.
+set once and stays opaque to the model.
+
+**The chooser goes once per phone, not on every snapshot.** Its static keys
+(cars, colors, tracks) are most of the room's bytes and never change while the
+display runs, so the HELLO walk answers a phone with a CHOOSER message and the
+snapshot carries only `chooserRev`, a digest of those keys. The phone's HELLO says
+which revision it holds (none, on a fresh page), so a rename or a reconnect is not
+sent it again, and the phone holds back any snapshot naming a revision it lacks,
+re-asking with a HELLO (and again on each ping tick while it holds one, so an
+ask the display never answered heals). That makes the revision the whole protocol: a display
+reload that replaces its own socket (no `peer_joined`, so no re-HELLO) or a
+catalogue configured late still reaches every phone. `progress` changes at
+runtime and stays on the lobby snapshot.
+
+**Version skew runs one way.** Phones load the controller from the site, the TV
+apps ship their engine through the stores, so a phone is routinely newer than
+the display it joins: a snapshot with no `chooserRev` is an older display's,
+carries the content itself, and is routed at once. The reverse, a phone older
+than its display, finds no chooser in the snapshot and draws an empty picker;
+the site deploys ahead of any store build, so that only happens to a phone page
+left open across a deploy.
 
 **Deliberately did not cross:** the transport and its timers, the QR bitmap (the
 URL composition is shared, the bitmap is three platform one-liners), the reconnect
