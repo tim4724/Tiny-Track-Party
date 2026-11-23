@@ -56,6 +56,8 @@ export const DEBUG = {
   // The pop probe's (see:pops): no far forms, the last frame's choice of them
   // held, the cells unculled, and fog past its cutoff.
   NO_LOD: 0x1000000, LOD_HOLD: 0x2000000, NO_CULL: 0x20000000, FOG_WHOLE: 0x40000000,
+  // The car-shadow pass, which rides ROAD_DECALS rather than CARS (perf-features).
+  NO_DECAL_BLOB: 0x40000,
 };
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU

@@ -2920,7 +2920,7 @@ public:
     // reading is the DRAW half of a feature's cost, not the whole of it.
     static constexpr uint8_t kFeatRoad     = 0x04; // the deck ribbon (chunked)
     static constexpr uint8_t kFeatTerrain  = 0x08; // ground, sky, hills, water, structures
-    static constexpr uint8_t kFeatDressing = 0x10; // scenery, props, landmarks, clutter, cones
+    static constexpr uint8_t kFeatDressing = 0x10; // scenery, props, set pieces, landmarks, clutter, cones
     static constexpr uint8_t kFeatSky      = 0x20; // clouds, haze, fliers, balloon
     static constexpr uint8_t kFeatCars     = 0x40; // car GLBs, monster rigs, boost streaks
     static constexpr uint8_t kFeatEffects  = 0x80; // item pools, rockets, bursts, ambient

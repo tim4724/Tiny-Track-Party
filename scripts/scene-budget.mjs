@@ -54,9 +54,11 @@
 // nothing submitted) and only the sampled frames draw, each twice: the full
 // scene, then without the DRESSING group, which splits the world's own share
 // out of the total. Headless, at a page size per tier (VIEW): the far forms
-// and lite's cuts gate on a cell's own pixels, so lite is priced at the box's
-// 4P buffer (960x540); full keeps the small page its figures were recorded
-// at, which swaps the far forms in a little early.
+// and lite's cuts gate on a cell's own pixels, so each tier is priced at the
+// buffer its device draws: lite at the box's 4P one (960x540), full at a 1080
+// panel's (1920x1080; a smaller page swaps the far forms in early and
+// understates full). At the same buffer and frame the count is
+// perf-features.mjs's.
 //
 // Usage: npm run budget:scene [-- --track cove,tangle] [--players 1,4] [--detail full,lite]
 //        [--record]   rewrite the measured tiers' per-track figures (the ceilings stay)
@@ -74,7 +76,7 @@ const PLAYERS = String(a.players || '1,4').split(',').map(Number);
 const TIERS = String(a.detail || 'full,lite').split(',');
 for (const t of TIERS) if (t !== 'full' && t !== 'lite') throw new Error(`--detail: full and/or lite, not ${t}`);
 // HOW, in the header, has why the tiers are priced at different sizes.
-const VIEW = { full: { width: 480, height: 270 }, lite: { width: 960, height: 540 } };
+const VIEW = { full: { width: 1920, height: 1080 }, lite: { width: 960, height: 540 } };
 const EVERY = parseInt(a.every || '30', 10);
 const RECORD = !!a.record;
 

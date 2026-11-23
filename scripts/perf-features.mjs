@@ -235,11 +235,15 @@ const main = async () => {
     console.log(`# wrote ${SHOT}`);
   }
 
-  const FEAT = await page.evaluate(async () => {
+  const { FEAT, DEBUG } = await page.evaluate(async () => {
     const m = await import('/display/render/Display.js');
-    return m.FEAT;
+    return { FEAT: m.FEAT, DEBUG: m.DEBUG };
   });
   const CHAN = ROAD_CHANNELS.reduce((m, n) => m | FEAT[n], 0);
+  // The car-shadow pass is gated by ROAD_DECALS, not CARS: a mask of CHAN
+  // alone still draws a shadow under every hidden car. So the floor and every
+  // solo arm but the cars' own go without it.
+  const NO_SHADOWS = DEBUG.NO_DECAL_BLOB;
   // ALL first (the reference), then one group dropped at a time, then the bare
   // canvas — which is the present pass plus whatever a frame costs with nothing
   // in it, i.e. the floor every other reading sits on.
@@ -256,12 +260,13 @@ const main = async () => {
     // A solo arm keeps the road's fragment channels ON: they are not one of the
     // groups, and dropping them silently would make "only road" a reading of a
     // deck with nothing painted on it.
-    ...ARM_NAMES.map((n) => ({ name: `only ${n.toLowerCase()}`, mask: FEAT[n] | CHAN })),
+    ...ARM_NAMES.map((n) => ({ name: `only ${n.toLowerCase()}`,
+                               mask: FEAT[n] | CHAN | (n === 'CARS' ? 0 : NO_SHADOWS) })),
     ...ROAD_CHANNELS.map((n) => ({ name: `-${n.toLowerCase()}`, mask: FEAT.ALL & ~FEAT[n] })),
     // The deck with every channel off is the road's own floor: its geometry,
     // its Lambert term and the grade, and nothing it was asked to paint.
     { name: '-road channels', mask: FEAT.ALL & ~CHAN },
-    { name: 'none', mask: CHAN },
+    { name: 'none', mask: CHAN | NO_SHADOWS },
   ];
 
   // EVERY ARM IS MEASURED AGAINST A REFERENCE TAKEN BESIDE IT. The absolute

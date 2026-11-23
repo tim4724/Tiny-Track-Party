@@ -2164,6 +2164,10 @@ void TtpRenderer::tagFeatures() {
     instVec(mConeInstances, kFeatDressing);
     for (const auto& per : mSceneryInstances) instVec(per, kFeatDressing);
     for (const auto& per : mPropInstances) instVec(per, kFeatDressing);
+    // The set pieces, which every merge of them copies its layer from: left
+    // out, a mask set before the dressing merge (a launch argument, ?features=)
+    // drew every set piece and priced scatter and props only.
+    for (const auto& per : mSetInstances) instVec(per, kFeatDressing);
 
     // The sky's moving furniture — all billboards, all re-aimed per cell.
     meshVec(mClouds, kFeatSky);
