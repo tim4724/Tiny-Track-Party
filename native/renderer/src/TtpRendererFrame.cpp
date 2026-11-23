@@ -3580,10 +3580,15 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
         // Undrawn, and done: the merge, the blob readbacks and the GPU frame
         // are a drawn frame's. The phases above still queued driver work (the
         // decal uniform writes, the ambient buffers) that no endFrame will
-        // flush, so drain it here — the single-threaded backends execute on
-        // flush(), and a wind of thousands of these frames would otherwise
-        // fill the command buffer with nothing ever coming to empty it.
-        mEngine->flush();
+        // retire. flush() hands them to the driver, but on a threaded backend
+        // only endFrame or a finish COMMITS the driver's command buffer: on
+        // Metal the uploads' blits piled into one uncommitted buffer until a
+        // cover board held ~100-270 s ran the GPU out of shared memory
+        // (IOGPUDeviceShmem, then abort). Renderer::skipFrame does not commit
+        // either. So every kUndrawnFinish-th undrawn frame finishes the queue;
+        // nothing is drawing, so the wait is the queue's few blits.
+        if (++mUndrawnFrames % kUndrawnFinish == 0) mEngine->flushAndWait();
+        else mEngine->flush();
         mSkidCatchUp = true;   // the next drawn frame owes the rubber layer a full refresh
         mProfile[kProfTotal] = ttpNowMs() - tFrame0;
         return true;

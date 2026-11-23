@@ -1794,6 +1794,8 @@ private:
     std::vector<SkidRect> mSkidDirty;
     static constexpr size_t kSkidDirtyMax = 32;   // past this the list is one union rect
     bool mSkidCatchUp = false;                    // undrawn frames stamped; finish the deep pass
+    static constexpr uint32_t kUndrawnFinish = 60; // undrawn frames between finishes (frame())
+    uint32_t mUndrawnFrames = 0;
     static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
     // One mip level refiltered and uploaded under rects in level l-1 texels,
     // which come back in level l texels.
