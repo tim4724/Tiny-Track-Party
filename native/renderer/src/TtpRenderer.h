@@ -157,9 +157,10 @@ public:
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
 #if defined(__ANDROID__)
-    // Before init: the file the Vulkan backend keeps its compiled pipelines in
-    // between runs. Unset keeps them in memory, as every other backend does.
-    void setPipelineCacheFile(std::string path) { mPipelineCacheFile = std::move(path); }
+    // Before init: the directory the engine keeps its compiled shaders in
+    // between runs (the Vulkan pipeline cache, the GL program binaries). Unset
+    // keeps them in memory, as every other platform does.
+    void setProgramCacheDir(std::string dir) { mProgramCacheDir = std::move(dir); }
     // Start the engine before there is a window, and return at once: the
     // driver (Vulkan instance and device, the pipeline cache read, or the EGL
     // context) comes up on Filament's own thread while the shell's main thread
@@ -625,10 +626,11 @@ private:
 
     filament::Engine* mEngine = nullptr;
 #if defined(__ANDROID__)
-    // The Vulkan platform with the framebuffer-eviction override (see
-    // TtpRenderer::init) — caller-owned, so it outlives the engine here.
-    std::unique_ptr<filament::backend::Platform> mVkPlatform;
-    std::string mPipelineCacheFile;
+    // The platform prepare() hands the engine (Vulkan's framebuffer-eviction
+    // override, or GL's with a program store) — caller-owned, so it outlives
+    // the engine here.
+    std::unique_ptr<filament::backend::Platform> mPlatform;
+    std::string mProgramCacheDir;
     // prepare()'s engine until init or the destructor collects it.
     struct PendingEngine;
     std::shared_ptr<PendingEngine> mPending;

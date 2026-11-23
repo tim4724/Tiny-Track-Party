@@ -760,9 +760,10 @@ every `ttp_*` call: Filament hands the engine back only on the thread that
 started it. A later surface (Home and back) builds its engine there, as before,
 because `ttp_display_destroy` still deletes the renderer. The canary is marked
 at the prepare, before the driver starts, so a driver that kills the process
-still counts. Both calls carry the file a Vulkan engine keeps its compiled
-pipelines in between runs, under `codeCacheDir`, which Android empties on an app
-update so a build with new materials never starts from the last one's. A Vulkan
+still counts. Both calls carry the directory the engine keeps its compiled
+shaders in between runs (Vulkan's pipeline cache, GL's program binaries),
+`codeCacheDir`, which Android empties on an app update so a build with new
+materials never starts from the last one's. A Vulkan
 engine reads the SPIR-V twins from `assets/materials-vk/`
 (compiled by `build-runtime-android.sh`; a GL blob does not parse on a Vulkan
 engine, so `SceneStaging` follows `DisplayHost.usingVulkan`, never the

@@ -30,8 +30,8 @@
 // checkout (FilamentSdk.cmake resolves the include path from it), so the
 // shipped engine always carries the fix; only the compile-only leg loses it.
 #if defined(__ANDROID__)
-// mVkPlatform's unique_ptr needs the BASE type complete here for its reset()
-// whether or not the override below compiles in.
+// mPlatform's unique_ptr needs the BASE type complete here for its reset()
+// whether or not the overrides below compile in.
 #include <backend/Platform.h>
 #endif
 #if defined(__ANDROID__) && __has_include(<bluevk/BlueVK.h>)
@@ -109,6 +109,110 @@ void persistPipelineCache(filament::backend::Platform& platform, std::string con
 }  // namespace
 #endif
 
+// The GL twin of the override above, guarded the same way: PlatformEGLAndroid.h
+// includes a utils header only the checkout carries (FilamentSdk.cmake).
+#if defined(__ANDROID__) && __has_include(<utils/android/PerformanceHintManager.h>)
+#define TTP_GL_PLATFORM_OVERRIDE 1
+#include <backend/platforms/PlatformEGLAndroid.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <atomic>
+#include <vector>
+namespace {
+// THE LINKED GL PROGRAMS OUTLIVE THE PROCESS TOO. A GL driver links every
+// program from source on every launch: on the Fire TV Stick that was most of a
+// minute of CPU on the compile threads before the lobby could draw. Filament's
+// GL backend hands each program it links to the platform's blob cache
+// (glGetProgramBinary) and asks there before compiling one (glProgramBinary). A
+// blob the driver refuses (a driver update, a torn file) fails Filament's link
+// check and the program compiles from source as it always did, and its insert
+// replaces the refused one.
+//
+// Many entries, so one file per key, named by its hash and carrying the key
+// itself: a hash collision reads as a miss. Written beside and renamed over,
+// per thread, since the compile pool inserts concurrently. BOUNDED twice: the
+// directory goes with the code cache on every app update, and inserts stop at
+// kGlProgramBytes, counted from what it already holds.
+constexpr size_t kGlProgramBytes = 32u << 20;
+
+std::string glProgramFile(std::string const& dir, const void* key, size_t keySize) {
+    uint64_t h = 1469598103934665603ull;   // FNV-1a
+    for (size_t i = 0; i < keySize; i++) {
+        h = (h ^ static_cast<const unsigned char*>(key)[i]) * 1099511628211ull;
+    }
+    char name[24];
+    std::snprintf(name, sizeof name, "/%016llx", (unsigned long long) h);
+    return dir + name;
+}
+
+void persistGlPrograms(filament::backend::Platform& platform, std::string const& dir) {
+    ::mkdir(dir.c_str(), 0700);
+    // What the store already holds, and the leftovers of a process killed
+    // mid-write, which nothing would ever read.
+    auto held = std::make_shared<std::atomic<size_t>>(0);
+    size_t programs = 0;
+    if (DIR* d = ::opendir(dir.c_str())) {
+        while (const dirent* e = ::readdir(d)) {
+            if (e->d_name[0] == '.') continue;
+            std::string const path = dir + "/" + e->d_name;
+            struct stat st;
+            if (std::strchr(e->d_name, '.')) {
+                ::unlink(path.c_str());
+            } else if (::stat(path.c_str(), &st) == 0) {
+                *held += (size_t) st.st_size;
+                programs++;
+            }
+        }
+        ::closedir(d);
+    }
+    utils::slog.i << "ttp: gl program store holds " << (unsigned) programs << " programs, "
+            << (unsigned) held->load() << " bytes" << utils::io::endl;
+    platform.setBlobFunc(
+            [dir, held](const void* key, size_t keySize, const void* value, size_t size) {
+                size_t const bytes = sizeof(uint32_t) + keySize + size;
+                if (held->fetch_add(bytes) + bytes > kGlProgramBytes) return;
+                std::string const file = glProgramFile(dir, key, keySize);
+                std::string const tmp = file + ".tmp" + std::to_string(::gettid());
+                FILE* f = std::fopen(tmp.c_str(), "wb");
+                if (!f) return;
+                uint32_t const ks = (uint32_t) keySize;
+                bool const wrote = std::fwrite(&ks, sizeof ks, 1, f) == 1
+                        && std::fwrite(key, 1, keySize, f) == keySize
+                        && std::fwrite(value, 1, size, f) == size;
+                if (std::fclose(f) == 0 && wrote) {
+                    std::rename(tmp.c_str(), file.c_str());
+                } else {
+                    std::remove(tmp.c_str());
+                }
+            },
+            // The value's size whenever the key matches, as the contract asks;
+            // its bytes only when they fit (Filament asks again with room).
+            [dir](const void* key, size_t keySize, void* value, size_t size) -> size_t {
+                FILE* f = std::fopen(glProgramFile(dir, key, keySize).c_str(), "rb");
+                if (!f) return 0;
+                size_t stored = 0;
+                uint32_t ks = 0;
+                std::vector<unsigned char> k(keySize);
+                if (std::fread(&ks, sizeof ks, 1, f) == 1 && ks == keySize
+                        && std::fread(k.data(), 1, keySize, f) == keySize
+                        && std::memcmp(k.data(), key, keySize) == 0) {
+                    long const at = std::ftell(f);
+                    std::fseek(f, 0, SEEK_END);
+                    long const end = std::ftell(f);
+                    std::fseek(f, at, SEEK_SET);
+                    stored = end > at ? (size_t) (end - at) : 0;
+                    if (stored && stored <= size && std::fread(value, 1, stored, f) != stored) {
+                        stored = 0;
+                    }
+                }
+                std::fclose(f);
+                return stored;
+            });
+}
+}  // namespace
+#endif
+
 // Every engine's recipe: init builds it on the spot, and on Android prepare
 // starts it ahead of the window.
 static Engine::Builder engineBuilder(backend::Backend backend) {
@@ -176,11 +280,21 @@ void TtpRenderer::prepare(backend::Backend backend) {
 #if defined(TTP_VK_PLATFORM_OVERRIDE)
     // The framebuffer-eviction override above. A provided platform is
     // caller-owned and must outlive the engine, so it is a member destroyed
-    // after Engine::destroy in shutdown; only the Vulkan backend takes it.
+    // after Engine::destroy in shutdown.
     if (backend == backend::Backend::VULKAN) {
-        mVkPlatform = std::make_unique<TtpVulkanPlatform>();
-        if (!mPipelineCacheFile.empty()) persistPipelineCache(*mVkPlatform, mPipelineCacheFile);
-        builder.platform(mVkPlatform.get());
+        mPlatform = std::make_unique<TtpVulkanPlatform>();
+        if (!mProgramCacheDir.empty()) {
+            persistPipelineCache(*mPlatform, mProgramCacheDir + "/vk-pipeline-cache.bin");
+        }
+        builder.platform(mPlatform.get());
+    }
+#endif
+#if defined(TTP_GL_PLATFORM_OVERRIDE)
+    // The platform Filament would make for GL itself, with the program store.
+    if (backend == backend::Backend::OPENGL && !mProgramCacheDir.empty()) {
+        mPlatform = std::make_unique<backend::PlatformEGLAndroid>();
+        persistGlPrograms(*mPlatform, mProgramCacheDir + "/gl-programs");
+        builder.platform(mPlatform.get());
     }
 #endif
     // Filament answers on a thread of its own once the driver is up, or has
@@ -2779,7 +2893,7 @@ TtpRenderer::~TtpRenderer() {
     utils::EntityManager::get().destroy(mCameraEntity);
     Engine::destroy(&mEngine);
 #if defined(__ANDROID__)
-    mVkPlatform.reset();   // caller-owned platform, after the engine using it
+    mPlatform.reset();   // caller-owned platform, after the engine using it
 #endif
 }
 

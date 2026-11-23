@@ -510,7 +510,9 @@ memory until another track builds or the renderer goes.
 - **The one-time half is a warm-up problem.** Filament's Vulkan pipeline-cache
   prewarming needs an extension the reference box lacks, so the effect pools are
   drawn once before the race (`warmEffectPipelines`) and the compiled pipelines
-  persist in a file the Android shell names (`setPipelineCacheFile`).
+  persist in the directory the Android shell names (`setProgramCacheDir`). So do
+  the Android GL backend's linked programs (`persistGlPrograms`): one file per
+  program, which a refusing driver just recompiles.
 - **Car bodies ARE kept** (`mBodyPool`), and **parking restores nothing**: a
   parked body still wears the last frame's pose, so `takeAsset` hands one back at
   its snapshotted parse pose (`mBodyRest`). Anything added to a reuse path asks

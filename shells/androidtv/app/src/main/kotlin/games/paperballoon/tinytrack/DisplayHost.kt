@@ -9,7 +9,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONArray
-import java.io.File
 import java.nio.ByteOrder
 
 /**
@@ -108,12 +107,12 @@ class DisplayHost(
     private var attemptMarked = false
 
     /**
-     * Where a Vulkan engine keeps its compiled pipelines between runs: the CODE
-     * cache, which Android empties when the app is updated, so a build with new
-     * materials never starts from the last one's pipelines.
+     * Where the engine keeps its compiled shaders between runs (a Vulkan
+     * engine's pipelines, a GL engine's program binaries): the CODE cache, which
+     * Android empties when the app is updated, so a build with new materials
+     * never starts from the last one's.
      */
-    private val pipelineCacheFile =
-        File(view.context.codeCacheDir, "vk-pipeline-cache.bin").path.toByteArray()
+    private val programCacheDir = view.context.codeCacheDir.path.toByteArray()
 
     /**
      * Fired EVERY time a surface comes into existence, not just the first.
@@ -251,7 +250,7 @@ class DisplayHost(
             vkCanaryArmed = true
             attemptMarked = true
         }
-        TtpSurface.nativePrepare(vulkan, pipelineCacheFile)
+        TtpSurface.nativePrepare(vulkan, programCacheDir)
     }
 
     // -- SurfaceHolder.Callback ---------------------------------------------
@@ -270,18 +269,18 @@ class DisplayHost(
             // picture either way — and the refusal keeps its canary count, so a
             // driver that refuses twice stops being asked.
             var vulkan = VulkanPolicy.useVulkan(view.context)
-            val pipelines = pipelineCacheFile
+            val shaders = programCacheDir
             if (vulkan) {
                 if (!attemptMarked) VulkanPolicy.markAttempt(view.context)
                 attemptMarked = false
                 vkCanaryArmed = true
-                if (!TtpSurface.nativeCreate(holder.surface, width, height, true, pipelines)) {
+                if (!TtpSurface.nativeCreate(holder.surface, width, height, true, shaders)) {
                     Log.e(TAG, "Vulkan engine refused ${width}x$height — retrying on GL")
                     vulkan = false
                     vkCanaryArmed = false
                 }
             }
-            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false, pipelines)) {
+            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false, shaders)) {
                 Log.e(TAG, "ttp_display_create failed for ${width}x$height")
                 return
             }

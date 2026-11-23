@@ -27,7 +27,7 @@ internal object TtpSurface {
      * another. A no-op while a display is up or an engine is already started.
      * Same thread as [nativeCreate]: only the thread that started it may take it.
      */
-    external fun nativePrepare(vulkan: Boolean, pipelineCacheFile: ByteArray)
+    external fun nativePrepare(vulkan: Boolean, programCacheDir: ByteArray)
 
     /**
      * Bind the engine to a live [Surface]. `width`/`height` are the surface's
@@ -37,11 +37,11 @@ internal object TtpSurface {
      * backend for the life of this engine — the caller decides ([VulkanPolicy]
      * through [DisplayHost]); this just carries it across, because the shared
      * `ttp_display_create` ABI cannot grow a platform-private parameter.
-     * `pipelineCacheFile` (UTF-8) is where a Vulkan engine keeps its compiled pipelines
+     * `programCacheDir` (UTF-8) is where the engine keeps its compiled shaders
      * between runs, for the same reason.
      */
     external fun nativeCreate(surface: Surface, width: Int, height: Int, vulkan: Boolean,
-                              pipelineCacheFile: ByteArray): Boolean
+                              programCacheDir: ByteArray): Boolean
 
     /**
      * Tear the display down. The caller removes its Choreographer callback

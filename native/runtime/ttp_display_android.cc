@@ -43,8 +43,8 @@ namespace {
 // ttp_display_create's signature is the shared ABI and the backend is this
 // platform's private business.
 static bool gUseVulkan = false;
-// TtpRenderer::setPipelineCacheFile's path, carried like gUseVulkan.
-static std::string gPipelineCacheFile;
+// TtpRenderer::setProgramCacheDir's directory, carried like gUseVulkan.
+static std::string gProgramCacheDir;
 
 // An engine started before its window (nativePrepare), and the backend it was
 // started on. The next ttp_display_create takes it instead of starting one.
@@ -111,7 +111,7 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     }
     if (!renderer) {
         renderer = new TtpRenderer();
-        renderer->setPipelineCacheFile(gPipelineCacheFile);
+        renderer->setProgramCacheDir(gProgramCacheDir);
     }
     if (!renderer->init(gUseVulkan ? filament::backend::Backend::VULKAN
                                    : filament::backend::Backend::OPENGL,
@@ -152,16 +152,16 @@ void ttp_display_destroy(void) {
 
 // THE ENGINE NEEDS NO WINDOW UNTIL ITS SWAP CHAIN, and the surface arrives
 // only after Compose's first frame — so the driver (the Vulkan instance and
-// device, the pipeline cache read, or the EGL context) is started here, from
+// device, the pipeline cache read, or the EGL context and its program store) is started here, from
 // onCreate, on Filament's own thread, and the create that follows collects it.
 // Every ttp_* call stays on main: this thread only starts it and only it takes
 // it back. A display already up, or an engine already started, is left alone.
 JNIEXPORT void JNICALL
 Java_games_paperballoon_tinytrack_TtpSurface_nativePrepare(
-        JNIEnv* env, jclass, jboolean vulkan, jbyteArray pipelineCacheFile) {
+        JNIEnv* env, jclass, jboolean vulkan, jbyteArray programCacheDir) {
     if (ttp::rt::displayCore() || gPrepared) return;
     gPrepared = new TtpRenderer();
-    gPrepared->setPipelineCacheFile(utf8(env, pipelineCacheFile));
+    gPrepared->setProgramCacheDir(utf8(env, programCacheDir));
     gPreparedVulkan = vulkan == JNI_TRUE;
     gPrepared->prepare(gPreparedVulkan ? filament::backend::Backend::VULKAN
                                        : filament::backend::Backend::OPENGL);
@@ -170,10 +170,10 @@ Java_games_paperballoon_tinytrack_TtpSurface_nativePrepare(
 JNIEXPORT jboolean JNICALL
 Java_games_paperballoon_tinytrack_TtpSurface_nativeCreate(
         JNIEnv* env, jclass, jobject surface, jint width, jint height,
-        jboolean vulkan, jbyteArray pipelineCacheFile) {
+        jboolean vulkan, jbyteArray programCacheDir) {
     if (!surface) return JNI_FALSE;
     gUseVulkan = vulkan == JNI_TRUE;
-    gPipelineCacheFile = utf8(env, pipelineCacheFile);
+    gProgramCacheDir = utf8(env, programCacheDir);
     // fromSurface RETURNS an acquired window; ttp_display_create acquires again
     // for its own reference, so this one is released either way below.
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
