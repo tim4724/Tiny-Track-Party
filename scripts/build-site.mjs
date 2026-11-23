@@ -122,8 +122,11 @@ for (const rel of fs.readdirSync(OUT, { recursive: true })) {
   fs.writeFileSync(file, html);
 }
 
-// Off the main thread and in parallel: the engine wasm alone is seconds.
+// Off the main thread and in parallel: the engine wasm alone is seconds. The
+// E2E build (the one that sets RELAY_URL) tests the .br path, not its ratio,
+// so it takes Apache's own quality and leaves every test run ~10 s sooner.
 const brotli = promisify(zlib.brotliCompress);
+const quality = relayUrl ? 5 : 11;
 const named = new Set([
   ...engineFiles.map((name) => `display/engine/${engine}/${name}`),
   ...Object.keys(metafile.outputs).filter((out) => !out.endsWith('.map')),
@@ -131,7 +134,7 @@ const named = new Set([
 ]);
 await Promise.all([...named].map(async (rel) => {
   const data = fs.readFileSync(path.join(OUT, rel));
-  const br = await brotli(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } });
+  const br = await brotli(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } });
   if (br.length < data.length) fs.writeFileSync(path.join(OUT, rel + '.br'), br);
 }));
 
