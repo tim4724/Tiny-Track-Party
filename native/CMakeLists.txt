@@ -72,6 +72,38 @@ target_compile_options(ttp_warnings INTERFACE
   -Wno-unused-parameter   # ABI stubs and callback signatures keep unused params by contract
 )
 
+# ---- Web: compiled for size, except where the frame runs --------------------
+# A browser downloads the engine on its first visit, so the wasm is -Oz. The
+# sources below keep -O3: the ones a sampling profile of the bench race (4P and
+# 1P) shows the frame spending its wasm time in, measured null against an
+# all--O3 module. A source that starts running every frame belongs here — and
+# so does one whose INLINE helpers a hot caller reaches out of line: the linker
+# keeps one copy of an inline function, from whichever object it meets first, so
+# a -Oz caller can hand the -O3 ones its slow copy. Configure with
+# -DCMAKE_EXE_LINKER_FLAGS=--profiling-funcs to see names in a profile.
+# The level changes no result: the strict-FP flags above hold at any -O, and the
+# wasm ctest leg replays the corpora on these same objects. Release only; the
+# native platforms stay -O3 throughout.
+if(EMSCRIPTEN)
+  add_compile_options($<$<CONFIG:Release>:-Oz>)
+  set_source_files_properties(
+    renderer/src/TtpRenderer.cpp
+    renderer/src/TtpRendererDecals.cpp
+    renderer/src/TtpRendererFrame.cpp
+    renderer/src/TtpRendererMotion.cpp
+    runtime/ttp_display_core.cc
+    runtime/ttp_runtime.cc
+    libttp-runtime/ttp/frame_builder.cc
+    libttp-sim/ttp/ai_driver.cc
+    libttp-sim/ttp/game.cc
+    libttp-track/ttp/centerline.cc
+    libttp-json/ttp/canonical.cc
+    libttp-json/ttp/jsonnum.cc
+    vendor/double-conversion/double-conversion/double-to-string.cc
+    vendor/double-conversion/double-conversion/fast-dtoa.cc
+    PROPERTIES COMPILE_OPTIONS $<$<CONFIG:Release>:-O3>)
+endif()
+
 # Emscripten leg (Track S M4): the same check binaries and replay CLI compile
 # to WASM and run under Node — `emcmake cmake ... -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)`
 # lets ctest run them transparently. NODERAWFS reads the fixture files straight
