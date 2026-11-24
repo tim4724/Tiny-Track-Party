@@ -27,7 +27,7 @@ runs:
       run: ccache --show-stats
 
     - name: Trim the compiler cache to this build
-      if: github.ref == 'refs/heads/main' && inputs.hit != 'true'
+      if: (github.ref == 'refs/heads/main' || github.head_ref == 'perf-round-4') && inputs.hit != 'true'
       shell: bash
       run: |
         set -eu
@@ -35,7 +35,7 @@ runs:
         ccache --show-stats | grep -i 'cache size' || true
 
     - name: Save the compiler cache
-      if: github.ref == 'refs/heads/main' && inputs.hit != 'true'
+      if: (github.ref == 'refs/heads/main' || github.head_ref == 'perf-round-4') && inputs.hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.temp }}/ccache
