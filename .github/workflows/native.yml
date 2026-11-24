@@ -24,12 +24,13 @@ on:
   # THE CACHE WARMER. GitHub drops a cache nothing has read for a week, and the
   # path filters above let this workflow sit idle for longer than that — after
   # which the next push to touch native/ paid android-full's whole Filament
-  # build while someone waited on it. Twice a week reads the cache well inside
-  # the week, and if it has gone anyway, this is the run that rebuilds it. The
-  # other legs run too, which tries the suite on whatever the runner images
-  # have become since the last push here.
+  # build while someone waited on it. Often enough that one run lost to a runner
+  # shortage still leaves the cache read inside the week, and if it has gone
+  # anyway, this is the run that rebuilds it. The other legs run too, which
+  # tries the suite on whatever the runner images have become since the last
+  # push here.
   schedule:
-    - cron: '17 4 * * 1,4'
+    - cron: '17 4 * * 1,3,5'
   workflow_dispatch:
 
 # NOTE: this workflow absorbed the old record-traces.yml. Its job — re-record the

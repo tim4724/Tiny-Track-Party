@@ -82,7 +82,7 @@ on:
   # drops a cache nothing has read for a week, and the path filters above let
   # this sit idle for longer. See native.yml's schedule.
   schedule:
-    - cron: '47 4 * * 1,4'
+    - cron: '47 4 * * 1,3,5'
   workflow_dispatch:
 
 # A pull request's newer push cancels its older run. A run on MAIN is never
