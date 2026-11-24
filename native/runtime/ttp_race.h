@@ -294,7 +294,8 @@ TTP_ABI double ttp_race_flourish_ms(void);
  * is measured in frames rather than in the build returning.
  *
  *   sessionHandle  the launched race. Its pause is read here, not passed in:
- *                  a paused race never counts down (race_flow.h).
+ *                  a paused race never counts down (race_flow.h). 0 or a
+ *                  disposed handle reads as not paused.
  *   sceneBuilt     the shell's "my scene build has returned" latch
  *   measuring      is this surface feeding ttp_perf_sample at all? A shell that
  *                  is not (the web under automation or a pinned ?dpr=) has no
