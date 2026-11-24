@@ -119,6 +119,8 @@ class AudioDevice(
     private var musicMuted = false
     /** The song's own level, before the mute and the master gain. */
     private var musicBed = 1f
+    /** [suspend] paused the bed itself, so [resume] plays it again. Any music command clears it. */
+    private var musicHeld = false
     /** What [music] is streaming, so a repeat rewinds instead of re-fetching. */
     private var musicUrl: String? = null
 
@@ -180,13 +182,30 @@ class AudioDevice(
      * The app left the screen: silence the decisions, then close the mix stream
      * so the box can idle ([AudioMixer.release] says what an open one holds).
      * [resume] reopens it on the way back.
+     *
+     * THE MUSIC BED IS PAUSED HERE TOO, after the drain has performed whatever the
+     * decisions queued. A race with a seated phone is already frozen by the
+     * link-down the background walk answers, and its pause is in that drain; but
+     * Android keeps a stopped app's process running (tvOS suspends it), so a bed
+     * nothing froze, a scenario race's, would play on over the launcher. Only a
+     * bed paused HERE is played again by [resume]; the frozen race's waits for
+     * its thaw.
      */
     fun suspend() {
         silence()
         mixer.release()
+        musicHandler.post {
+            val m = music
+            if (musicPrepared && m != null && m.isPlaying) { m.pause(); musicHeld = true }
+        }
     }
 
-    fun resume() = mixer.start()
+    fun resume() {
+        mixer.start()
+        musicHandler.post {
+            if (musicHeld) { musicHeld = false; music?.start() }
+        }
+    }
 
     fun stopCar(id: EngineId) = Ttp.ttp_audio_stop_car(TtpJson.arg(id.json))
 
@@ -289,9 +308,11 @@ class AudioDevice(
                     MUSIC_START -> { pendingSong = subject; pendingBed = level }
                     MUSIC_STOP -> { pendingSong = null; musicHandler.post { stopMusic() } }
                     MUSIC_PAUSE -> musicHandler.post {
+                        musicHeld = false
                         if (musicPrepared) music?.pause() else musicWantsPause = true
                     }
                     MUSIC_RESUME -> musicHandler.post {
+                        musicHeld = false
                         musicWantsPause = false
                         if (musicPrepared && music?.isPlaying == false) music?.start()
                     }
@@ -332,6 +353,7 @@ class AudioDevice(
                 live.setVolume(musicGain, musicGain)
                 live.seekTo(0)
                 musicWantsPause = false
+                musicHeld = false
                 if (!live.isPlaying) live.start()
                 return
             } catch (t: Throwable) {
@@ -475,6 +497,7 @@ class AudioDevice(
         musicPrepared = false
         musicUrl = null
         musicWantsPause = false
+        musicHeld = false
         music?.let { try { it.stop() } catch (_: Throwable) { }; it.release() }
         music = null
         musicNext?.release()
