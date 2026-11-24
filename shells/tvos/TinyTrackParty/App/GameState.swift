@@ -195,7 +195,9 @@ final class GameState: ObservableObject {
     /// with the rect the RENDERER letterboxed for that cell.
     @Published var cells: [CellHUD] = []
 
-    struct CellHUD: Identifiable {
+    /// Equatable so the slow tick publishes only a cell that CHANGED: every
+    /// `@Published` write re-evaluates the whole root body, equal value or not.
+    struct CellHUD: Identifiable, Equatable {
         let index: Int
         /// Whose cell this is. Carried so the item slot can find this car's
         /// pickup counter — the slot re-spins on a fresh PICKUP, not on the item

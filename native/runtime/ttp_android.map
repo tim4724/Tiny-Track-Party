@@ -1,0 +1,11 @@
+/* The Android engine .so exports what the VM looks up by name and nothing else:
+   JNI_OnLoad, which registers the generated bridge's whole table
+   (runtime/ttp_jni.cc), and the hand-written Java_* surface natives
+   (runtime/ttp_display_android.cc). See native/CMakeLists.txt. */
+{
+  global:
+    JNI_OnLoad;
+    Java_*;
+  local:
+    *;
+};

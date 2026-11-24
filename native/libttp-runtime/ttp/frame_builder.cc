@@ -132,13 +132,10 @@ V3 coverFollow(DisplayState& d, const std::vector<const Car*>& cars, const Game*
     return lens.apply(d.obstacles, d.tagDeck, n, f.loop >= 0, dt);
 }
 
-}  // namespace
-
-TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
-                          float cellAspect) {
-    // Cars, in ROSTER order: the renderer baked each slot's model and livery at
-    // build time, so slot i must keep carrying the car the roster named. Ids,
-    // not indices — `cars()` is insertion order and the roster is cell order.
+// Cars, in ROSTER order: the renderer baked each slot's model and livery at
+// build time, so slot i must keep carrying the car the roster named. Ids,
+// not indices — `cars()` is insertion order and the roster is cell order.
+std::vector<const Car*> slotCars(const DisplayState& d, const Game* eng) {
     std::vector<const Car*> cars(d.roster.size(), nullptr);
     if (eng) {
         for (const auto& cp : eng->cars()) {
@@ -147,22 +144,42 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             }
         }
     }
+    return cars;
+}
 
-    // Views: one chase camera per cell car, or a single overview when no car
-    // owns a cell (the lobby's attract race, the gallery, a track preview).
-    //
-    // A cell whose car is not in THIS scene's roster gets no camera worth
-    // pointing: the spring has never been seeded, so it would sit at the origin
-    // and stare at whatever happens to be there. That is reachable whenever the
-    // cells are set before the scene that holds those cars has finished
-    // building, so fall back to the overview until at least one of them lands.
-    bool anyCellCar = false;
+// Views: one chase camera per cell car, or a single overview when no car
+// owns a cell (the lobby's attract race, the gallery, a track preview).
+//
+// A cell whose car is not in THIS scene's roster gets no camera worth
+// pointing: the spring has never been seeded, so it would sit at the origin
+// and stare at whatever happens to be there. That is reachable whenever the
+// cells are set before the scene that holds those cars has finished
+// building, so fall back to the overview until at least one of them lands.
+bool raceCamsFor(const DisplayState& d, const std::vector<const Car*>& cars) {
     for (const ScalarId& cell : d.cells) {
-        for (size_t i = 0; i < d.roster.size() && !anyCellCar; i++) {
-            if (d.roster[i] == cell && cars[i]) anyCellCar = true;
+        for (size_t i = 0; i < d.roster.size(); i++) {
+            if (d.roster[i] == cell && cars[i]) return true;
         }
     }
-    const bool raceCams = anyCellCar;
+    return false;
+}
+
+}  // namespace
+
+bool filmsScenery(const DisplayState& d, const Game* eng) {
+    if (d.camMode != CAM_COVERAGE && d.camMode != CAM_FOLLOW) return false;
+    const std::vector<const Car*> cars = slotCars(d, eng);
+    if (raceCamsFor(d, cars)) return false;
+    // With no car to film, both rigs stand still (FollowCam::update,
+    // Coverage's WIDE); a held field is every slot (buildFrame's `live`).
+    if (d.hold && d.held.size() == cars.size() && !cars.empty()) return true;
+    return std::any_of(cars.begin(), cars.end(), [](const Car* c) { return c != nullptr; });
+}
+
+TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
+                          float cellAspect) {
+    const std::vector<const Car*> cars = slotCars(d, eng);
+    const bool raceCams = raceCamsFor(d, cars);
     uint32_t viewCount = raceCams ? (uint32_t) d.cells.size() : 1;
     // The renderer owns the rect — it fits the grid as ONE piece, so a cell is a
     // tile of the fitted picture and not of the raw surface. The caller measured

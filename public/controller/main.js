@@ -99,14 +99,14 @@ let roster = [];           // latest lobby roster (for the host name in the wait
 let hostPeerIndex = null;
 let displaySoundOn = true; // the DISPLAY's mute state (snapshot soundOn) — the host's Sound setting renders it
 let displayFrameRate = null; // the snapshot's frameRate {half, fullHz, halfHz}, null where the TV holds 60 and offers no choice
-// Chooser content, driven entirely off the relay room snapshot (set_state) — the
-// phone bundles none of it, so it can't diverge from a differently-versioned
-// display. tracks ride the snapshot in the lobby only; cars + the livery palette
-// always. Car images load by id from the web host (carThumbs.js).
-let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] — snapshot.tracks (lobby only)
-let trackCatalogRaw = '';  // the packed snapshot.tracks it was decoded from (skip re-decoding per push)
-let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
-let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
+// Chooser content, driven entirely off the display (the CHOOSER message, or an
+// older display's snapshots; see adoptChooser) — the phone bundles none of it, so
+// it can't diverge from a differently-versioned display. Car images load by id
+// from the web host (carThumbs.js).
+let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] — chooser.tracks
+let trackCatalogRaw = '';  // the packed chooser.tracks it was decoded from (skip re-decoding per push)
+let carCatalog = [];       // [{id,name,stats}] — chooser.cars
+let colorPalette = (window.CAR_COLORS || []).slice(); // chooser.colors (bundled palette = pre-chooser fallback)
 const liveryOf = (i) => colorPalette[i] || '#888';
 let selectedMode = null;   // current pick {mode:'cup'|'random'|'tour', cupId?, randomRaces?} (host-controlled, echoed to all)
 let displayMode = null;    // pick the display last reported (LOBBY_UPDATE snapshot); null = it has none
@@ -313,11 +313,16 @@ function modeFrom(data) {
 function handleMessage(data) {
   switch (data.type) {
     // The retained room snapshot (set_state) is the single source of truth:
-    // identity, roster, selection, chooser content, and which screen we belong
-    // on. Replayed on every (re)join and pushed on every change, so a reconnecting
-    // phone recovers its whole state here — no unicast WELCOME round-trip to miss.
+    // identity, roster, selection, and which screen we belong on. Replayed on
+    // every (re)join and pushed on every change, so a reconnecting phone
+    // recovers its whole state here — no unicast WELCOME round-trip to miss.
     case MSG.LOBBY_UPDATE:
       syncRoom(data);
+      break;
+    // The picker content, once per (re)join. Net.js holds back every snapshot
+    // that names it until it is here, so the next syncRoom renders with it.
+    case MSG.CHOOSER:
+      adoptChooser(data);
       break;
     // Transient haptic tick (3..2..1..GO). The snapshot owns the screen; this is
     // just the buzz plus a fresh-race USE reset.
@@ -335,19 +340,15 @@ function handleMessage(data) {
   }
 }
 
-// Land this phone on the screen the snapshot describes, and adopt its identity /
-// roster / chooser content. Idempotent by design: it runs on every replay and
-// every push, so each branch must be a safe no-op when we're already there.
-function syncRoom(data) {
-  hideConn();   // the snapshot reached us ⇒ the relay link + the display are alive
-
-  // Chooser content, display-authoritative. tracks ride the snapshot in the lobby
-  // only, so keep the last set for the picker; cars + palette come on every push.
+// Chooser content, display-authoritative: a current display sends it as the
+// CHOOSER message, an older one puts it on every snapshot (tracks in the lobby
+// only), so keep the last set of each key.
+function adoptChooser(data) {
   if (data.cars) carCatalog = data.cars;
   if (data.colors) colorPalette = data.colors;
-  // Each track's svg rides the snapshot as a packed base64 string (RDP + uint8);
-  // decode it back to the { viewBox, d, start } the picker renders. The same
-  // catalogue rides EVERY lobby push, so only re-decode when it actually changed.
+  // Each track's svg rides as a packed base64 string (RDP + uint8); decode it
+  // back to the { viewBox, d, start } the picker renders. An older display sends
+  // the same catalogue on EVERY lobby push, so only re-decode when it changed.
   if (data.tracks) {
     const raw = JSON.stringify(data.tracks);
     if (raw !== trackCatalogRaw) {
@@ -355,6 +356,15 @@ function syncRoom(data) {
       trackCatalog = data.tracks.map((t) => ({ ...t, svg: unpackSchematic(t.svg) }));
     }
   }
+}
+
+// Land this phone on the screen the snapshot describes, and adopt its identity /
+// roster. Idempotent by design: it runs on every replay and every push, so each
+// branch must be a safe no-op when we're already there.
+function syncRoom(data) {
+  hideConn();   // the snapshot reached us ⇒ the relay link + the display are alive
+
+  adoptChooser(data);   // an older display's snapshot; a current one's carries none
   if (data.progress) progressData = data.progress;
 
   roster = data.players || [];
@@ -402,7 +412,7 @@ function syncRoom(data) {
     el('drive-hud').classList.remove('hidden');  // pause + settings ride inside it
     setPauseOverlay(!!data.paused);  // re-raise a pause missed while away
     if (data.paused) haptics.stopLoop();
-    startDriving(myName || 'Racer'); // resume/continue streaming tilt to our car
+    startDriving(myName || 'Racer', !!data.paused); // stream tilt to our car, or hold it under the pause
   } else if (waitingForNextRace && board && board.over) {
     // Late joiner and the FINAL board is up — it lists us as "Next race", so join
     // everyone on the results screen.

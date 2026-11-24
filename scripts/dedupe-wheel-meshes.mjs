@@ -53,39 +53,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { encodeGlb, readGlb } from './lib/glb-compose.mjs';
+
 const ASSET_DIR = 'public/assets/toycar';
 const CHECK = process.argv.includes('--check');
 
 const COMPONENT_BYTES = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
 const TYPE_COUNT = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 };
-
-function readGlb(file) {
-  const buf = fs.readFileSync(file);
-  if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error(`${file}: not a GLB`);
-  const jsonLen = buf.readUInt32LE(12);
-  const json = JSON.parse(buf.slice(20, 20 + jsonLen).toString('utf8'));
-  const binLen = buf.readUInt32LE(20 + jsonLen);
-  const bin = buf.slice(20 + jsonLen + 8, 20 + jsonLen + 8 + binLen);
-  return { json, bin };
-}
-
-function writeGlb(file, json, bin) {
-  let jsonBuf = Buffer.from(JSON.stringify(json), 'utf8');
-  while (jsonBuf.length % 4) jsonBuf = Buffer.concat([jsonBuf, Buffer.from(' ')]);
-  let binBuf = bin;
-  while (binBuf.length % 4) binBuf = Buffer.concat([binBuf, Buffer.alloc(1)]);
-  const head = Buffer.alloc(12);
-  head.write('glTF', 0);
-  head.writeUInt32LE(2, 4);
-  head.writeUInt32LE(12 + 8 + jsonBuf.length + 8 + binBuf.length, 8);
-  const jsonHead = Buffer.alloc(8);
-  jsonHead.writeUInt32LE(jsonBuf.length, 0);
-  jsonHead.write('JSON', 4);
-  const binHead = Buffer.alloc(8);
-  binHead.writeUInt32LE(binBuf.length, 0);
-  binHead.write('BIN\0', 4);
-  fs.writeFileSync(file, Buffer.concat([head, jsonHead, jsonBuf, binHead, binBuf]));
-}
 
 function readAccessor(bin, json, i) {
   const a = json.accessors[i];
@@ -94,24 +68,30 @@ function readAccessor(bin, json, i) {
   const width = COMPONENT_BYTES[a.componentType];
   const lanes = TYPE_COUNT[a.type];
   // These files hold one tightly-packed view per accessor — a declared
-  // byteStride equal to the element is still packed, which is how they ship. An
-  // INTERLEAVED one would still be copied correctly by prune (it carries the
-  // stride across), but the signature below would compare the wrong bytes and
-  // could fold two wheels that are not the same disc. Refuse rather than read
-  // past the stride.
-  if (view.byteStride != null && view.byteStride !== width * lanes) {
+  // byteStride equal to the element (rounded up to 4, as a quantized i8 normal
+  // is) is still packed, which is how they ship. An INTERLEAVED one would still
+  // be copied correctly by prune (it carries the stride across), but the
+  // signature below would compare the wrong bytes and could fold two wheels
+  // that are not the same disc. Refuse rather than read past the stride.
+  const stride = view.byteStride ?? width * lanes;
+  if (stride !== Math.ceil(width * lanes / 4) * 4 && stride !== width * lanes) {
     throw new Error(`accessor ${i} is interleaved (byteStride ${view.byteStride}`
         + ` over a ${width * lanes}-byte element) — the wheel signatures would be garbage`);
   }
+  // A normalized integer decodes the glTF way (KHR_mesh_quantization).
+  const unit = a.normalized ? { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 }[a.componentType] : 1;
   const rows = [];
   for (let r = 0; r < a.count; r++) {
     const row = [];
     for (let c = 0; c < lanes; c++) {
-      const at = base + (r * lanes + c) * width;
-      row.push(a.componentType === 5126 ? bin.readFloatLE(at)
+      const at = base + r * stride + c * width;
+      const v = a.componentType === 5126 ? bin.readFloatLE(at)
              : a.componentType === 5125 ? bin.readUInt32LE(at)
              : a.componentType === 5123 ? bin.readUInt16LE(at)
-             : bin.readUInt8(at));
+             : a.componentType === 5122 ? bin.readInt16LE(at)
+             : a.componentType === 5120 ? bin.readInt8(at)
+             : bin.readUInt8(at);
+      row.push(unit === 1 ? v : Math.max(v / unit, -1));
     }
     rows.push(row);
   }
@@ -257,7 +237,7 @@ for (const file of fs.readdirSync(ASSET_DIR).filter((f) => f.endsWith('.glb')).s
     for (const w of group) w.mesh = keep;
   }
   const before = fs.statSync(full).size;
-  writeGlb(full, json, prune(json, bin));
+  fs.writeFileSync(full, encodeGlb(json, prune(json, bin)));
   console.log(`${file}: ${meshes.length} wheel meshes -> ${groups.size}  (${shape})`
       + `  ${before} -> ${fs.statSync(full).size} bytes`);
 }

@@ -66,11 +66,12 @@ another layer's state the read happens here rather than through JS. That replace
 the shell as courier, where two C++ functions reached each other through a
 serialize/parse round trip on every publish.
 
-**The cost is the chooser payload, not the roster** — an immutable blob set once
+**The cost was the chooser payload, not the roster** — an immutable blob set once
 at boot that the round trip re-parsed on every join, rename, pick and ready
-toggle. Node microbenchmarks under-read this badly because a hand-built snapshot
-has no chooser in it: **measure a publish path in the page with the real payload,
-or do not quote a number.**
+toggle. It has since left the snapshot for a per-phone CHOOSER
+(`libttp-party/CLAUDE.md`), but the lesson stands: a hand-built payload
+under-reads the real one, so **measure a path in the page with the real
+payload, or do not quote a number.**
 
 **A handle form is gated by agreement, not by corpus**: it adds no rule, it
 only GATHERS what a shell used to gather, so the only statement of correctness

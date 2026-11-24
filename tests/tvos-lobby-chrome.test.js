@@ -79,7 +79,7 @@ test('every shipped car model has a still to draw', () => {
   // placeholder, which looks like a deliberate empty seat.
   const thumbs = path.join(ROOT, 'public/assets/toycar/thumbs');
   const have = new Set(readdirSync(thumbs)
-    .filter((f) => f.endsWith('.png') && !f.endsWith('.strip.png'))
+    .filter((f) => f.endsWith('.png'))
     .map((f) => f.replace(/\.png$/, '')));
   const proto = readFileSync(path.join(ROOT, 'public/shared/protocol.js'), 'utf8');
   const list = proto.slice(proto.indexOf('CAR_MODELS'));

@@ -911,7 +911,7 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
  * knob can answer. */
 #define TTP_FEAT_ROAD     0x04  /* the deck ribbon — decals, rubber and paint ride its shader */
 #define TTP_FEAT_TERRAIN  0x08  /* ground, sky dome, hills, water, pillars, berms, gantry */
-#define TTP_FEAT_DRESSING 0x10  /* scenery, props, landmarks, clutter, cones, signs */
+#define TTP_FEAT_DRESSING 0x10  /* scenery, props, set pieces, landmarks, clutter, cones, signs */
 #define TTP_FEAT_SKY      0x20  /* clouds, dust banks, birds, kites, balloon */
 #define TTP_FEAT_CARS     0x40  /* car GLBs, monster rigs, boost streaks */
 #define TTP_FEAT_EFFECTS  0x80  /* item pools, rockets, bursts, ambient particles */

@@ -243,7 +243,7 @@ val checkEngine = tasks.register("checkEngine") {
     val noEngine = project.hasProperty("ttpNoEngine")
     val sources = fileTree("$rootDir/../../native") {
         include("**/*.cc", "**/*.h", "**/*.cpp", "**/*.hpp", "**/*.inc")
-        include("**/CMakeLists.txt", "**/*.cmake")
+        include("**/CMakeLists.txt", "**/*.cmake", "**/*.map")
         exclude("build/**")     // per-worktree build trees, gitignored
     }
     val libFiles = listOf("armeabi-v7a", "arm64-v8a")

@@ -178,7 +178,7 @@ private struct CellChrome: View {
     /// `.cell-rank`: a white paper badge for the ordinal over a GLASS
     /// "LAP 2/3" pill, the pair right-aligned.
     ///
-    /// The lap pill is the glass tint without the web's backdrop blur. Behind it
+    /// The lap pill is the glass tint alone, no backdrop blur. Behind it
     /// is the live race at full rate, and a blur re-run per cell per frame is GPU
     /// time spent on a cosmetic the 55% tint already gives the white type.
     private var rankReadout: some View {

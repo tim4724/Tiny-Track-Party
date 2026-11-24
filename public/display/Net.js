@@ -222,10 +222,10 @@ export class DisplayNet extends GameNet {
     // and read the configured chooser, so this survives only as the
     // trackChooser fallback below.
     this.tracks = opts.trackCatalog || [];
-    // Slim chooser content for the retained room snapshot (set_state): reduced
-    // track schematics (lobby only — the bulk), car id/name/stats (always — the
-    // late-joiner picker needs it mid-race), and the livery palette. The controller
-    // renders straight off these; car images load by id from the web host.
+    // Slim chooser content, sent to each phone once as the CHOOSER the HELLO walk
+    // answers with: reduced track schematics, car id/name/stats, and the livery
+    // palette. The controller renders straight off these; car images load by id
+    // from the web host.
     this.trackChooser = opts.trackChooser || this.tracks;
     this.carChooser = opts.carChooser || [];
     this.colorPalette = opts.colorPalette || [];
@@ -415,6 +415,9 @@ export class DisplayNet extends GameNet {
   // The stored pick ({mode,cupId,randomRaces,trackId}), read where it lives.
   // One crossing per ask, at button-press frequency.
   get pick() { return session.pick(this.flow.handle); }
+  // Whether the screen is held awake: while a party exists (session.h's
+  // keep_screen_awake over the roster).
+  get keepAwake() { return session.keepAwake(this.flow.handle); }
   // Field projections of the same read — the E2E surface (window.__net.mode
   // and friends) predates the stored pick and stays stable. Prefer `pick` in
   // game code: one crossing for all four fields.
@@ -491,18 +494,16 @@ export class DisplayNet extends GameNet {
   // The room's single outbound message: the retained host snapshot (relay
   // set_state). The relay pushes it live to every controller and replays it right
   // after `joined`, so a (re)joining phone recovers its whole state — identity,
-  // roster, selection, results, and the chooser content — from the replay alone.
-  // There is no per-phone WELCOME: the controller funnels the replayed/pushed
-  // snapshot into their existing LOBBY_UPDATE handler.
+  // roster, selection, results — from the replay alone. The one per-phone reply
+  // is the CHOOSER (the picker content, static), which the HELLO walk
+  // sends as a send-to effect; the snapshot names only its revision.
   //
   // NOTHING ABOUT A SEAT CROSSES. The roster, the effective host, the room phase
   // and every seat's "does this seat hold a car in the live race" are read off
   // the two HANDLES in C++ (ttp_net_lobby_frame over ttp_room.h's seam); what is
   // passed here is the two latches only the game knows. The answer is the finished
   // frame text, so the socket write is the next statement and there is no object
-  // in between. (~169.6 us -> 44.4 us a publish in the browser at the 4-player
-  // cap when the round trip through this file was removed; most of what was
-  // being re-read is the ~5.9 KB `tracks` chooser payload.)
+  // in between.
   //
   // DELIBERATELY NOT re-routed through ttp_framing_encode_set_state: that
   // encoder takes the snapshot as an argument, which would put the roster back
@@ -521,12 +522,13 @@ export class DisplayNet extends GameNet {
   // changes without a roster/state event (manual pause, mid-race car forfeit/rekey).
   syncState() { this._publishLobby(); }
 
-  // Replace the chooser content the snapshot carries. It is normally authored
-  // data set once at construction — which is why the session model holds it
-  // rather than being handed 4 KB of it on every publish — so this exists for
-  // the cases where it genuinely changes: a shell that loads its catalogue
-  // late, and the wire-compat fixture that pushes an oversize one to prove the
-  // relay's 16 KiB cap actually bites. Republishes, like every other writer.
+  // Replace the chooser content. It is normally authored data set once at
+  // construction — which is why the session model holds it rather than being
+  // handed 4 KB of it on every publish — so this exists for the cases where it
+  // genuinely changes: a banked cup's `progress` (which rides the snapshot), a
+  // shell that loads its catalogue late, and the wire-compat fixtures.
+  // Republishes, like every other writer; a phone that finds a new chooser
+  // revision on it asks for the CHOOSER again.
   setChooser({ cars, colors, tracks, progress } = {}) {
     if (cars) this.carChooser = cars;
     if (colors) this.colorPalette = colors;

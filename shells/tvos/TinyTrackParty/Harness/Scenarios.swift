@@ -313,6 +313,11 @@ enum Scenarios {
             // `-ttpTrack <id>` picks the circuit; both are the sweep's axes,
             // because a frame's cost scales with cells and pixels together and
             // a lap's own cost varies by circuit.
+            //
+            // Unlocked first, as the race cards above are and as the Android
+            // bench is: the pick walk refuses a track in a locked cup, and the
+            // bench then logs whatever screen was up under the named track's id.
+            _ = ttp_ui_progress_load(nil, 1)
             pinTrack(game)
             game.show(.race)
             game.startDemoRace(humans: playerCount)

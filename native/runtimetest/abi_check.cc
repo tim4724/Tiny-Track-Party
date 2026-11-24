@@ -2382,6 +2382,7 @@ void handlePathsMatchJsonPaths() {
     input.set("inRace", inRace);
     input.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "room host"));
     input.set("roomState", Value::Str(ttp_room_state(r)));
+    input.set("chooserRev", Value::Num(ns::chooser_rev(chooser)));
     const std::string snapshot = canonical_stringify(ns::lobby_snapshot(input, chooser));
     return std::string(ttp_framing_encode_set_state(snapshot.c_str()));
   };
@@ -3213,6 +3214,7 @@ Value bareEffect(const char* op) {
 struct ShellTwin {
   int room = 0;
   RoomFlow* flow = nullptr;
+  Value chooser = Value::Obj();   // what the walk's ttp_net_configure was handed
   Value expected = Value::Arr();
 
   void reset() { expected = Value::Arr(); }
@@ -3319,6 +3321,14 @@ struct ShellTwin {
         expected.push(std::move(e));
       }
     }
+    const double rev = ns::chooser_rev(chooser);
+    const Value* held = msg.find("chooserRev");
+    if (!(held && held->type == Value::NUM && held->num == rev)) {
+      Value e = bareEffect("send-to");
+      e.set("to", Value::Num(from));
+      e.set("data", ns::chooser_message(chooser, rev));
+      expected.push(std::move(e));
+    }
     if (ttp_has_car(sessionHandle, pj.c_str()))
       expected.push(peerEffect("welcome-item", from));
     expected.push(bareEffect("announce"));
@@ -3360,16 +3370,18 @@ void literalEffects(const Value& walk, const Value& want, const char* where) {
 
 void netWalksMatchMultiCallPath() {
   // The same chooser both the pick walk and the twin's expectations read.
-  ttp_net_configure(
+  const char* kChooser =
       "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\",\"#0f0\"],"
       "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\"},"
       "{\"id\":\"lagoon\",\"name\":\"Lagoon\",\"cup\":\"beach\"},"
-      "{\"id\":\"summit\",\"name\":\"Summit\",\"cup\":\"alpine\"}]}");
+      "{\"id\":\"summit\",\"name\":\"Summit\",\"cup\":\"alpine\"}]}";
+  ttp_net_configure(kChooser);
 
   const int walkRoom = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   ShellTwin twin;
   twin.room = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   twin.flow = ttp_room_flow(twin.room);
+  twin.chooser = parseOrNull(kChooser, "netwalk chooser");
   if (walkRoom <= 0 || twin.room <= 0 || !twin.flow) { fail("netwalk: no room handles"); return; }
 
   const auto walkPeerMsg = [&](double from, const char* msgJson, int sess, double now) {
@@ -3473,6 +3485,22 @@ void netWalksMatchMultiCallPath() {
     for (const Value& e : w2.find("effects")->arr)
       sawRename = sawRename || json::str_field(e, "op") == "player-renamed";
     check(sawRename, "netwalk hello/rename: the rename signal was raised");
+
+    // A phone that already holds this chooser revision is not sent it again;
+    // one holding any other value (a stale rev, the same number as a string) is.
+    const std::string rev = canonical_stringify(Value::Num(ns::chooser_rev(twin.chooser)));
+    for (const std::string& held : {rev, std::string("1"), "\"" + rev + "\""}) {
+      const std::string m = "{\"type\":\"hello\",\"name\":\"Zephyr\",\"rejoinToken\":null,"
+                            "\"chooserRev\":" + held + "}";
+      Value w3 = walkPeerMsg(1, m.c_str(), 0, 2350);
+      twin.reset();
+      twin.hello(1, parseOrNull(m.c_str(), "rev hello msg"), 0, 2350);
+      sameEffects(w3, twin, "hello/chooserRev");
+      bool sent = false;
+      for (const Value& e : w3.find("effects")->arr)
+        sent = sent || json::str_field(e, "op") == "send-to";
+      check(sent == (held != rev), "netwalk hello/chooserRev: the CHOOSER goes only to a stale rev");
+    }
   }
 
   {
@@ -4143,7 +4171,17 @@ void netWalksMatchMultiCallPath() {
     Value watchdog = bareEffect("arm-create-watchdog");
     watchdog.set("delayMs", Value::Num(8000));
 
+    // The screen stays awake while a party exists, and only then: the rule is
+    // session.h's, gathered over the live roster.
+    const auto awake = [](int room, bool want, const char* what) {
+      const RoomFlow* f = ttp_room_flow(room);
+      check(ttp_net_keep_awake(room) == (ns::keep_screen_awake(f ? f->size() : 0) ? 1 : 0),
+            "keep-awake: the export agrees with the rule");
+      check(ttp_net_keep_awake(room) == (want ? 1 : 0), what);
+    };
+
     ttp_net_on_protocol_json(bg, "created", "{\"room\":\"BGRM\"}", 0);
+    awake(bg, false, "keep-awake: an empty lobby lets the screen sleep");
     // An empty lobby: the relay deletes a memberless room, so it ends as ever.
     literalEffects(walkOf(ttp_net_on_background_json(bg), "background empty"),
                    ops({bareEffect("shutdown")}), "background/empty-room");
@@ -4151,6 +4189,7 @@ void netWalksMatchMultiCallPath() {
 
     ttp_net_on_protocol_json(bg, "peer_joined", "{\"index\":1}", 0);
     ttp_room_events_json(bg);
+    awake(bg, true, "keep-awake: a seated phone keeps the screen on");
     literalEffects(walkOf(ttp_net_on_background_json(bg), "background seated"),
                    ops({bareEffect("detach-socket"), reconnecting}),
                    "background/seated");
@@ -4176,6 +4215,7 @@ void netWalksMatchMultiCallPath() {
                    "background/dead-room-ends-the-party");
     check(std::strcmp(ttp_room_list_json(bg), "[]") == 0,
           "background: no seat survives a dead room");
+    awake(bg, false, "keep-awake: the party ending lets the screen sleep again");
 
     // Mid-race, a phone that left while we were away is RESERVED on the
     // rejoin, as its peer_left would have reserved it, not freed.
@@ -4197,6 +4237,9 @@ void netWalksMatchMultiCallPath() {
     check(reserved && ttp_room_flow(mid)->has(PeerId::Num(2)) &&
               ttp_room_flow(mid)->isDisconnected(PeerId::Num(2)),
           "background: a racer who left meanwhile keeps a reserved seat");
+    ttp_net_on_protocol_json(mid, "peer_left", "{\"index\":1}", 0);
+    ttp_room_events_json(mid);
+    awake(mid, true, "keep-awake: a race whose every racer dropped is still a party");
     ttp_room_dispose(mid);
 
     // A seat that is only RESERVED holds no relay socket, so it keeps nothing.
@@ -4204,6 +4247,7 @@ void netWalksMatchMultiCallPath() {
     ttp_net_on_protocol_json(bg, "peer_joined", "{\"index\":3}", 0);
     ttp_room_flow(bg)->markDisconnected(PeerId::Num(3));
     ttp_room_events_json(bg);
+    awake(bg, true, "keep-awake: a reserved seat is still a party");
     literalEffects(walkOf(ttp_net_on_background_json(bg), "background reserved only"),
                    ops({bareEffect("shutdown")}), "background/reserved-seats-only");
     ttp_room_dispose(bg);

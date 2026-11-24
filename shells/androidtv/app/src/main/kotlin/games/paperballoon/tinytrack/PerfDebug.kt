@@ -218,12 +218,21 @@ object PerfDebug {
      *
      * Internal because [VulkanPolicy] reads its override (`debug.ttp.vk` — not a
      * knob this poll can act on: a backend exists only at engine creation).
+     *
+     * The Method is resolved once: the poll reads every knob at the HUD tick, on
+     * the frame thread. A platform that refuses it reads every knob as unset.
      */
     internal fun getprop(key: String): String? = try {
-        val cls = Class.forName("android.os.SystemProperties")
-        (cls.getMethod("get", String::class.java).invoke(null, key) as? String)
-            ?.takeIf { it.isNotEmpty() }
+        (sysPropGet?.invoke(null, key) as? String)?.takeIf { it.isNotEmpty() }
     } catch (_: Throwable) {
         null
+    }
+
+    private val sysPropGet: java.lang.reflect.Method? by lazy {
+        try {
+            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java)
+        } catch (_: Throwable) {
+            null
+        }
     }
 }

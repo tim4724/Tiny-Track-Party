@@ -60,8 +60,10 @@ target_include_directories(filament-sdk INTERFACE "${FILAMENT_SDK}/include")
 # backend/platforms/VulkanPlatform*.h (the platform-customization override the
 # Android renderer subclasses): <bluevk/BlueVK.h>, and — since Filament 1.76,
 # through the new AndroidNdk.h — <utils/api_level.h>, which is not among the
-# utils headers the install exports. Both live only in the CHECKOUT the install
-# was built from, above out/<config>, three levels up from the SDK root.
+# utils headers the install exports (nor is <utils/android/PerformanceHintManager.h>,
+# which PlatformEGLAndroid.h includes for the GL override beside it). Both live
+# only in the CHECKOUT the install was built from, above out/<config>, three
+# levels up from the SDK root.
 #
 # Appended AFTER the SDK's own include dir so an installed header still wins;
 # the checkout is at the pinned commit, so the two copies agree by construction.

@@ -1,11 +1,14 @@
 'use strict';
 
 // Bake the lobby car-picker thumbnails for each roster car: a front-3/4 hero
-// still plus a 24-frame turntable sprite strip, both as plain transparent PNGs
-// (see public/shared/carThumbs.js — phones show <img>s, never WebGL).
+// still plus a 24-frame turntable sprite strip, both transparent (see
+// public/shared/carThumbs.js — phones show <img>s, never WebGL).
 //
 //   <model>.png        — front-3/4 hero still (== strip frame 0)
-//   <model>.strip.png  — horizontal sprite strip, SPIN_FRAMES cells wide
+//   <model>.strip.webp — horizontal sprite strip, SPIN_FRAMES cells wide.
+//                        Lossless WebP from the canvas's PNG through `cwebp`
+//                        (brew install webp): under half the PNG's bytes, and
+//                        Chromium's own canvas encoder lands far above cwebp's.
 //
 // "Render the real GLB offline": reuse the live origin so the page's CSP
 // resolves, render into an own transparent renderer with the game's toy
@@ -41,6 +44,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const { chromium } = require('playwright');
 const { installThreeRoutes } = require('./lib/three-routes');
 
@@ -266,10 +270,8 @@ async function main() {
         return { strip: strip.toDataURL('image/png'), still };
       }, { name, size: SIZE, height: HEIGHT, frames: FRAMES, yaw0: YAW, pitch: PITCH, margin: MARGIN, bias: BIAS });
 
-      const write = (dataUrl, file) => {
-        const b64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-        fs.writeFileSync(file, Buffer.from(b64, 'base64'));
-      };
+      const pngOf = (dataUrl) => Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
+      const write = (dataUrl, file) => fs.writeFileSync(file, pngOf(dataUrl));
       if (OUT) {
         fs.mkdirSync(path.dirname(OUT), { recursive: true });
         write(still, OUT);
@@ -277,8 +279,10 @@ async function main() {
         continue;
       }
       write(still, path.join(OUTDIR, `${name}.png`));
-      write(strip, path.join(OUTDIR, `${name}.strip.png`));
-      console.log(`Baked ${name}: ${name}.png (${SIZE}×${HEIGHT}) + ${name}.strip.png (${SIZE * FRAMES}×${HEIGHT})`);
+      // -exact keeps the RGB under alpha 0 too, so the WebP decodes to the PNG's bytes.
+      execFileSync('cwebp', ['-quiet', '-lossless', '-exact', '-z', '9', '-metadata', 'none',
+        '-o', path.join(OUTDIR, `${name}.strip.webp`), '--', '-'], { input: pngOf(strip) });
+      console.log(`Baked ${name}: ${name}.png (${SIZE}×${HEIGHT}) + ${name}.strip.webp (${SIZE * FRAMES}×${HEIGHT})`);
     }
   } finally {
     if (browser) await browser.close();

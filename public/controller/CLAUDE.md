@@ -69,5 +69,6 @@ was fixed, not restated here.
 The phone renders what the snapshot says and sends requests. Every local change
 (car pick, ready flag, mode) is OPTIMISTIC and the next `LOBBY_UPDATE` is the
 source of truth; nothing here validates a move on the display's behalf. The
-phone bundles no game content — tracks, cars and the livery palette all ride the
-snapshot, so a phone can never diverge from a differently-versioned display.
+phone bundles no game content — tracks, cars and the livery palette all come from
+the display (`MSG.CHOOSER`, once per phone, its revision named by every snapshot),
+so a phone can never diverge from a differently-versioned display.

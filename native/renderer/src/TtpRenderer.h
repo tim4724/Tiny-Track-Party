@@ -157,9 +157,10 @@ public:
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
 #if defined(__ANDROID__)
-    // Before init: the file the Vulkan backend keeps its compiled pipelines in
-    // between runs. Unset keeps them in memory, as every other backend does.
-    void setPipelineCacheFile(std::string path) { mPipelineCacheFile = std::move(path); }
+    // Before init: the directory the engine keeps its compiled shaders in
+    // between runs (the Vulkan pipeline cache, the GL program binaries). Unset
+    // keeps them in memory, as every other platform does.
+    void setProgramCacheDir(std::string dir) { mProgramCacheDir = std::move(dir); }
     // Start the engine before there is a window, and return at once: the
     // driver (Vulkan instance and device, the pipeline cache read, or the EGL
     // context) comes up on Filament's own thread while the shell's main thread
@@ -331,8 +332,9 @@ public:
     // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
     const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
     // The built scene's standing scenery as solid volume (ttp/obstacles.h),
-    // filled into `out` off the triangles it is drawn from. Asked once per
-    // build, inside it: the fill is too slow for a drawn frame on a TV box.
+    // filled into `out` off the triangles it is drawn from. Asked at most once
+    // per static scene, by the lobby's build (ttp_display_core.cc fillScenery):
+    // the fill is too slow for a drawn frame on a TV box.
     void fillObstacles(ttp::rt::Obstacles& out);
 
     // Slot i as the name tags see it (ttp/name_tags.h), measured off the model
@@ -606,20 +608,17 @@ private:
     // than `minTris` triangles are merged into the next, so a sparse sheet
     // does not become hundreds of renderables.
     static void tileMajor(Mesh& m, float tile, uint32_t minTris);
-    // 48 u tiles: a 4P cell's frustum to the fog is a wedge a few tiles wide,
-    // and the world is ±400 u, so a sheet is at most a few hundred ranges;
-    // a range under 64 triangles is not worth a renderable of its own.
-    static constexpr float kSheetTile = 48.0f;
-    static constexpr uint32_t kSheetMinTris = 64;
-    // The live values: the constants above, or coarser where a draw costs
-    // more than the vertices it saves: the Android GL fallback, and the lite
-    // tier (buildStatic sets them per scene).
-    float mSheetTile = kSheetTile;
-    uint32_t mSheetMinTris = kSheetMinTris;
+    // 96 u tiles, and a range under 256 triangles is not worth a renderable of
+    // its own: a 4P cell's frustum to the fog is a wedge a few tiles wide, and
+    // the world is ±400 u. Every tier and backend: the 48 u / 64 tiles the
+    // full tier kept cost it a fifth to a quarter more draws a cell for a few
+    // percent fewer vertices, and no pixel of the static world differed.
+    static constexpr float kSheetTile = 96.0f;
+    static constexpr uint32_t kSheetMinTris = 256;
     // A set piece's bake tile (bakePlacements), split by whole part. Finer
     // than a sheet's because a piece is dense where a sheet is sparse, so a
     // tile drawn whole to a camera beside it costs vertices a sheet's would
-    // not; doubled with the sheet's.
+    // not; doubled where a draw costs more than those vertices (buildStatic).
     static constexpr float kPieceTile = 8.0f;
     float mPieceTile = kPieceTile;
     bool mLite = false;   // setLite
@@ -628,10 +627,11 @@ private:
 
     filament::Engine* mEngine = nullptr;
 #if defined(__ANDROID__)
-    // The Vulkan platform with the framebuffer-eviction override (see
-    // TtpRenderer::init) — caller-owned, so it outlives the engine here.
-    std::unique_ptr<filament::backend::Platform> mVkPlatform;
-    std::string mPipelineCacheFile;
+    // The platform prepare() hands the engine (Vulkan's framebuffer-eviction
+    // override, or GL's with a program store) — caller-owned, so it outlives
+    // the engine here.
+    std::unique_ptr<filament::backend::Platform> mPlatform;
+    std::string mProgramCacheDir;
     // prepare()'s engine until init or the destructor collects it.
     struct PendingEngine;
     std::shared_ptr<PendingEngine> mPending;
@@ -1797,6 +1797,8 @@ private:
     std::vector<SkidRect> mSkidDirty;
     static constexpr size_t kSkidDirtyMax = 32;   // past this the list is one union rect
     bool mSkidCatchUp = false;                    // undrawn frames stamped; finish the deep pass
+    static constexpr uint32_t kUndrawnFinish = 60; // undrawn frames between finishes (frame())
+    uint32_t mUndrawnFrames = 0;
     static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
     // One mip level refiltered and uploaded under rects in level l-1 texels,
     // which come back in level l texels.
@@ -2414,15 +2416,23 @@ private:
     // …and what the last assetPlan said each name WOULD be a function of, so the
     // provideAsset that answers it can stamp the tag without a second crossing.
     std::unordered_map<std::string, std::string> mAssetWantTag;
-    // A model's images[].uri list, by ASSET NAME. The texture step needs it and
+    // A likeness of the first bytes ever provided under each tag (bytesPrint),
+    // which later bytes must match to be stamped with it: a tag is trusted to
+    // NAME its bytes (memoKey, glbKey), so a provide that contradicts one keeps
+    // none. Engine-lifetime, one entry per kit model.
+    std::unordered_map<std::string, uint64_t> mTagPrint;
+    // What a memo about asset `name`'s bytes is kept under: "\x1f" + its tag,
+    // which outlives the slot (set3.glb is one track's rock and the next one's
+    // marble run, and a re-entered track hands its models over again), or,
+    // untagged or empty, its name, whose entries provideAsset drops.
+    std::string memoKey(const std::string& name) const;
+    // A model's images[].uri list, by memoKey. The texture step needs it and
     // used to get it by re-scanning a container the shell had just read — which
     // is exactly the read the plan above exists to skip.
     //
-    // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
-    // a byte-at-a-time FNV over the whole buffer, so consulting the cache
-    // re-read every model it was there to avoid re-reading, ~1.2 MB a build
-    // in play. The name is exact because provideAsset is the only place an
-    // asset's bytes change, and it drops the entry.
+    // NOT BY CONTENT HASH, which the first version did: hashing is a
+    // byte-at-a-time FNV over the whole buffer, so consulting the cache re-read
+    // every model it was there to avoid re-reading, ~1.2 MB a build in play.
     std::unordered_map<std::string, std::vector<std::string>> mAssetUriCache;
     std::vector<filament::MaterialInstance*> mSceneMatInstances;
 
@@ -2651,7 +2661,7 @@ private:
     bool mCarMergeDirty = false;
     bool mDressMergeDirty = false;
     bool mMergeOff = false;                 // kFeatNoMerge (ablation only)
-    std::vector<uint64_t> mCarModelKey;     // per slot: FNV of its GLB bytes
+    std::vector<uint64_t> mCarModelKey;     // per slot: glbKey of its GLB
     std::vector<uint64_t> mCarGhostKey;     // …and of its ghost twin's, for the pool
 
     // PARSED BODIES, KEPT BY MODEL — the same argument the sun bake and the
@@ -2710,7 +2720,7 @@ private:
     std::unordered_map<const filament::gltfio::FilamentAsset*, RestPose> mBodyRest;
     void snapshotRestPose(filament::gltfio::FilamentAsset* a);
     void restoreRestPose(filament::gltfio::FilamentAsset* a);
-    // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
+    // Parsed kit geometry, keyed by glbKey. Engine-lifetime — the kit's
     // bytes never change, so a cup's four scenes parse each model once.
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
     // The welded form of each flat prim drawn with vglbflat, keyed by the
@@ -2720,10 +2730,12 @@ private:
     std::unordered_map<const ttp::rt::GlbMeshPrim*, ttp::rt::FlatWeld> mFlatWelds;
     // Which parse an instanced dressing asset was loaded from (scene scope).
     std::unordered_map<const filament::gltfio::FilamentAsset*, uint64_t> mAssetMeshKey;
-    // The model identity of asset `name` (whose bytes are `glb`), memoised
-    // by name for the same reason mAssetUriCache is.
+    // The model identity of asset `name` (whose bytes are `glb`): its tag's
+    // hash, or its bytes' when it has none; memoised by name, which
+    // provideAsset drops.
     uint64_t glbKey(const std::string& name, const std::vector<uint8_t>& glb);
     std::unordered_map<std::string, uint64_t> mGlbKeyOf;
+    std::unordered_map<uint64_t, std::string> mKeyTag;   // a tag key's memoKey: no two share one
     const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
             const std::vector<uint8_t>& glb);
     // A parsed model's base colour per vertex (ttp/kit_colors.h), sampled from
@@ -2923,7 +2935,7 @@ public:
     // reading is the DRAW half of a feature's cost, not the whole of it.
     static constexpr uint8_t kFeatRoad     = 0x04; // the deck ribbon (chunked)
     static constexpr uint8_t kFeatTerrain  = 0x08; // ground, sky, hills, water, structures
-    static constexpr uint8_t kFeatDressing = 0x10; // scenery, props, landmarks, clutter, cones
+    static constexpr uint8_t kFeatDressing = 0x10; // scenery, props, set pieces, landmarks, clutter, cones
     static constexpr uint8_t kFeatSky      = 0x20; // clouds, haze, fliers, balloon
     static constexpr uint8_t kFeatCars     = 0x40; // car GLBs, monster rigs, boost streaks
     static constexpr uint8_t kFeatEffects  = 0x80; // item pools, rockets, bursts, ambient

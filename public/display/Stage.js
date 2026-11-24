@@ -105,6 +105,10 @@ export const MAX_BUFFER_H = 2160;
 // hidden scene may stop drawing (see _hiddenIdle). Two, because the boot's
 // first reveal is two frames into the loop and cuts straight in, unfaded.
 const FRESH_FRAMES = 2;
+// How long a scene under a full-screen frost board keeps drawing before it
+// idles (see _hiddenIdle): long enough for a held field's chase rig to close on
+// the parked car, whose settled frame is what the frost then shows.
+const COVER_SETTLE_MS = 500;
 
 // DEV. `?cars=,,tk-stock-hatch-muscle,tk-jeep-b` draws roster car i
 // with concept car i instead (public/assets/concepts/,
@@ -184,6 +188,8 @@ export class Stage {
     this._freshFrames = 0;   // frames drawn since the last build or resize (see _hiddenIdle)
     this._dimSince = null;   // when #scene last went transparent, and its fade-out's length
     this._dimFadeMs = 0;
+    this._covers = new Set(); // the full-screen boards over the scene right now (see setCovered)
+    this._coveredSince = null; // when the first of them went up
     this._hiddenIdling = false;
     this._clockMs = 0;       // the frame clock: dt summed, handed to onFrame
     this._track = null;
@@ -612,6 +618,9 @@ export class Stage {
             this.display.showcase(!!this._showcase); // latched; see showcase()
             this.display.bench(this._bench || '');   // …and see bench()
             for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
+            // The cells before the build, as both TV shells latch them: a build
+            // with none is the lobby's, and fills what its cameras read then.
+            this._syncCells();
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;
             this._rosterSig = rosterSig;
@@ -1644,13 +1653,37 @@ export class Stage {
   // without a fade. And a fade OUT keeps drawing until it has run (its length
   // read off the element, as the CSS states it), or the picture would freeze
   // while it dissolves.
+  //
+  // A full-screen FROST board over the scene (setCovered) hides it too. What
+  // shows through the frost is the canvas's last drawn frame, which the
+  // compositor keeps while nothing new is submitted, so that frame has to be
+  // the settled one: the board keeps drawing for COVER_SETTLE_MS while a held
+  // field's chase rig closes on the parked car. After that only the ambient
+  // motion under the frost's blur and wash (theme.css --frost) stops.
   _hiddenIdle(t) {
-    if (!this.container.classList.contains('is-dim')) { this._dimSince = null; return false; }
-    if (this._dimSince === null) {
-      this._dimSince = t;
-      this._dimFadeMs = (parseFloat(getComputedStyle(this.container).transitionDuration) || 0) * 1000;
+    let hidden = false;
+    if (!this._covers.size) this._coveredSince = null;
+    else {
+      if (this._coveredSince === null) this._coveredSince = t;
+      hidden = t - this._coveredSince >= COVER_SETTLE_MS;
     }
-    return this._freshFrames >= FRESH_FRAMES && t - this._dimSince >= this._dimFadeMs;
+    if (!this.container.classList.contains('is-dim')) this._dimSince = null;
+    else {
+      if (this._dimSince === null) {
+        this._dimSince = t;
+        this._dimFadeMs = (parseFloat(getComputedStyle(this.container).transitionDuration) || 0) * 1000;
+      }
+      hidden = hidden || t - this._dimSince >= this._dimFadeMs;
+    }
+    return hidden && this._freshFrames >= FRESH_FRAMES;
+  }
+
+  // A full-screen frost board (`key` names it: the pause overlay, the display's
+  // own link) went up or came down over the scene. The caller is whoever
+  // performs the effect that shows it, so the fact is the model's, not a read
+  // of the page's CSS.
+  setCovered(key, on) {
+    if (on) this._covers.add(key); else this._covers.delete(key);
   }
 
   // The frame itself, and the only place the perf HUD instruments. The GPU timer

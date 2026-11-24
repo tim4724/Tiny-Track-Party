@@ -138,6 +138,10 @@ class GameCoordinator(
      */
     private var suspended = false
 
+    /** The window's FLAG_KEEP_SCREEN_ON, which only the Activity can set ([syncKeepAwake]). */
+    var onKeepAwake: ((Boolean) -> Unit)? = null
+    private var keptAwake = false
+
     /**
      * The circuit the next race builds and the current scene shows. Held here
      * rather than read back from the display, because the pick exists before a
@@ -622,15 +626,17 @@ class GameCoordinator(
         // rejoin, and a record that outlives an ended one costs a player a tap
         // into a room that is already gone.
         syncAdvertisement()
-        // The mix goes with the frame loop: nothing will update a voice's level once
-        // the Choreographer callback is gone, so a held one sounds forever.
-        audio.silence()
         lobbyDemo.stop()
         holdTimers()
         // A scenario never started the net (see [boot]), so it has no
         // room to keep or end, and nothing to dial on the way back.
         if (!Scenarios.active) net.suspend()
         if (!net.roomKept) clearJoinTicket()
+        // The mix goes with the frame loop: nothing will update a voice's level once
+        // the Choreographer callback is gone, so a held one sounds forever. AFTER
+        // the background walk, whose link-down freeze queues the music's pause:
+        // this drain is the last one before the return, so it performs it.
+        audio.suspend()
     }
 
     /**
@@ -696,6 +702,20 @@ class GameCoordinator(
     }
 
     /**
+     * The screen stays on while a party exists (`ttp_net_keep_awake`), and the
+     * OS may dream over an empty lobby. A race is minutes of no input at all
+     * from the TV's point of view — every button is on a phone — which is why
+     * the flag exists; an attract loop nobody is watching is why it comes off.
+     * Asked on every roster movement, performed only on a change.
+     */
+    private fun syncKeepAwake() {
+        val on = Ttp.ttp_net_keep_awake(net.roomHandle) != 0
+        if (on == keptAwake) return
+        keptAwake = on
+        onKeepAwake?.invoke(on)
+    }
+
+    /**
      * Back on screen. A kept room is rejoined and its race thaws on the relay's
      * `joined`; an ended one comes back fresh, and its race goes with it through
      * [PartyNet.onRoomGone] — as does a kept room that died while we were away.
@@ -703,6 +723,7 @@ class GameCoordinator(
     fun resume() {
         if (!suspended) return
         suspended = false
+        audio.resume()
         // The timers come back with the scene they act on: a background that
         // destroyed the surface re-arms them in [displayReady], once rebuilt.
         if (display.hasScene) rearmTimers()
@@ -791,6 +812,9 @@ class GameCoordinator(
                 .put("ready", false)
                 .toString()))
         }
+        // Seated straight onto the room, past every roster walk, so asked here: a
+        // harness race (the bench, a long hold) must not dream either.
+        syncKeepAwake()
         // THROUGH THE SAME WALK THE START BUTTON TAKES. Building a launch payload
         // here instead is how fifteen tvOS race screenshots looked perfect for a
         // build whose Start button had never once worked: the harness reached the
@@ -972,6 +996,15 @@ class GameCoordinator(
 
         display.onFrame = { dt -> frame(dt) }
         display.onSlowTick = { slowTick() }
+        // The boards [RootScreen] stands over the whole 3D: the display's link
+        // anywhere, an info page over the lobby, the pause overlay or a results
+        // board over the race. The results board lands after `endFlourish` has
+        // held the field and leaves at the launch that builds the next scene,
+        // so like the pause it covers a still picture.
+        display.covered = {
+            state.link != null || state.infoPath.isNotEmpty()
+                || (state.screen == GameState.Screen.RACE && (state.paused || state.results != null))
+        }
         // Fires once, when a built scene first reaches the glass. At boot the
         // preview pick lands long before the pixels do, so without this nothing
         // ever re-asks and the boot cover would stay up for the whole lobby —
@@ -1274,6 +1307,8 @@ class GameCoordinator(
         // The LAN record rides the roster too: a room that just filled must go off
         // the air, and one that just freed a slot must come back on.
         syncAdvertisement()
+
+        syncKeepAwake()
 
         // THE SILENT AUTO-PAUSE RIDES THE ROSTER, exactly as on the web. Every
         // roster movement is a candidate: a disconnect, a reconnect, a rekey, a

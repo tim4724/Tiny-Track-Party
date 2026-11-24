@@ -82,6 +82,10 @@ jobs:
           BUNDLE=$(grep -o '/bundle/display\.[^"]*' <<< "$PAGE")
           curl -fsSI "http://localhost:4000$BUNDLE" | grep -qi '^cache-control:.*immutable'
           curl -fsSI http://localhost:4000/display/main.js | grep -qi '^cache-control:.*no-store'
+          # A model goes out as build-site's brotli copy, under the model's type.
+          GLB=$(curl -fsSI -H 'Accept-Encoding: br' http://localhost:4000/assets/toycar/item-box.glb)
+          grep -qi '^content-encoding: br' <<< "$GLB"
+          grep -qi '^content-type: model/gltf-binary' <<< "$GLB"
 
   deploy:
     runs-on: [self-hosted, k8s]

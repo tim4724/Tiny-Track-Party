@@ -89,6 +89,19 @@ void solveFraming(DisplayCore& d) {
     d.framing = ttp::rt::solveFraming(tf, d.renderer->maxOrbitDist(ring.ovRadius, ring.ovHeight));
 }
 
+// What the lobby's lens keeps out of (LensPlan), and the loopings it films
+// from places clear of that. Tens of milliseconds, a fifth of a box's build,
+// and only the lobby's cameras read either (filmsScenery): a build for a race
+// leaves it pending, and the first frame a lobby camera films fills it.
+// A build with no cells fills it itself, because a lobby is what it is for,
+// and on a TV box a fill on a frame is a visible hitch.
+void fillScenery(DisplayCore& d) {
+    d.renderer->fillObstacles(d.obstacles);
+    d.loops = ttp::rt::loopShots(d.scenerySamples, d.sceneryLap, d.tagDeck, d.ground, d.obstacles);
+    d.scenerySamples = {};
+    d.sceneryPending = false;
+}
+
 }  // namespace
 
 extern "C" {
@@ -286,18 +299,19 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
         g_disp->tagDeck.kerbH = theme.road.kerbH;
         g_disp->ground = r.groundGrid();
-        // What the lobby's lens keeps out of (LensPlan). Here, in the build
-        // the shell already waits on, and not on a frame: on a TV box the fill
-        // would be a visible hitch.
-        r.fillObstacles(g_disp->obstacles);
-        g_disp->loops = ttp::rt::loopShots(geo.samples, (float) geo.length, g_disp->tagDeck, g_disp->ground,
-                                           g_disp->obstacles);
+        g_disp->obstacles = {};
+        g_disp->loops.clear();
+        g_disp->scenerySamples = geo.samples;
+        g_disp->sceneryLap = (float) geo.length;
+        g_disp->sceneryPending = true;
         g_disp->sceneT = 0;
         solveFraming(*g_disp);
         // Start the turntable on the still view's own bearing, so a preview's
         // first frame is the framing the track was fitted for.
         g_disp->orbitAngle = g_disp->framing.ovBearing;
     }
+    // The shells latch the cells before they build, so none is a lobby's.
+    if (g_disp->sceneryPending && g_disp->cells.empty()) fillScenery(*g_disp);
     g_disp->built = true;
     g_disp->roster = roster.ids;
     g_disp->rosterCars = roster.cars; // ttp_display_reroster's diff base
@@ -791,6 +805,7 @@ namespace {
 // shell deriving it would be a copy that could drift.
 const TtpFrameInput* frameInput(DisplayCore& d, double dtSeconds) {
     const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
+    if (d.sceneryPending && ttp::rt::filmsScenery(d, eng)) fillScenery(d);
     return ttp::rt::buildFrame(d, eng, (float) dtSeconds,
                                d.renderer->cellAspect((uint32_t) d.cells.size()));
 }

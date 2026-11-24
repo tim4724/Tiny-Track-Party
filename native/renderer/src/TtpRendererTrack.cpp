@@ -2811,16 +2811,12 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb) {
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
     PhaseLog phases{ mEngine };
-    // THE TILES (tileMajor, bakePlacements), twice as coarse where a draw costs
-    // more than the vertices a coarser tile submits: the Android GL fallback
-    // (a draw is driver CPU there; init) and the lite tier, whose box is as
-    // bound by draws as by vertices at four players. Lite's cut that a racer
-    // cannot see at all: measured on the heavy tracks, a quarter of the 4P
-    // frame's draws for 2-3% more of its vertices (less of each sheet culled).
-    const bool coarse = mAndroidGl || mLite;
-    mSheetTile = coarse ? 2.0f * kSheetTile : kSheetTile;
-    mSheetMinTris = coarse ? 4 * kSheetMinTris : kSheetMinTris;
-    mPieceTile = coarse ? 2.0f * kPieceTile : kPieceTile;
+    // A set piece's bake tile (bakePlacements), twice as coarse where a draw
+    // costs more than the vertices a coarser tile submits: the Android GL
+    // fallback (a draw is driver CPU there; init) and the lite tier, whose box
+    // is as bound by draws as by vertices at four players. The sheets' tile is
+    // one for every tier (kSheetTile).
+    mPieceTile = (mAndroidGl || mLite) ? 2.0f * kPieceTile : kPieceTile;
 
     TrackBin tb;
     applyTheme(tb, theme);
@@ -3023,7 +3019,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         mHills.bakeLight = true;
         // The ring stands all round the circuit, so one renderable is in every
         // cell's frustum; tiles let each cell draw only the hills it faces.
-        tileMajor(mHills, mSheetTile, mSheetMinTris);
+        tileMajor(mHills, kSheetTile, kSheetMinTris);
         if (!buildMesh(mHills)) return false;
     }
 
@@ -3322,7 +3318,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         }
         // The sheet is the size of the world; cut per tile so a cell submits
         // the tiles in its frustum rather than all of it, four times over.
-        tileMajor(mGround, mSheetTile, mSheetMinTris);
+        tileMajor(mGround, kSheetTile, kSheetMinTris);
         bakeVertexLight(mGround);
         if (mGroundMaterial) {
             mGroundTex = buildGroundTexture(tb.groundKind, tb.groundBase);
@@ -3637,7 +3633,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         // Cut per tile like the ground. Overlapping discs across a tile seam
         // may now blend in either order, which is the same picture: they are
         // one colour, and `over` with one colour commutes.
-        tileMajor(mGroundShadows, mSheetTile, mSheetMinTris);
+        tileMajor(mGroundShadows, kSheetTile, kSheetMinTris);
         buildMesh(mGroundShadows, true, mBlendMaterial->getDefaultInstance());
     }
 
@@ -4393,28 +4389,33 @@ bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
     }
-    // EVERY MATERIAL, NOT THREE. vglbfade, vburst and voverlay each carried a
-    // prewarm of their own, added one at a time as someone felt its first-use
-    // compile as a hitch, on the theory that "every other material draws on the
-    // first frame after build, which compiles its programs while the lobby is
-    // still up". That theory is wrong: a Material compiles a PROGRAM PER
-    // VARIANT, and the lobby's single overview camera exercises a different
-    // variant set than a race does (chase cams, split cells, the depth and
-    // shadow passes). The rest of the set therefore compiles at GO, on
-    // Filament's BACKEND thread — which is why neither instrument could see it:
-    // the app thread records a frame in 1.5 ms and returns, the GPU timer
-    // measures only what executed, and the stall arrives as beginFrame refusing
-    // to hand out a drawable. Measured on an A10X solo at 4K: 7-40 fps for
-    // ~2.3 s from GO, with the GPU at 9 ms of a 16.7 ms budget throughout.
+    // EVERY MATERIAL, BUT ONLY THE VARIANTS THIS RENDERER DRAWS. A material's
+    // first draw compiles its program on Filament's BACKEND thread, where
+    // neither instrument sees it: the app thread records its frame and returns,
+    // the GPU timer measures only what executed, and the stall arrives as
+    // beginFrame refusing a drawable. Some first draws are gameplay moments
+    // (the box poof, the first rocket, the HUD overlay at the countdown), so
+    // every material compiles here, where a build is all headroom: compile()
+    // is async on a driver-side queue.
     //
-    // compile() is async on a driver-side queue, so a build is all headroom.
+    // Not every VARIANT, which is compile()'s default. Every material here is
+    // unlit with its fog filtered out, and nothing casts a Filament shadow or
+    // is picked, so a draw only ever asks for the standard variant. The
+    // default also queued the skinned one and a fog-keyed twin of each (the
+    // draw clears the fog key on a material built without fog; compile() does
+    // not), four programs where one is drawn: on a GL driver that links from
+    // source, most of the launch's compile CPU. The one skinned draw is the set
+    // pieces' movers, vcolor in full only (TtpRendererMotion.cpp, THE SKIN).
     for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial,
                          mRoadMaterial, mGlbMaterial, mGlbFadeMaterial, mGlbFlatMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
                          mBurstMaterial, mEsmMaterial,
                          mPresentMaterial, mOverlayMaterial,
                          mVisMaterial }) {
-        if (m) m->compile(Material::CompilerPriorityQueue::HIGH);
+        if (!m) continue;
+        const bool skinned = m == mMaterial && !mLite;
+        m->compile(Material::CompilerPriorityQueue::HIGH,
+                skinned ? UserVariantFilterMask(UserVariantFilterBit::SKINNING) : 0);
     }
     mEngine->flush(); // start any prewarm compiles queued above immediately
     // Between frames — the present material only lands now. Gated exactly

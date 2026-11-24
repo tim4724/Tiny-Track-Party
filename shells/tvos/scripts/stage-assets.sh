@@ -10,7 +10,7 @@
 #
 # WHAT SHIPS (a few MB; the copy below is the list, and it prints its own count
 # at the end rather than stating one here that the next asset would falsify):
-#   toycar/     the renderer's whole model kit, GLBs + the shared palette PNGs
+#   toycar/     the renderer's whole model kit, GLBs (LZFSE-packed) + the shared palette PNGs
 #   toycar/thumbs/ the lobby's 2D car stills + the banana icon (no strips)
 #   items/      the shared item-icon SVGs, byte-for-byte
 #   audio/cues/ the pre-baked WAVs + manifest — the shell only plays them
@@ -64,9 +64,20 @@ mkdir -p "$OUT/toycar/Textures" "$OUT/audio/cues" "$OUT/materials"
 # lite build (<model>-lite.glb) is never asked for. TTP_STAGE_TIERS=all stages
 # both, for a bench that prices the other tier here
 # (`npm run perf:race -- --platform tvos --detail lite`).
+#
+# LZFSE-PACKED, as <model>.glb.lzfse: an app bundle is stored uncompressed on
+# the box, and the kit packs to well under half. AssetStore.glb() inflates each one
+# with the same Compression framework. Every file is inflated back HERE and
+# compared byte for byte, because a model the reader rejects does not fail the
+# race — it draws live-lit — so a bad pack has to stop the build instead.
 for glb in "$ROOT/public/assets/toycar"/*.glb; do
   case "$glb" in *-lite.glb) [ "${TTP_STAGE_TIERS:-}" = all ] || continue;; esac
-  cp "$glb" "$OUT/toycar/"
+  packed="$OUT/toycar/$(basename "$glb").lzfse"
+  compression_tool -encode -a lzfse -i "$glb" -o "$packed"
+  compression_tool -decode -a lzfse -i "$packed" | cmp -s - "$glb" || {
+    echo "stage-assets.sh: $packed does not inflate back to $glb" >&2
+    exit 1
+  }
 done
 cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
 
@@ -74,17 +85,14 @@ cp "$ROOT/public/assets/toycar/Textures"/*.png "$OUT/toycar/Textures/"
 # lobby seat show the car the player actually picked rather than a shape
 # standing in for one.
 #
-# THE TURNTABLE STRIPS ARE DELIBERATELY LEFT BEHIND. `<model>.strip.png` is a
-# 24-frame sprite sheet, ~800 KB each and 3.4 MB for the set — thirteen times
-# the stills — to make the seats rotate in lockstep. That is a lovely thing on
-# the web, where it costs one lazy request; in an .ipa it is 3.4 MB of bundle
+# THE TURNTABLE STRIPS ARE DELIBERATELY LEFT BEHIND (they are `.strip.webp`,
+# so the *.png below skips them). Each is a 24-frame sprite sheet, several
+# times the stills, to make the seats rotate in lockstep. That is a lovely
+# thing on the web, where it costs one lazy request; in an .ipa it is bundle
 # for motion behind a board nobody is looking at yet. If it is ever wanted, the
 # assets exist and `carThumbs.js` documents the frame count and rate.
 mkdir -p "$OUT/toycar/thumbs"
-for png in "$ROOT/public/assets/toycar/thumbs"/*.png; do
-  case "$png" in *.strip.png) continue;; esac
-  cp "$png" "$OUT/toycar/thumbs/"
-done
+cp "$ROOT/public/assets/toycar/thumbs"/*.png "$OUT/toycar/thumbs/"
 
 # The item icons: the SHARED SVGs, byte-for-byte (ledger item 10). ItemIcon
 # substitutes the two CSS custom properties (--icon-accent, --icon-car) and

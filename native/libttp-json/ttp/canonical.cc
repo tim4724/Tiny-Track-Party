@@ -25,10 +25,10 @@ constexpr EscapeTable kEscape{};
 
 // Escaping used to append ONE BYTE AT A TIME through this switch, which charged
 // a capacity check and a store per character of every string the tree emits. The
-// payload that made that matter is the retained room snapshot: ~6.6 KB, of which
-// ~5.9 KB is the `tracks` chooser payload — base64 schematics, i.e. thousands of
-// consecutive bytes that need no escaping at all and were being copied the
-// slowest way available.
+// payload that made that matter was the retained room snapshot: ~6.6 KB, of which
+// ~5.9 KB was the `tracks` chooser payload (now the per-phone CHOOSER) — base64
+// schematics, i.e. thousands of consecutive bytes that need no escaping at all
+// and were being copied the slowest way available.
 //
 // So: scan for the next byte that actually escapes and bulk-append the run
 // before it. Same bytes out, by construction — the switch below is untouched and
@@ -36,9 +36,9 @@ constexpr EscapeTable kEscape{};
 //
 // WHAT IT IS WORTH, measured on the live page at the 4-player cap rather than
 // guessed: ttp_net_lobby_frame 44.4 us -> 36.0 us per publish. That is the
-// escaping alone; the rest of that 36 us is the two deep copies the snapshot
-// still makes (the chooser into the snapshot, the snapshot into the frame
-// wrapper), which is where anyone chasing this further should look. Publishes
+// escaping alone; the rest of that 36 us was the two deep copies the snapshot
+// made (the chooser into the snapshot, the snapshot into the frame wrapper), the
+// first of which left with the chooser. Publishes
 // are event-paced — a join, a rename, a ready toggle — so this is not a win the
 // player can feel. It is worth having because it is free and because every
 // JSON-emitting path in the tree shares it, ctest's corpus diffs included.

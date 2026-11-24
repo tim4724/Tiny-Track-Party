@@ -23,6 +23,11 @@
 #include <filament/DebugRegistry.h>
 #include <utils/Log.h>
 
+static uint64_t fnv1a(const uint8_t* p, size_t n, uint64_t h = 14695981039346656037ull) {
+    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ull; }
+    return h;
+}
+
 // __has_include on bluevk, not just __ANDROID__: CI's android link leg
 // compiles against a BARE SDK install with no fork checkout beside it, so the
 // bluevk headers VulkanPlatform.h includes are absent there and the override
@@ -30,8 +35,8 @@
 // checkout (FilamentSdk.cmake resolves the include path from it), so the
 // shipped engine always carries the fix; only the compile-only leg loses it.
 #if defined(__ANDROID__)
-// mVkPlatform's unique_ptr needs the BASE type complete here for its reset()
-// whether or not the override below compiles in.
+// mPlatform's unique_ptr needs the BASE type complete here for its reset()
+// whether or not the overrides below compile in.
 #include <backend/Platform.h>
 #endif
 #if defined(__ANDROID__) && __has_include(<bluevk/BlueVK.h>)
@@ -109,6 +114,107 @@ void persistPipelineCache(filament::backend::Platform& platform, std::string con
 }  // namespace
 #endif
 
+// The GL twin of the override above, guarded the same way: PlatformEGLAndroid.h
+// includes a utils header only the checkout carries (FilamentSdk.cmake).
+#if defined(__ANDROID__) && __has_include(<utils/android/PerformanceHintManager.h>)
+#define TTP_GL_PLATFORM_OVERRIDE 1
+#include <backend/platforms/PlatformEGLAndroid.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <atomic>
+#include <vector>
+namespace {
+// THE LINKED GL PROGRAMS OUTLIVE THE PROCESS TOO. A GL driver links every
+// program from source on every launch: on the Fire TV Stick that was most of a
+// minute of CPU on the compile threads before the lobby could draw. Filament's
+// GL backend hands each program it links to the platform's blob cache
+// (glGetProgramBinary) and asks there before compiling one (glProgramBinary). A
+// blob the driver refuses (a driver update, a torn file) fails Filament's link
+// check and the program compiles from source as it always did, and its insert
+// replaces the refused one.
+//
+// Many entries, so one file per key, named by its hash and carrying the key
+// itself: a hash collision reads as a miss. Written beside and renamed over,
+// per thread, since the compile pool inserts concurrently. BOUNDED twice: the
+// directory goes with the code cache on every app update, and inserts stop at
+// kGlProgramBytes, counted from what it already holds.
+constexpr size_t kGlProgramBytes = 32u << 20;
+
+std::string glProgramFile(std::string const& dir, const void* key, size_t keySize) {
+    uint64_t const h = fnv1a(static_cast<const uint8_t*>(key), keySize);
+    char name[24];
+    std::snprintf(name, sizeof name, "/%016llx", (unsigned long long) h);
+    return dir + name;
+}
+
+void persistGlPrograms(filament::backend::Platform& platform, std::string const& dir) {
+    ::mkdir(dir.c_str(), 0700);
+    // What the store already holds, and the leftovers of a process killed
+    // mid-write, which nothing would ever read.
+    auto held = std::make_shared<std::atomic<size_t>>(0);
+    size_t programs = 0;
+    if (DIR* d = ::opendir(dir.c_str())) {
+        while (const dirent* e = ::readdir(d)) {
+            if (e->d_name[0] == '.') continue;
+            std::string const path = dir + "/" + e->d_name;
+            struct stat st;
+            if (std::strchr(e->d_name, '.')) {
+                ::unlink(path.c_str());
+            } else if (::stat(path.c_str(), &st) == 0) {
+                *held += (size_t) st.st_size;
+                programs++;
+            }
+        }
+        ::closedir(d);
+    }
+    utils::slog.i << "ttp: gl program store holds " << (unsigned) programs << " programs, "
+            << (unsigned) held->load() << " bytes" << utils::io::endl;
+    platform.setBlobFunc(
+            [dir, held](const void* key, size_t keySize, const void* value, size_t size) {
+                size_t const bytes = sizeof(uint32_t) + keySize + size;
+                if (held->fetch_add(bytes) + bytes > kGlProgramBytes) return;
+                std::string const file = glProgramFile(dir, key, keySize);
+                std::string const tmp = file + ".tmp" + std::to_string(::gettid());
+                FILE* f = std::fopen(tmp.c_str(), "wb");
+                if (!f) return;
+                uint32_t const ks = (uint32_t) keySize;
+                bool const wrote = std::fwrite(&ks, sizeof ks, 1, f) == 1
+                        && std::fwrite(key, 1, keySize, f) == keySize
+                        && std::fwrite(value, 1, size, f) == size;
+                if (std::fclose(f) == 0 && wrote) {
+                    std::rename(tmp.c_str(), file.c_str());
+                } else {
+                    std::remove(tmp.c_str());
+                }
+            },
+            // The value's size whenever the key matches, as the contract asks;
+            // its bytes only when they fit (Filament asks again with room).
+            [dir](const void* key, size_t keySize, void* value, size_t size) -> size_t {
+                FILE* f = std::fopen(glProgramFile(dir, key, keySize).c_str(), "rb");
+                if (!f) return 0;
+                size_t stored = 0;
+                uint32_t ks = 0;
+                std::vector<unsigned char> k(keySize);
+                if (std::fread(&ks, sizeof ks, 1, f) == 1 && ks == keySize
+                        && std::fread(k.data(), 1, keySize, f) == keySize
+                        && std::memcmp(k.data(), key, keySize) == 0) {
+                    long const at = std::ftell(f);
+                    std::fseek(f, 0, SEEK_END);
+                    long const end = std::ftell(f);
+                    std::fseek(f, at, SEEK_SET);
+                    stored = end > at ? (size_t) (end - at) : 0;
+                    if (stored && stored <= size && std::fread(value, 1, stored, f) != stored) {
+                        stored = 0;
+                    }
+                }
+                std::fclose(f);
+                return stored;
+            });
+}
+}  // namespace
+#endif
+
 // Every engine's recipe: init builds it on the spot, and on Android prepare
 // starts it ahead of the window.
 static Engine::Builder engineBuilder(backend::Backend backend) {
@@ -176,11 +282,21 @@ void TtpRenderer::prepare(backend::Backend backend) {
 #if defined(TTP_VK_PLATFORM_OVERRIDE)
     // The framebuffer-eviction override above. A provided platform is
     // caller-owned and must outlive the engine, so it is a member destroyed
-    // after Engine::destroy in shutdown; only the Vulkan backend takes it.
+    // after Engine::destroy in shutdown.
     if (backend == backend::Backend::VULKAN) {
-        mVkPlatform = std::make_unique<TtpVulkanPlatform>();
-        if (!mPipelineCacheFile.empty()) persistPipelineCache(*mVkPlatform, mPipelineCacheFile);
-        builder.platform(mVkPlatform.get());
+        mPlatform = std::make_unique<TtpVulkanPlatform>();
+        if (!mProgramCacheDir.empty()) {
+            persistPipelineCache(*mPlatform, mProgramCacheDir + "/vk-pipeline-cache.bin");
+        }
+        builder.platform(mPlatform.get());
+    }
+#endif
+#if defined(TTP_GL_PLATFORM_OVERRIDE)
+    // The platform Filament would make for GL itself, with the program store.
+    if (backend == backend::Backend::OPENGL && !mProgramCacheDir.empty()) {
+        mPlatform = std::make_unique<backend::PlatformEGLAndroid>();
+        persistGlPrograms(*mPlatform, mProgramCacheDir + "/gl-programs");
+        builder.platform(mPlatform.get());
     }
 #endif
     // Filament answers on a thread of its own once the driver is up, or has
@@ -323,6 +439,17 @@ void TtpRenderer::updateCamera() {
             -aspect * ZOOM, aspect * ZOOM, -ZOOM, ZOOM, 0.0, 1.0);
 }
 
+// A cheap likeness of a buffer — its length and its two ends, which for a GLB
+// are the header and the start of its JSON (node names, counts) and the tail
+// of its binary chunk. Enough to tell one model from another; never a key.
+static uint64_t bytesPrint(const uint8_t* p, size_t n) {
+    constexpr size_t kEnd = 1024;
+    const uint64_t len = n;
+    uint64_t h = fnv1a(reinterpret_cast<const uint8_t*>(&len), sizeof len);
+    h = fnv1a(p, std::min(n, kEnd), h);
+    return fnv1a(p + n - std::min(n, kEnd), std::min(n, kEnd), h);
+}
+
 bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
         uint32_t len) {
     if (!name || (!bytes && len)) return false;
@@ -331,12 +458,27 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
     // handed over WITHOUT a plan (the .filamat blobs at boot) has no provenance
     // this class can vouch for, so it keeps none and a plan would always ask for
     // it again — which is the safe direction to be wrong in.
+    //
+    // NOR DOES ONE WHOSE BYTES CONTRADICT THE PLAN. The last plan is not always
+    // the one these bytes answer: a tvOS build overtaken while it fetches still
+    // hands over what it fetched, under the newer build's want. Bytes unlike the
+    // first ever provided under that tag keep no tag, because the memos below
+    // and glbKey trust a tag to name its bytes.
     const auto want = mAssetWantTag.find(name);
-    if (want != mAssetWantTag.end()) mAssetTag[name] = want->second;
+    bool vouched = want != mAssetWantTag.end();
+    if (vouched && len) {
+        const uint64_t print = bytesPrint(bytes, len);
+        vouched = mTagPrint.try_emplace(want->second, print).first->second == print;
+        if (!vouched) {
+            utils::slog.w << "provideAsset: " << name << " is not the bytes its tag named; kept untagged"
+                    << utils::io::endl;
+        }
+    }
+    if (vouched) mAssetTag[name] = want->second;
     else mAssetTag.erase(name);
-    // …and whatever was memoised ABOUT the old bytes goes with them. This is the
-    // one place an asset's content changes, which is what lets assetTextures and
-    // glbKey key their memos by name instead of by a hash of every byte.
+    // …and whatever was memoised ABOUT the old bytes BY NAME goes with them. This
+    // is the one place an asset's content changes, which is what lets
+    // assetTextures and glbKey key their memos by name for an untagged asset.
     mAssetUriCache.erase(name);
     mGlbKeyOf.erase(name);
     // The monster pools are built out of these two (buildField).
@@ -350,9 +492,13 @@ std::vector<std::string> TtpRenderer::assetPlan(const std::vector<AssetWant>& wa
     std::vector<std::string> need;
     for (const AssetWant& w : want) {
         if (w.name.empty()) continue;
-        mAssetWantTag[w.name] = w.tag;
+        // A derivative is other bytes than its source under the same tag (a
+        // ghost is its model's), so it is stamped apart. Every derivative is
+        // the one ghost transform (ttp_glb_ghost); a second would need its own.
+        const std::string tag = w.from.empty() ? w.tag : w.tag + "\x1f" "derived";
+        mAssetWantTag[w.name] = tag;
         const auto held = mAssetTag.find(w.name);
-        if (held != mAssetTag.end() && held->second == w.tag
+        if (held != mAssetTag.end() && held->second == tag
                 && mAssets.count(w.name)) {
             continue;
         }
@@ -375,9 +521,10 @@ std::vector<std::string> TtpRenderer::assetTextures() {
     for (const auto& [name, bytes] : mAssets) {
         if (bytes.empty()) continue;
         if (name.size() < 4 || name.compare(name.size() - 4, 4, ".glb") != 0) continue;
-        auto it = mAssetUriCache.find(name);
+        const std::string memo = memoKey(name);
+        auto it = mAssetUriCache.find(memo);
         if (it == mAssetUriCache.end()) {
-            it = mAssetUriCache.emplace(name,
+            it = mAssetUriCache.emplace(memo,
                     ttp::rt::glb_image_uris(bytes.data(), bytes.size())).first;
         }
         for (const std::string& uri : it->second) {
@@ -1554,14 +1701,35 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
 // TtpRendererDressing.cpp).
 // ---------------------------------------------------------------------------
 
+std::string TtpRenderer::memoKey(const std::string& name) const {
+    const auto tag = mAssetTag.find(name);
+    const auto bytes = mAssets.find(name);
+    if (tag == mAssetTag.end() || bytes == mAssets.end() || bytes->second.empty()) return name;
+    return "\x1f" + tag->second;   // no asset name starts with it
+}
+
 uint64_t TtpRenderer::glbKey(const std::string& name, const std::vector<uint8_t>& glb) {
-    // FNV-1a over the bytes: the same bytes are the same model, which is the
-    // whole grouping rule. Never 0 — every caller reserves 0 for "none".
-    // Memoised by name, which provideAsset drops with the bytes it replaces.
+    // One key is one model's bytes, which is the whole grouping rule. A
+    // tagged asset's bytes are what its tag names (provideAsset vouches), so
+    // its key is the TAG's hash, and a new track's models are not read for
+    // it; anything else is FNV-1a over the bytes. The top bit keeps the two
+    // apart. Two tags naming identical files get two keys: a parse each,
+    // never two models drawn as one. Never 0 — every caller reserves 0 for
+    // "none". Memoised by name, which provideAsset drops with the bytes it
+    // replaces.
+    constexpr uint64_t kTagBit = 1ull << 63;
     const auto it = mGlbKeyOf.find(name);
     if (it != mGlbKeyOf.end()) return it->second;
-    uint64_t key = 14695981039346656037ull;
-    for (const uint8_t b : glb) { key ^= b; key *= 1099511628211ull; }
+    const std::string memo = memoKey(name);
+    if (memo != name) {
+        const uint64_t key = fnv1a(reinterpret_cast<const uint8_t*>(memo.data()), memo.size()) | kTagBit;
+        // Two tags on one key would draw two models as one.
+        const auto [at, fresh] = mKeyTag.try_emplace(key, memo);
+        if (fresh || at->second == memo) return mGlbKeyOf[name] = key;
+        utils::slog.e << "glbKey: two tags hash alike; " << name << " is keyed by its bytes"
+                << utils::io::endl;
+    }
+    const uint64_t key = fnv1a(glb.data(), glb.size()) & ~kTagBit;
     return mGlbKeyOf[name] = key ? key : 1;
 }
 
@@ -2164,6 +2332,10 @@ void TtpRenderer::tagFeatures() {
     instVec(mConeInstances, kFeatDressing);
     for (const auto& per : mSceneryInstances) instVec(per, kFeatDressing);
     for (const auto& per : mPropInstances) instVec(per, kFeatDressing);
+    // The set pieces, which every merge of them copies its layer from: left
+    // out, a mask set before the dressing merge (a launch argument, ?features=)
+    // drew every set piece and priced scatter and props only.
+    for (const auto& per : mSetInstances) instVec(per, kFeatDressing);
 
     // The sky's moving furniture — all billboards, all re-aimed per cell.
     meshVec(mClouds, kFeatSky);
@@ -2775,7 +2947,7 @@ TtpRenderer::~TtpRenderer() {
     utils::EntityManager::get().destroy(mCameraEntity);
     Engine::destroy(&mEngine);
 #if defined(__ANDROID__)
-    mVkPlatform.reset();   // caller-owned platform, after the engine using it
+    mPlatform.reset();   // caller-owned platform, after the engine using it
 #endif
 }
 

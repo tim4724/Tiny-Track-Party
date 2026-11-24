@@ -218,13 +218,13 @@ export const MUTATIONS = [
     expect: 'session',
   },
   {
-    // The bulky track schematics ride the LOBBY snapshot only — nothing about the
-    // other eleven keys hints at it, and shipping them every publish is how the
-    // room silently exceeds the relay's 16 KiB cap.
+    // The bulky track schematics ride the per-phone CHOOSER, never the snapshot —
+    // nothing about the other keys hints at it, and shipping them every publish
+    // is ~6 KB to every phone each time and how the room nears the relay's 16 KiB cap.
     name: 'session/track-chooser-rides-every-snapshot',
     file: 'native/libttp-party/ttp/session.cc',
-    find: '  if (lobby) copyKey(out, chooser, "tracks");\n  else out.set("tracks", Value::Null());',
-    replace: '  copyKey(out, chooser, "tracks");',
+    find: '  copyKey(out, input, "chooserRev");',
+    replace: '  copyKey(out, input, "chooserRev");\n  copyKey(out, chooser, "tracks");',
     expect: 'session',
   },
   {

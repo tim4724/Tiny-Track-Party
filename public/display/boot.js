@@ -12,6 +12,7 @@
 // Still JS by design: rendering, HUD, and the transport I/O (WebSocket /
 // RTCPeerConnection), which wasm cannot own without proxying through JS anyway.
 import { loadBiomes } from '../shared/biomes.js';
+import { loadNativeRuntime } from './nativeRuntime.js';
 import * as ui from './NativeUiModel.js';
 import * as schem from './NativeSchematic.js';
 
@@ -33,6 +34,10 @@ export function trackEntry(t, totalLaps) {
 // window globals (field sizes, car table, lap count) arrive as `world` rather
 // than being read here, so this module has no opinion about where they live.
 export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, carNames, carStatsRows, totalLaps }) {
+  // The engine's download first: the layers below arrive as chunks of their own,
+  // one round trip each, and every one of them waits on it anyway. Memoized, so
+  // their init()s join this load; a failure surfaces through them.
+  loadNativeRuntime().catch(() => {});
   const sim = await import('./NativeRaceSession.js');
   // The audio DECISIONS are C++ too (ttp_audio.h). Only the device half — the
   // AudioContext, the cue palette, the song element — is still JS, and it decides

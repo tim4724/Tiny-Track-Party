@@ -760,9 +760,10 @@ every `ttp_*` call: Filament hands the engine back only on the thread that
 started it. A later surface (Home and back) builds its engine there, as before,
 because `ttp_display_destroy` still deletes the renderer. The canary is marked
 at the prepare, before the driver starts, so a driver that kills the process
-still counts. Both calls carry the file a Vulkan engine keeps its compiled
-pipelines in between runs, under `codeCacheDir`, which Android empties on an app
-update so a build with new materials never starts from the last one's. A Vulkan
+still counts. Both calls carry the directory the engine keeps its compiled
+shaders in between runs (Vulkan's pipeline cache, GL's program binaries),
+`codeCacheDir`, which Android empties on an app update so a build with new
+materials never starts from the last one's. A Vulkan
 engine reads the SPIR-V twins from `assets/materials-vk/`
 (compiled by `build-runtime-android.sh`; a GL blob does not parse on a Vulkan
 engine, so `SceneStaging` follows `DisplayHost.usingVulkan`, never the
@@ -829,7 +830,10 @@ blob's reads land on the frame beat).
 
 ## Audio
 
-**Every cue is mixed here, in Kotlin, into one always-open `AudioTrack`.**
+**Every cue is mixed here, in Kotlin, into one `AudioTrack`, open while the app
+is on screen.** It closes on `onStop` and reopens on `onStart`: an open track,
+silent or not, keeps AudioFlinger's output out of standby and holds an `AudioMix`
+partial wake lock charged to the app.
 `AudioMixer` is the port of the render half of tvOS's `AudioDevice.swift` and
 `CueBank` is the port of its `CueBank.swift`; read those two Swift files for the
 reasoning behind the DSP, which is not repeated in the Kotlin.
@@ -900,9 +904,8 @@ row a list would clip, the same blue as an inset edge) whenever it holds focus.
 
 **THIS SHELL IS DELIBERATELY SIMPLER THAN THE OTHER TWO** (the user's call, for
 the box above): no blur anywhere, no per-frame animation added for a look, and
-any translucent layer over the live race kept small. Where the web blurs (the
-frost, the scan hint, the open seats, the lap pill, the countdown strip) this
-draws the tint alone; the frost goes on a touch thicker to make up for it
+any translucent layer over the live race kept small. Where the web blurs (its
+frost) this draws the tint alone, a touch thicker to make up for it
 (`Sticker.frost`). The item slot shows a landed item without the web's 1.8x pop.
 
 `Tokens.kt` reads the staged `design-tokens.json` — the same file the web's CSS is
@@ -1058,7 +1061,9 @@ Three consequences of that:
   a scene lands (`ttp_display_frame` answers 0 throughout), so every card whose
   dressing ran a few seconds past the build came back as a perfect HUD over a BLACK
   surface. `DisplayHost.framesPresented` is what the harness waits on, and its
-  timeout has to OUTLAST that stall rather than expire inside it. This is the
+  timeout has to OUTLAST that stall rather than expire inside it. A scene under
+  a full-screen board stops presenting once it has settled (`DisplayHost.covered`),
+  so `DisplayHost.idling` answers the wait too. This is the
   "frames presented counter" the tvOS harness names in its own comment as the
   honest fix and does not have.
 - **IT PHOTOGRAPHS WHATEVER IS INSTALLED**, because it never builds and never
@@ -1123,6 +1128,13 @@ thing that needs to be remembered. What it wraps:
   APK. This is the shell's answer to what `npm run check:artifact` is for the web
   (root rule 6). `-PttpNoEngine` is how the CI leg says it has no engine on
   purpose.
+- **The engine exports only what the VM binds by name** (`native/runtime/
+  ttp_android.map`): `JNI_OnLoad` and the `Java_*` surface natives. So the
+  shipped `.so` names none of its own functions, and anything that symbolizes
+  it — a tombstone, a profile — reads the unstripped link the script keeps per
+  build id under `native/build/android-symbols/` (a store build's are a
+  `release.yml` artifact): `ndk-stack -sym native/build/android-symbols -i
+  <tombstone>` picks the right one by the build id each frame carries.
 
 **NEVER `./gradlew install<Variant>`. Assemble, then `adb -s "$SERIAL" install`.**
 Gradle's install task installs on EVERY attached device, and this tree is worked

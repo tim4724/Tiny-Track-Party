@@ -836,6 +836,11 @@ jbyteArray n_ttp_net_join_url(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1,
     return toBytes(env, ttp_net_join_url(s0.get(), s1.get(), s2.get(), s3.get()));
 }
 
+jint n_ttp_net_keep_awake(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return (jint) ttp_net_keep_awake((int) a0);
+}
+
 jbyteArray n_ttp_net_liveness_json(JNIEnv* env, jclass, jint a0, jint a1, jdouble a2) {
     (void) env;
     return toBytes(env, ttp_net_liveness_json((int) a0, (int) a1, (double) a2));
@@ -1603,6 +1608,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_net_host_change_apply_json", "(I[B)[B", (void*) n_ttp_net_host_change_apply_json },
     { "ttp_net_init_pick", "(I[BID)V", (void*) n_ttp_net_init_pick },
     { "ttp_net_join_url", "([B[B[B[B)[B", (void*) n_ttp_net_join_url },
+    { "ttp_net_keep_awake", "(I)I", (void*) n_ttp_net_keep_awake },
     { "ttp_net_liveness_json", "(IID)[B", (void*) n_ttp_net_liveness_json },
     { "ttp_net_lobby_frame", "(II[B)[B", (void*) n_ttp_net_lobby_frame },
     { "ttp_net_on_background_json", "(I)[B", (void*) n_ttp_net_on_background_json },

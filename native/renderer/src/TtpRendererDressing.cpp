@@ -268,7 +268,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (uint32_t i = 0; i < mBoulders.idx.size(); i++) mBoulders.idx[i] = i;
         accumulateNormals(mBoulders); // soup → flat faceted, the kit read
         mBoulders.bakeLight = true;
-        tileMajor(mBoulders, mSheetTile, mSheetMinTris);
+        tileMajor(mBoulders, kSheetTile, kSheetMinTris);
         buildMesh(mBoulders);
     }
     mScatterLayout = ttp::canonical_stringify(scatter);
@@ -945,7 +945,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         if (!mLandmarks.verts.empty()) {
             accumulateNormals(mLandmarks);
             mLandmarks.bakeLight = true;
-            tileMajor(mLandmarks, mSheetTile, mSheetMinTris);
+            tileMajor(mLandmarks, kSheetTile, kSheetMinTris);
             buildMesh(mLandmarks);
         }
         return;
@@ -1343,7 +1343,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         mLandmarks.bakeLight = true;
         mLandmarks.simplify = true;
-        tileMajor(mLandmarks, mSheetTile, mSheetMinTris);   // per vertex above: order-free
+        tileMajor(mLandmarks, kSheetTile, kSheetMinTris);   // per vertex above: order-free
         buildMesh(mLandmarks);
     }
 }
@@ -2696,7 +2696,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         accumulateNormals(m);
         bakeVertexLight(m);
         m.uvs.assign(m.verts.size(), float2{ 0, 0 });
-        tileMajor(m, mSheetTile, mSheetMinTris);
+        tileMajor(m, kSheetTile, kSheetMinTris);
         return buildMesh(m, true, staticInstance());
     };
     // mStructures itself is built after the set pieces, which may add their
@@ -2738,7 +2738,7 @@ void TtpRenderer::buildStructuresReceiver() {
     accumulateNormals(mStructures);
     bakeVertexLight(mStructures);
     mStructures.uvs.assign(mStructures.verts.size(), float2{ 0, 0 });
-    tileMajor(mStructures, mSheetTile, mSheetMinTris);
+    tileMajor(mStructures, kSheetTile, kSheetMinTris);
     buildMesh(mStructures, true, staticInstance());
 }
 
@@ -2805,7 +2805,7 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     // the slots are the same in every instance.
     const utils::Entity* ents = insts[0]->getEntities();
     const auto spins = [&](size_t e) { return hangsUnder(asset, tcm, ents[e], isSpin); };
-    // The kit's colours for this model, keyed by the same bytes hash; a
+    // The kit's colours for this model, under the same glbKey; a
     // model it does not know keeps the instanced, live-lit draw.
     const ttp::kitcolors::Model* const colorModel = kitColors(keyIt->second);
     for (auto* in : insts) {
@@ -3075,6 +3075,7 @@ void TtpRenderer::buildDressingMerge() {
 void TtpRenderer::fillObstacles(ttp::rt::Obstacles& out) {
     out = {};
     if (!mScene || !mEngine) return;
+    const auto t0 = std::chrono::steady_clock::now();
     // What lies on the land is no obstacle, and a shot along the road would
     // graze it: a face counts only where it stands kClear over the ground.
     // A face longer than kBackdrop is the room or the horizon, not scenery.
@@ -3141,6 +3142,11 @@ void TtpRenderer::fillObstacles(ttp::rt::Obstacles& out) {
     family(mPropAssets, mPropInstances, false);
     family(mSetAssets, mSetInstances, true);
     out.seal();
+    // Which build or frame paid for it: the lobby's builds should, a race's not.
+    char line[64];
+    std::snprintf(line, sizeof line, "ttp obstacles: %.1f ms", std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - t0).count());
+    utils::slog.i << line << utils::io::endl;
 }
 
 void TtpRenderer::addCut(utils::Entity e, float size, bool sheet) {

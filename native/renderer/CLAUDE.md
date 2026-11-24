@@ -447,8 +447,8 @@ what was measured and not taken; the rules it left:
   driver CPU. Blended renderables keep their priorities.
 - **The engine is flushed around `beginFrame`**, so the backend starts the
   frame's uploads and instance writes before cell 1 is recorded.
-- **The terrain sheets tile twice as coarse** (`mSheetTile`, `mSheetMinTris`):
-  fewer draws for vertices the GPU is not bound on here.
+- **The set pieces bake in tiles twice as coarse** (`mPieceTile`): fewer
+  draws for vertices the GPU is not bound on here.
 - **Filament's automatic instancing is OFF** (`TtpRenderer::init`): the merged
   groups are explicit, so the instancer only ever batched the gltfio pools, and
   a pass that batches anything creates, writes and destroys a per-pass
@@ -497,8 +497,12 @@ memory until another track builds or the renderer goes.
   from inside it.** They know scenery only as the voxels that function fills
   from the drawn triangles (`ttp/obstacles.h`; `LensPlan` in `ttp/camera.h` is
   the reader), so a new family of standing geometry joins its list. It is
-  filled inside `ttp_display_build`, never on a frame: it costs tens of
-  milliseconds, which on a TV box would be a visible hitch.
+  filled inside a `ttp_display_build` with no cells, never on a frame by
+  design: it costs tens of milliseconds, which on a TV box would be a visible
+  hitch. A race's build leaves it unfilled, because only the lobby's cameras
+  read it; a frame fills it only if a lobby camera films a scene no lobby
+  build has (`fillScenery`), so it must stay a pure function of the static
+  scene, whatever frames have done to it since.
 - **Split a build before optimising it**: `bakeShadowMap`, `buildStatic` and
   `buildField` each log their phases (`PhaseLog`).
 - **A bake never `flushAndWait`s**: its GPU time belongs behind the thread that
@@ -510,7 +514,9 @@ memory until another track builds or the renderer goes.
 - **The one-time half is a warm-up problem.** Filament's Vulkan pipeline-cache
   prewarming needs an extension the reference box lacks, so the effect pools are
   drawn once before the race (`warmEffectPipelines`) and the compiled pipelines
-  persist in a file the Android shell names (`setPipelineCacheFile`).
+  persist in the directory the Android shell names (`setProgramCacheDir`). So do
+  the Android GL backend's linked programs (`persistGlPrograms`): one file per
+  program, which a refusing driver just recompiles.
 - **Car bodies ARE kept** (`mBodyPool`), and **parking restores nothing**: a
   parked body still wears the last frame's pose, so `takeAsset` hands one back at
   its snapshotted parse pose (`mBodyRest`). Anything added to a reuse path asks
@@ -1035,9 +1041,12 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
   are inherited, never re-implemented. The monster swap is PER CELL, so
   `renderCells` re-mirrors while one is on.
 - **Geometry comes from the same GLB bytes the shell provided**, through
-  `ttp/glb_mesh.h` (the `glbmesh` ctest executes it), and materials are SHARED
-  from the originals'. A model the reader cannot fully decode keeps drawing as
-  gltfio loaded it — the fallback is whole-model, never a partial merge.
+  `ttp/glb_mesh.h` (the `glbmesh` ctest executes it, and reads every kit model
+  through it), and materials are SHARED from the originals'. A model the reader
+  cannot fully decode keeps drawing as gltfio loaded it — the fallback is
+  whole-model, never a partial merge. It decodes the kit's quantized attributes
+  (KHR_mesh_quantization) the way gltfio's cgltf does, so the bake and the live
+  draw read one vertex.
 - **A merged group culls as ONE box.** Teardown order matters twice:
   `destroyCarSlot` kills the groups BEFORE the asset whose instances they share,
   and `releaseScene` destroys them while the source entities are still alive.
@@ -1188,9 +1197,13 @@ its code:
   sprites are fill, and none has been priced on the box yet
   (`resolve_theme`).
 
-- **Coarser tiles** (`buildStatic`): the Android GL fallback's 96 u sheet and
-  16 u piece tiles. Nothing to see; a quarter of the 4P frame's draws, for a
-  few percent more vertices (less of each sheet culled).
+- **Coarser piece tiles** (`buildStatic`): the Android GL fallback's 16 u
+  set-piece tiles. Nothing to see; a few draws a cell for a few thousand more
+  vertices. The sheets' 96 u tile is every tier's (`kSheetTile`): it takes a
+  fifth or more of full's 4P draws for more vertices (less of each sheet
+  culled; most on a sparse circuit like Riptide), with no pixel of the static
+  world changed (blended effects across a tile seam may stack in the other
+  order).
 - **A coarser sky dome** (16 rings, 24 spokes): never culled, so every cell
   paid all of the full one; the gradient between rings strays a few code values.
 - **Octagonal ground-shadow discs**: the rim fades to nothing.
@@ -1210,7 +1223,7 @@ frame-matched still shows; and no copse companions, or a thinner scatter or
 clutter, which change the verge in 1P too, where the box has the headroom.
 
 Priced at the box's 4P buffer on the heavy tracks, lite's worst frame has
-about 30% fewer draws and 6-13% fewer vertices than full's; most of the rest
+fewer draws and vertices than full's (the cuts above); most of the rest
 of the vertices are the road, the cars and the ground, which it does not touch. It
 changes no sim, so `film:laps -- --detail lite` films the same race frame for
 frame beside full, and `score:verge -- --detail lite` scores it. `perf:race --

@@ -36,6 +36,18 @@ RewriteRule ^api/([\w-]+)$ api/$1.json [END]
 RewriteCond $1 !^(display|controller|shared|bundle|assets|partyplug|gallery|trailer|kits|api|health|privacy|about|terms|robots|sitemap|favicon|licenses|licences|credits|imprint|legal)$ [NC]
 RewriteRule ^([A-Za-z0-9_-]{1,24})/?$ controller/index.html [END]
 
+# The brotli-11 copies scripts/build-site.mjs makes of the content-named code
+# and the kit's models, sent in place of the file to a browser that takes br. The .br's second extension
+# makes it Content-Encoding: br over the first one's type, so the compression
+# filters below leave it alone; server/index.js does the same.
+RewriteCond %{HTTP:Accept-Encoding} \bbr\b
+RewriteCond %{REQUEST_FILENAME}.br -f
+RewriteRule ^(.+)$ $1.br [END]
+AddEncoding br .br
+<FilesMatch "\.br$">
+  Header append Vary Accept-Encoding
+</FilesMatch>
+
 # Types a stock mime.types may lack. The engine's correct type is what enables
 # WebAssembly.instantiateStreaming. The license notices open in place rather
 # than download.
@@ -89,6 +101,6 @@ Header set Cache-Control "no-cache"
 <FilesMatch "\.(html|js|mjs|wasm|filamat|css)$">
   Header set Cache-Control "no-store"
 </FilesMatch>
-<If "%{REQUEST_URI} =~ m#(\.[0-9A-Z]{8}\.(js|css)(\.map)?|^/display/engine/[0-9A-Z]{8}/[^/]+)$#">
+<If "%{REQUEST_URI} =~ m#(\.[0-9A-Z]{8}\.(js|css)(\.map|\.br)?|^/display/engine/[0-9A-Z]{8}/[^/]+)$#">
   Header set Cache-Control "public, max-age=31536000, immutable"
 </If>

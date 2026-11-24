@@ -408,6 +408,28 @@ test('stop() resets brake + ACTION + keyboard state so the next race cannot inhe
   assert.equal(t._brakeKey, 0, 'keyboard brake cleared on stop');
 });
 
+test('suspend() (a pause) emits nothing and keeps every held state, so start() carries the race on', () => {
+  const sent = [];
+  const t = new TiltInput({ onControl: (c) => sent.push(c) });
+  t.setActionEnabled(true);
+  t.start();
+  try {
+    t.pressAction(); t.pressAction(); t.pressBrake(true);
+    t.suspend();
+    const n = sent.length;
+    t.pressSteer('left', true); t.pressBrake(false); t.pressBrake(true);
+    assert.equal(sent.length, n, 'nothing is emitted while suspended');
+    // A use counter back at 0 would read to the display as a press.
+    assert.equal(t._useCount, 2, 'use-counter kept');
+    assert.equal(t._brakeBtn, 1, 'held brake kept');
+    t.start();
+    t._tick();
+    assert.deepEqual(sent.at(-1), { s: -1, b: 1, u: 2, h: 0 }, 'the resume sends the state held through the pause');
+  } finally {
+    t.stop();
+  }
+});
+
 // ---- a refused REQUEST is not a refused PERMISSION ----
 
 test("a requestPermission the platform would not even put leaves 'unknown', and re-asks on the next tap", async () => {

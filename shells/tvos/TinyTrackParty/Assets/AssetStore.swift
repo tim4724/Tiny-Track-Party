@@ -10,7 +10,7 @@ import Foundation
 ///
 /// TWO SOURCES, and the split is `shells/tvos/scripts/stage-assets.sh`'s:
 ///
-/// - **Bundled** (~7 MB): the toy-car kit, the baked cues, the Metal
+/// - **Bundled**: the toy-car kit, the baked cues, the Metal
 ///   `.filamat` blobs and `design-tokens.json`, staged into
 ///   `Bundle.main.resourceURL/assets/`. That directory is a **folder
 ///   reference** in `project.yml`, not a group, precisely so subdirectories
@@ -103,11 +103,24 @@ final class AssetStore {
     /// `ttp_theme_scenery_models` answers `the lawn's tree models in order` and
     /// `protocol.js`'s `CAR_MODELS` names `vehicle-gt`.
     ///
-    /// Not cached. The bundle read is a memory map serviced by the unified page
-    /// cache, so a per-race rebuild costs a handful of `open`s; a dictionary here
-    /// would be a second copy of the same pages held for the life of the app.
+    /// STAGED LZFSE-PACKED (`stage-assets.sh` has why and checks every pack
+    /// inflates back byte-identical), so each read inflates. Not cached: the
+    /// engine copies the bytes before `ttp_display_asset` returns and keeps what
+    /// it holds across builds (`ttp_display_asset_plan`), so a copy here would
+    /// only be a second one held for the life of the app.
+    ///
+    /// A pack that does not inflate is a staging defect, loud in debug. A
+    /// release build answers nil, which `SceneStaging` turns into one fetch from
+    /// the origin rather than a model the reader rejects.
     func glb(_ name: String) -> Data? {
-        bundled("toycar/\(name).glb")
+        guard let packed = bundled("toycar/\(name).glb.lzfse") else { return nil }
+        do {
+            return try (packed as NSData).decompressed(using: .lzfse) as Data
+        } catch {
+            print("[ttp] toycar/\(name).glb.lzfse does not inflate: \(error)")
+            assertionFailure("toycar/\(name).glb.lzfse does not inflate — re-run shells/tvos/scripts/stage-assets.sh")
+            return nil
+        }
     }
 
     // MARK: - Origin

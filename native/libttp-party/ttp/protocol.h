@@ -1,7 +1,7 @@
 // protocol — the C++ twin of public/shared/protocol.js: the wire vocabulary
 // (message types, room states, fastlane set) and shared game constants (car
-// models/colours/stats) both sides of the party agree on. Pure data plus one
-// pure function (car_stats). It mirrors the JS source file 1:1; the C++ module
+// models/colours/stats) both sides of the party agree on. Pure data plus two
+// pure functions (car_stats, msg). It mirrors the JS source file 1:1; the C++ module
 // boundary is deliberately loose (it lives under libttp-party for now, next to
 // the transport port, and may relocate into libttp-runtime once that exists).
 //
@@ -37,11 +37,19 @@ inline const std::vector<std::pair<std::string, std::string>> MSG = {
     {"SELECT_MODE", "select_mode"}, {"SERIES_NEXT", "series_next"},
     {"SET_SOUND", "set_sound"}, {"SET_FRAME_RATE", "set_frame_rate"},
     {"PING", "ping"},
-    {"LOBBY_UPDATE", "lobby_update"}, {"ITEM", "item"},
+    {"LOBBY_UPDATE", "lobby_update"}, {"CHOOSER", "chooser"}, {"ITEM", "item"},
     {"PONG", "pong"},           {"COUNTDOWN", "countdown"},
     // Display -> its own slot; never reaches a controller. See protocol.js.
     {"HEARTBEAT", "_heartbeat"},
 };
+
+// The wire spelling of a MSG key ("" for none): C++ names a message by its key,
+// never a literal, so it cannot drift from what protocol.js told the phone.
+inline const char* msg(const char* key) {
+  for (const auto& kv : MSG)
+    if (kv.first == key) return kv.second.c_str();
+  return "";
+}
 
 // FASTLANE_TYPES is keyed by the wire type string; value true = rides the
 // unreliable fastlane. Only 'control' today.

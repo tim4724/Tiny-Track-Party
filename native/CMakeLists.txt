@@ -72,6 +72,38 @@ target_compile_options(ttp_warnings INTERFACE
   -Wno-unused-parameter   # ABI stubs and callback signatures keep unused params by contract
 )
 
+# ---- Web: compiled for size, except where the frame runs --------------------
+# A browser downloads the engine on its first visit, so the wasm is -Oz. The
+# sources below keep -O3: the ones a sampling profile of the bench race (4P and
+# 1P) shows the frame spending its wasm time in, measured null against an
+# all--O3 module. A source that starts running every frame belongs here — and
+# so does one whose INLINE helpers a hot caller reaches out of line: the linker
+# keeps one copy of an inline function, from whichever object it meets first, so
+# a -Oz caller can hand the -O3 ones its slow copy. Configure with
+# -DCMAKE_EXE_LINKER_FLAGS=--profiling-funcs to see names in a profile.
+# The level changes no result: the strict-FP flags above hold at any -O, and the
+# wasm ctest leg replays the corpora on these same objects. Release only; the
+# native platforms stay -O3 throughout.
+if(EMSCRIPTEN)
+  add_compile_options($<$<CONFIG:Release>:-Oz>)
+  set_source_files_properties(
+    renderer/src/TtpRenderer.cpp
+    renderer/src/TtpRendererDecals.cpp
+    renderer/src/TtpRendererFrame.cpp
+    renderer/src/TtpRendererMotion.cpp
+    runtime/ttp_display_core.cc
+    runtime/ttp_runtime.cc
+    libttp-runtime/ttp/frame_builder.cc
+    libttp-sim/ttp/ai_driver.cc
+    libttp-sim/ttp/game.cc
+    libttp-track/ttp/centerline.cc
+    libttp-json/ttp/canonical.cc
+    libttp-json/ttp/jsonnum.cc
+    vendor/double-conversion/double-conversion/double-to-string.cc
+    vendor/double-conversion/double-conversion/fast-dtoa.cc
+    PROPERTIES COMPILE_OPTIONS $<$<CONFIG:Release>:-O3>)
+endif()
+
 # Emscripten leg (Track S M4): the same check binaries and replay CLI compile
 # to WASM and run under Node — `emcmake cmake ... -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)`
 # lets ctest run them transparently. NODERAWFS reads the fixture files straight
@@ -1010,7 +1042,8 @@ add_test(NAME wear COMMAND wear_check)
 add_executable(glbmesh_check runtimetest/glbmesh_check.cc)
 target_link_libraries(glbmesh_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(glbmesh_check)
-add_test(NAME glbmesh COMMAND glbmesh_check)
+add_test(NAME glbmesh
+  COMMAND glbmesh_check ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar)
 
 # The flat-body weld (ttp/flat_weld.h) the car bodies' merged draw uses —
 # header-inline for the same reason, and checked on the shipped roster too,
@@ -1261,6 +1294,15 @@ if(ANDROID)
   if(TARGET ttp_renderer)
     list(APPEND TTP_ANDROID_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_android.cc)
     add_library(ttp_runtime_android SHARED ${TTP_ANDROID_SOURCES})
+    # EXPORTS ONLY WHAT THE VM RESOLVES BY NAME (runtime/ttp_android.map).
+    # Everything else exported by default — every Filament, libc++ and ttp
+    # symbol — is a GC root the linker must keep and a dynsym entry the loader
+    # must hash, about a megabyte per ABI. The function names a tombstone loses
+    # with them come back from the unstripped copy build-runtime-android.sh
+    # keeps per build id.
+    set(TTP_ANDROID_MAP ${CMAKE_CURRENT_SOURCE_DIR}/runtime/ttp_android.map)
+    target_link_options(ttp_runtime_android PRIVATE "-Wl,--version-script=${TTP_ANDROID_MAP}")
+    set_property(TARGET ttp_runtime_android APPEND PROPERTY LINK_DEPENDS ${TTP_ANDROID_MAP})
   else()
     # NO SDK, NO .so — an OBJECT library instead, and the difference is not
     # cosmetic. The generated bridge takes the ADDRESS of every export in its

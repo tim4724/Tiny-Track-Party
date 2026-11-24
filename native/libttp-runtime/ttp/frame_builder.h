@@ -109,8 +109,9 @@ struct DisplayState {
     // The built scene's ground surface, handed over by the renderer after each
     // build (it alone samples the relief): the follow cam keeps above it.
     GroundGrid ground;
-    // The built scene's standing scenery, handed over by the renderer once it
-    // has merged its dressing: the lobby's lens keeps out of it (LensPlan).
+    // The built scene's standing scenery, handed over by the renderer: the
+    // lobby's lens keeps out of it (LensPlan). Like `loops`, which are placed
+    // clear of it, filled only once a camera that reads it looks (filmsScenery).
     Obstacles obstacles;
     LensPlan lens;                      // the coverage shot's; reset with `chase` and at every cut
 
@@ -210,6 +211,11 @@ void atRest(TtpCarInput& c);
 // The pose a car is DRAWN at, read back off the frame's own car input — what
 // a camera follows when the picture and the sim may disagree (a held field).
 ttp::Pose heldPose(const TtpCarInput& c);
+
+// Whether the next frame's camera reads `obstacles` and `loops`: the lobby's
+// coverage or the follow cam, filming at least one car. A race's chase rigs
+// read neither, which is what lets a race's build leave them unfilled.
+bool filmsScenery(const DisplayState& d, const Game* eng);
 
 // ttp_display_cell_look's body, so the frame_builder ctest drives the same
 // bounds the ABI does: a look for a cell the current list does not have is

@@ -146,9 +146,10 @@ the map, where it cannot outlive it.
 **What the re-work costs is entirely a fact about your storage**, and the shells
 differ by an order of magnitude — an APK is compressed, so Android re-inflated
 every model and copied it across JNI (39 ms of provisioning on the first build,
-8 ms once the plan holds), while a tvOS bundle is uncompressed (~5 ms of a
-~215 ms build) and the web's bytes are already in memory. That is a reason to
-expect different WINS, not a reason for different code.
+8 ms once the plan holds), a tvOS bundle is stored uncompressed so the shell
+stages its GLBs LZFSE-packed and inflates each one it hands over, and the web's
+bytes are already in memory. That is a reason to expect different WINS, not a
+reason for different code.
 
 **GENERATION IS THE INVALIDATION, and it is the one thing you supply.** Give it
 something that changes whenever your binary could produce different bytes —
@@ -284,6 +285,20 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    BACK at the root on API 31+) has to end the party explicitly first.
    `check:tvos-party` and `check:androidtv-party` assert the same room, seat and
    all, after Home.
+
+   **The screen is held awake while a party exists, and only then.** A race is
+   minutes with no input on the TV, so a shell keeps the OS from dimming it, but
+   an empty lobby is an attract loop nobody is watching, so the screensaver may
+   have it (and with it the room, on a platform where that is a background).
+   `ttp_net_keep_awake` is the answer: a seat on the roster, which the lobby
+   frees on `peer_left` and which anywhere else stays reserved until the room is
+   back in the lobby, so a seated phone and a live race (frozen or not) both
+   hold the screen. A shell asks it on every roster render and flips its
+   platform switch only on a change (Android FLAG_KEEP_SCREEN_ON, tvOS
+   `isIdleTimerDisabled`, the web's Screen Wake Lock); no timer of its own.
+   Anything that keeps the box from idling once the app is OFF screen goes with
+   the frame loop: an audio output left open in the background holds a wake
+   lock of its own.
 
    **Boot must not hold the first frame hostage.** Whatever the shell's boot does
    — configure, stage assets, build the preview track, dial the relay — it runs

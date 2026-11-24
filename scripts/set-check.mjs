@@ -4,8 +4,8 @@
 // corner, seams welded), and an island is held up when it stands on the floor
 // (the model's y = 0, the ground the renderer stands it on; a part sunk below
 // it is planted; for a piece modelled on terrain, that terrain: SET_GROUND,
-// except under a part the renderer drapes, built on the plain and laid on
-// the ground as it is drawn)
+// or a stand's trees' sampled ground, except under a part the renderer
+// drapes, built on the plain and laid on the ground as it is drawn)
 // or touches an island that is. Touching is the islands'
 // surfaces coming within TOUCH of each other, triangle against triangle, so a
 // part pushed into another counts and one a hair off does not; boxes would
@@ -111,11 +111,25 @@ const boxOf = (pts) => {
 // The gap between two boxes (0 where they overlap).
 const boxGap = (a, b) => Math.hypot(...[0, 1, 2].map((d) => Math.max(0, a.lo[d] - b.hi[d], b.lo[d] - a.hi[d])));
 
+// A stand of trees (set_prototypes.py forest) stands on the track's land, not
+// on its model's floor: each tree on the ground sampled under it
+// (scripts/blender/forests.json), which is its floor here. Whether that is
+// still the ground drawn there is what `npm run check:floating` measures.
+const FORESTS = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/blender/forests.json'), 'utf8'));
+// The tree of a stand nearest (x, z), as (x, z, ground, ...); null for a
+// model that is no stand.
+export function standTree(model) {
+  const trees = FORESTS[model.replace(/^set-/, '').replace(/-lite$/, '')];
+  if (!trees) return null;
+  return (x, z) => trees.reduce((a, t) => (Math.hypot(t[0] - x, t[1] - z) < Math.hypot(a[0] - x, a[1] - z) ? t : a));
+}
+
 export function checkPiece(file) {
-  // The floor: y = 0, or the terrain a piece was modelled on (SET_GROUND)
-  // where the part is not draped.
+  // The floor: y = 0, the terrain a piece was modelled on (SET_GROUND) or
+  // a stand's trees' ground, where the part is not draped.
   const model = path.basename(file, '.glb');
-  const floor = (p, t) => (t.drape ? 0 : setGroundY(model, p[0], p[2]));
+  const tree = standTree(model);
+  const floor = (p, t) => (t.drape ? 0 : tree ? tree(p[0], p[2])[2] : setGroundY(model, p[0], p[2]));
   const tris = glbTriangles(fs.readFileSync(file));
   // Islands: triangles joined through a shared corner, corners welded by
   // position (the exporter splits them at every UV and normal seam).
