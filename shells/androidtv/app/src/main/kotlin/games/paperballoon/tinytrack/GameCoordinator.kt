@@ -869,7 +869,9 @@ class GameCoordinator(
         // `measuring` is 1 unconditionally here: this shell feeds ttp_perf_sample
         // on every frame, with no automation or pinned-scale path that turns it
         // off (the web has both).
-        if (Ttp.ttp_race_countdown_ready(if (sceneBuildOk) 1 else 0, 1,
+        // The race's pause is read off the handle inside: a paused launch stays
+        // held, though this loop keeps framing under the board.
+        if (Ttp.ttp_race_countdown_ready(sessionHandle, if (sceneBuildOk) 1 else 0, 1,
                                          nowMs() - waiting.second) == 0) return false
         pendingCountdown = null
         run(JSONObject().put("effects", waiting.first))

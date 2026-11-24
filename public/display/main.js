@@ -548,8 +548,10 @@ scene.onFrame = (dt) => {
   // "3, 2, 1" waits here until the scene has stopped assembling itself. The
   // rule and everything it weighs are ttp_race.h's — this side reports only the
   // two facts it owns (has my build returned, am I measuring at all) and the
-  // clock. Held cars are free: the countdown holds them anyway, so a gate that
-  // skips the update simply extends the pose they were already in.
+  // clock. The pause is the rule's too: the return above skips the ask, but it
+  // is not what keeps a paused launch shut, here or on the TVs. Held cars are
+  // free: the countdown holds them anyway, so a gate that skips the update
+  // simply extends the pose they were already in.
   //
   // AND IT SKIPS THE AUDIO FRAME WITH IT, where the two TV shells deliberately
   // keep theirs ticking. That is each shell following its own structure rather
@@ -1099,7 +1101,7 @@ function armCountdown(effects) {
 // Asked once a frame while a launch is waiting. True the frame the countdown
 // actually starts, so the caller can skip the rest of that tick.
 function releaseCountdown() {
-  if (!flow.countdownReady(scene.sceneBuilt(), scene.perf.measuring,
+  if (!flow.countdownReady(session.h, scene.sceneBuilt(), scene.perf.measuring,
                            performance.now() - pendingCountdown.at)) {
     return false;
   }

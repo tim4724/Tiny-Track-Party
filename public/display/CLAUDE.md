@@ -130,7 +130,9 @@ A launch's countdown is HELD until the scene it will be driven on has settled
 and then arm `countdownEffects`, which `onFrame` releases once the rule agrees.
 The two facts this side owes are `Stage.sceneBuilt()` and `perf.measuring` —
 under automation and a pinned `?dpr=` nothing feeds the window, and an empty
-window must not be read as a scene that has not drawn yet.
+window must not be read as a scene that has not drawn yet. The race's pause is
+not one of them: the rule reads it off `session.h`, so `onFrame`'s paused return
+is not what keeps a paused launch held.
 
 ## Rendering surface
 

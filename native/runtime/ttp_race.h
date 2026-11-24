@@ -293,6 +293,9 @@ TTP_ABI double ttp_race_flourish_ms(void);
  * counts down. race_flow.h's countdownReady says what the wait buys and why it
  * is measured in frames rather than in the build returning.
  *
+ *   sessionHandle  the launched race. Its pause is read here, not passed in:
+ *                  a paused race never counts down (race_flow.h). 0 or a
+ *                  disposed handle reads as not paused.
  *   sceneBuilt     the shell's "my scene build has returned" latch
  *   measuring      is this surface feeding ttp_perf_sample at all? A shell that
  *                  is not (the web under automation or a pinned ?dpr=) has no
@@ -305,8 +308,8 @@ TTP_ABI double ttp_race_flourish_ms(void);
  * shell cannot gate a countdown on numbers its own readout disagrees with, and
  * three shells cannot pick three different series out of it. Every shell
  * already resets that window on a scene build, so it is this scene's frames. */
-TTP_ABI int ttp_race_countdown_ready(int sceneBuilt, int measuring,
-                                     double sinceLaunchMs);
+TTP_ABI int ttp_race_countdown_ready(int sessionHandle, int sceneBuilt,
+                                     int measuring, double sinceLaunchMs);
 
 /* ---- the roster-driven repairs ------------------------------------------- */
 

@@ -378,8 +378,8 @@ enum Scenarios {
             // held when the post-GO auto-pause sync happened to land after it —
             // and a launch whose countdown gate let go early ran on under the
             // board to its results. And only once the gate has let go (racing):
-            // this launch counts from zero, so a pause inside the gate would put
-            // the GO beat, and the race music with it, under the board.
+            // the card is a race under way, not the start grid a pause inside
+            // the gate would hold.
             for _ in 0..<200 where ttp_racing(game.sessionHandle) == 0 {
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }

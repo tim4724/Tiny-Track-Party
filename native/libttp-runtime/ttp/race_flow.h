@@ -489,8 +489,14 @@ inline constexpr double kSceneWarmCapMs = 4000.0;
 // May the deferred countdown start? `frames`, `p50Ms` and `p95Ms` are the frame
 // window's, `sinceLaunchMs` the shell's clock since the launch walk. Pure: the
 // facts arrive, nothing is reached for.
-bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
-                    double p95Ms, double sinceLaunchMs);
+//
+// NEVER WHILE THE RACE IS PAUSED, and that outranks the backstop: a launch
+// paused inside the gate would otherwise count 3 under the Paused board. The
+// backstop's clock keeps running through the pause — the pause already explains
+// the wait, and the scene went on assembling under it — so the first unpaused
+// ask past the cap goes at once.
+bool countdownReady(bool paused, bool sceneBuilt, bool measuring, int frames,
+                    double p50Ms, double p95Ms, double sinceLaunchMs);
 
 // One countdown beat. n > 0 is "3/2/1", n === 0 is "GO!", n < 0 is banner-gone.
 // The n<0 beat clears the LOCAL banner only and is never broadcast: the phones'

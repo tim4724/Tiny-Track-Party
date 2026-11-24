@@ -1011,14 +1011,16 @@ double ttp_race_flourish_ms(void) { return race::FINISH_FLOURISH_MS; }
 
 // ---- the countdown gate ------------------------------------------------------
 
-int ttp_race_countdown_ready(int sceneBuilt, int measuring, double sinceLaunchMs) {
-  // THE SEAM (CLAUDE.md rule 3): the frame evidence is fetched here rather than
-  // pulled out of the readout by a shell and handed back in. `present` and not
+int ttp_race_countdown_ready(int sessionHandle, int sceneBuilt, int measuring,
+                             double sinceLaunchMs) {
+  // THE SEAM (CLAUDE.md rule 3): the frame evidence and the pause are fetched
+  // here rather than pulled out by a shell and handed back in. `present` and not
   // `frame` — perf_stats.h's Readout says why the loop's own cadence cannot see
   // a stalling display link.
   const ttp::rt::perf::Readout r = ttp::rt::perf::monitor().fold();
-  return race::countdownReady(sceneBuilt != 0, measuring != 0, r.present.n,
-                              r.present.p50, r.present.p95, sinceLaunchMs) ? 1 : 0;
+  return race::countdownReady(ttp_paused(sessionHandle) != 0, sceneBuilt != 0,
+                              measuring != 0, r.present.n, r.present.p50,
+                              r.present.p95, sinceLaunchMs) ? 1 : 0;
 }
 
 // ---- the roster-driven repairs -----------------------------------------------

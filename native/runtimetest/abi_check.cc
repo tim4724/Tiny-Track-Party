@@ -80,6 +80,7 @@
 // includes of ttp_room.h / ttp_session.h have.
 #include "ttp/grand_prix.h"  // CupSeries::lastRaceOrder — the chained grid the race walks read
 #include "ttp/progression.h"  // the star record's rules — uiProgression composes them
+#include "ttp/perf_stats.h"  // the window the countdown gate's agreement composes over
 #include "ttp/race_flow.h"
 #include "ttp/render_scale_controller.h"  // the frame-rate choice the lobby frame offers
 #include "ttp/room_flow.h"
@@ -5079,7 +5080,7 @@ void raceLiveWalks() {
   // neither is visible from the rule alone: that it reads the PRESENT series
   // rather than the loop's (on a display link the loop's cadence is a flat vsync
   // period all through the assembly, so a shell gated on it would never wait),
-  // and that the backstop outranks everything else.
+  // and that the backstop outranks everything but the race's own pause.
   {
     // THE PRESENT SERIES IS FOLDED FROM tMs, not from the interval argument
     // (perf_stats.cc's foldPresents), so a feed whose clock does not actually
@@ -5096,17 +5097,17 @@ void raceLiveWalks() {
       for (int i = 0; i < n; ++i) tick(presentMs);
     };
     ttp_perf_reset();
-    check(ttp_race_countdown_ready(0, 1, 0) == 0, "gate: no build, no window, no go");
-    check(ttp_race_countdown_ready(1, 1, 0) == 0, "gate: a built scene with no frames waits");
-    check(ttp_race_countdown_ready(1, 0, 0) == 1,
+    check(ttp_race_countdown_ready(0, 0, 1, 0) == 0, "gate: no build, no window, no go");
+    check(ttp_race_countdown_ready(0, 1, 1, 0) == 0, "gate: a built scene with no frames waits");
+    check(ttp_race_countdown_ready(0, 1, 0, 0) == 1,
           "gate: a shell that never measures waits on the build alone");
-    check(ttp_race_countdown_ready(0, 1, race::kSceneWarmCapMs) == 1,
+    check(ttp_race_countdown_ready(0, 0, 1, race::kSceneWarmCapMs) == 1,
           "gate: the backstop starts a race whose scene never arrived");
 
     ttp_perf_reset();
     feed(60, 16.7);
-    check(ttp_race_countdown_ready(1, 1, 100) == 1, "gate: a settled window goes");
-    check(ttp_race_countdown_ready(0, 1, 100) == 0,
+    check(ttp_race_countdown_ready(0, 1, 1, 100) == 1, "gate: a settled window goes");
+    check(ttp_race_countdown_ready(0, 0, 1, 100) == 0,
           "…but never before the build itself has returned");
 
     // ASSEMBLY, as it actually arrives: steady frames with stalls among them.
@@ -5114,8 +5115,8 @@ void raceLiveWalks() {
     // 60 Hz box is still paying compile and upload costs.
     ttp_perf_reset();
     for (int i = 0; i < 60; ++i) tick(i % 6 == 0 ? 300.0 : 16.7);
-    check(ttp_race_countdown_ready(1, 1, 100) == 0, "gate: an assembling scene waits");
-    check(ttp_race_countdown_ready(1, 1, race::kSceneWarmCapMs) == 1,
+    check(ttp_race_countdown_ready(0, 1, 1, 100) == 0, "gate: an assembling scene waits");
+    check(ttp_race_countdown_ready(0, 1, 1, race::kSceneWarmCapMs) == 1,
           "…and is released by the backstop rather than held forever");
 
     // A SLOW BOX IS NOT AN ASSEMBLING ONE. Four cells on the reference Android
@@ -5123,8 +5124,39 @@ void raceLiveWalks() {
     // should start, which is why the rule reads spread and not share.
     ttp_perf_reset();
     feed(60, 33.4);
-    check(ttp_race_countdown_ready(1, 1, 100) == 1,
+    check(ttp_race_countdown_ready(0, 1, 1, 100) == 1,
           "gate: steadily over budget still goes — the test is spread, not speed");
+
+    // A PAUSED LAUNCH NEVER COUNTS DOWN, read off the handle. The session is
+    // built (pauseRace's own gather builds it inside the gate) and paused as the
+    // freeze plan pauses it. The control arm is the same handle unpaused: a
+    // gate that ignored the pause passes it and fails the two after.
+    ttp_perf_reset();
+    feed(60, 16.7);
+    const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+    ttp_add_human(sess, "1", nullptr);
+    check(ttp_session_engine(sess) != nullptr, "gate: the launch's session builds");
+    check(ttp_race_countdown_ready(sess, 1, 1, 100) == 1, "gate: an unpaused launch goes");
+    ttp_pause(sess);
+    check(ttp_race_countdown_ready(sess, 1, 1, 100) == 0,
+          "gate: a paused launch waits, however settled its scene");
+    check(ttp_race_countdown_ready(sess, 1, 0, race::kSceneWarmCapMs) == 0,
+          "…and the pause outranks the backstop");
+    // Agreement: the export is race::countdownReady over the handle's pause
+    // and the window it reads, for both pause states and both sides of the cap.
+    for (int p : {1, 0}) {
+      if (!p) ttp_resume(sess);
+      const ttp::rt::perf::Readout r = ttp::rt::perf::monitor().fold();
+      for (double ms : {100.0, race::kSceneWarmCapMs})
+        check(ttp_race_countdown_ready(sess, 0, 1, ms) ==
+                  (race::countdownReady(p != 0, false, true, r.present.n, r.present.p50,
+                                        r.present.p95, ms) ? 1 : 0),
+              "gate: the export is race::countdownReady over the live pause");
+    }
+    // The clock ran on through the pause: a resume past the cap goes at once.
+    check(ttp_race_countdown_ready(sess, 0, 1, race::kSceneWarmCapMs) == 1,
+          "gate: resumed past the backstop, the countdown goes at once");
+    ttp_dispose(sess);
     ttp_perf_reset();
   }
 
