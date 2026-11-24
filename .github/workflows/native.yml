@@ -93,9 +93,21 @@ jobs:
         id: ccache
         with:
           leg: wasm
-      - uses: emscripten-core/setup-emsdk@v16
-        with:
-          version: 6.0.9    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
+      # Installed at a FIXED path, not with setup-emsdk: that unpacks into a new
+      # directory every run, the path is in every compile, and ccache then
+      # shares nothing between runs.
+      - name: Install emsdk
+        env:
+          VERSION: 6.0.9    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
+        run: |
+          set -eu
+          dir="$RUNNER_TEMP/emsdk"
+          git clone -q --depth 1 https://github.com/emscripten-core/emsdk.git "$dir"
+          "$dir/emsdk" install "$VERSION"
+          "$dir/emsdk" activate "$VERSION"
+          echo "EMSDK=$dir" >> "$GITHUB_ENV"
+          echo "$dir" >> "$GITHUB_PATH"
+          echo "$dir/upstream/emscripten" >> "$GITHUB_PATH"
       - name: Configure (emscripten)
         run: emcmake cmake -S native -B native/build/wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)
       - name: Build
