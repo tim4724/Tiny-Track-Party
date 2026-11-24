@@ -104,6 +104,8 @@ class AudioDevice(
     private val musicThread = HandlerThread("ttp-music").apply { start() }
     private val musicHandler = Handler(musicThread.looper)
     private var music: MediaPlayer? = null
+    /** The same song, prepared and chained behind [music]: the loop ([queueLoop]). */
+    private var musicNext: MediaPlayer? = null
     /**
      * Whether [music] has reached Prepared. `pause()` and `start()` are documented
      * INVALID before it and throw IllegalStateException, which on the music thread
@@ -117,6 +119,8 @@ class AudioDevice(
     private var musicMuted = false
     /** The song's own level, before the mute and the master gain. */
     private var musicBed = 1f
+    /** [suspend] paused the bed itself, so [resume] plays it again. Any music command clears it. */
+    private var musicHeld = false
     /** What [music] is streaming, so a repeat rewinds instead of re-fetching. */
     private var musicUrl: String? = null
 
@@ -131,6 +135,7 @@ class AudioDevice(
         musicGain = if (musicMuted) 0f else musicBed * AudioMixer.MASTER
         try {
             music?.setVolume(musicGain, musicGain)
+            musicNext?.setVolume(musicGain, musicGain)
         } catch (_: IllegalStateException) {
             // A player torn down or not yet prepared; the next start applies it.
         }
@@ -177,13 +182,30 @@ class AudioDevice(
      * The app left the screen: silence the decisions, then close the mix stream
      * so the box can idle ([AudioMixer.release] says what an open one holds).
      * [resume] reopens it on the way back.
+     *
+     * THE MUSIC BED IS PAUSED HERE TOO, after the drain has performed whatever the
+     * decisions queued. A race with a seated phone is already frozen by the
+     * link-down the background walk answers, and its pause is in that drain; but
+     * Android keeps a stopped app's process running (tvOS suspends it), so a bed
+     * nothing froze, a scenario race's, would play on over the launcher. Only a
+     * bed paused HERE is played again by [resume]; the frozen race's waits for
+     * its thaw.
      */
     fun suspend() {
         silence()
         mixer.release()
+        musicHandler.post {
+            val m = music
+            if (musicPrepared && m != null && m.isPlaying) { m.pause(); musicHeld = true }
+        }
     }
 
-    fun resume() = mixer.start()
+    fun resume() {
+        mixer.start()
+        musicHandler.post {
+            if (musicHeld) { musicHeld = false; music?.start() }
+        }
+    }
 
     fun stopCar(id: EngineId) = Ttp.ttp_audio_stop_car(TtpJson.arg(id.json))
 
@@ -286,9 +308,11 @@ class AudioDevice(
                     MUSIC_START -> { pendingSong = subject; pendingBed = level }
                     MUSIC_STOP -> { pendingSong = null; musicHandler.post { stopMusic() } }
                     MUSIC_PAUSE -> musicHandler.post {
+                        musicHeld = false
                         if (musicPrepared) music?.pause() else musicWantsPause = true
                     }
                     MUSIC_RESUME -> musicHandler.post {
+                        musicHeld = false
                         musicWantsPause = false
                         if (musicPrepared && music?.isPlaying == false) music?.start()
                     }
@@ -329,6 +353,7 @@ class AudioDevice(
                 live.setVolume(musicGain, musicGain)
                 live.seekTo(0)
                 musicWantsPause = false
+                musicHeld = false
                 if (!live.isPlaying) live.start()
                 return
             } catch (t: Throwable) {
@@ -337,6 +362,63 @@ class AudioDevice(
         }
         stopMusic()
         musicUrl = file
+        val mp = openSong(file) ?: return
+        mp.setOnPreparedListener {
+            musicPrepared = true
+            if (musicWantsPause) musicWantsPause = false else it.start()
+            queueLoop(file)
+        }
+        music = mp
+    }
+
+    /**
+     * THE LOOP IS A SECOND PLAYER, NEVER `isLooping`. NuPlayer loops by draining
+     * its AudioTrack at the end, seeking and restarting it, and on the Streamer
+     * the mix pulls no music for over 100 ms of every wrap (AudioFlinger's frame
+     * counter for the track stalls; MP3 and AAC alike). `setNextMediaPlayer` is
+     * the framework's gapless road: at the end of [music] it hands the same
+     * AudioTrack to a copy already prepared ("Recycling track for gapless
+     * playback" in the log), and the counter runs straight through. It is tvOS's
+     * AVPlayerLooper in the same shape, a queue of copies of one item.
+     */
+    private fun queueLoop(file: String) {
+        val playing = music ?: return
+        val next = openSong(file) ?: return
+        next.setOnPreparedListener {
+            if (music !== playing) { it.release(); return@setOnPreparedListener }
+            it.setVolume(musicGain, musicGain)
+            // Any native refusal throws IllegalStateException, and uncaught on
+            // this thread that is the app; without a copy the wrap rewinds.
+            try {
+                playing.setNextMediaPlayer(it)
+                musicNext = it
+            } catch (t: Throwable) {
+                Log.w(TAG, "music $file could not chain its loop", t)
+                it.release()
+            }
+        }
+    }
+
+    /** [done] played out, and the framework has started [musicNext] in its place. */
+    private fun onSongEnd(done: MediaPlayer) {
+        val file = musicUrl
+        if (done !== music || file == null) return
+        val next = musicNext
+        if (next == null) {
+            // No copy was ready in time: rewind this one, gap and all.
+            done.seekTo(0)
+            done.start()
+            return
+        }
+        Log.i(TAG, "music $file looped")
+        done.release()
+        music = next
+        musicNext = null
+        queueLoop(file)
+    }
+
+    /** One copy of [file], preparing. */
+    private fun openSong(file: String): MediaPlayer? {
         try {
             // PLAYED FROM THE APK, and streamed from the origin only if it is not
             // there. stage-assets.sh bundles the catalogue; the fallback is what
@@ -367,29 +449,33 @@ class AudioDevice(
             } else {
                 mp.setDataSource(baseUrl + file)
             }
-            // WHICH SOURCE WON, once per song. The fallback above degrades in
+            // WHICH SOURCE WON, once per copy. The fallback above degrades in
             // silence by design — that is what makes it safe — so without this
             // line an APK that bundles 62 MB of music and streams anyway looks
             // exactly like one that works.
             Log.i(TAG, "music $file from ${if (local != null) "the APK" else "the origin"}")
-            mp.isLooping = true
             mp.setVolume(musicGain, musicGain)
-            mp.setOnPreparedListener {
-                musicPrepared = true
-                if (musicWantsPause) musicWantsPause = false else it.start()
-            }
+            mp.setOnCompletionListener { onSongEnd(it) }
             // A player in the Error state throws from pause(), start() and
             // isPlaying, so it is released here rather than left for the next
             // pause or resume to call into; the next song stands a fresh one up.
+            // A queued copy that fails takes only itself: the song plays out and
+            // [onSongEnd] rewinds it.
             mp.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "music $file failed ($what/$extra)")
-                if (music === mp) stopMusic()
+                if (music === mp) {
+                    stopMusic()
+                } else {
+                    if (musicNext === mp) { music?.setNextMediaPlayer(null); musicNext = null }
+                    mp.release()
+                }
                 true
             }
             mp.prepareAsync()
-            music = mp
+            return mp
         } catch (t: Throwable) {
             Log.w(TAG, "music $file could not start", t)
+            return null
         }
     }
 
@@ -418,8 +504,11 @@ class AudioDevice(
         musicPrepared = false
         musicUrl = null
         musicWantsPause = false
+        musicHeld = false
         music?.let { try { it.stop() } catch (_: Throwable) { }; it.release() }
         music = null
+        musicNext?.release()
+        musicNext = null
     }
 
     fun release() {

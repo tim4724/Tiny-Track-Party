@@ -298,7 +298,8 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    `isIdleTimerDisabled`, the web's Screen Wake Lock); no timer of its own.
    Anything that keeps the box from idling once the app is OFF screen goes with
    the frame loop: an audio output left open in the background holds a wake
-   lock of its own.
+   lock of its own, and on a platform that keeps a backgrounded process running
+   (Android), a music player nothing froze plays on over the launcher.
 
    **Boot must not hold the first frame hostage.** Whatever the shell's boot does
    — configure, stage assets, build the preview track, dial the relay — it runs

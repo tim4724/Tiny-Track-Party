@@ -833,7 +833,8 @@ blob's reads land on the frame beat).
 **Every cue is mixed here, in Kotlin, into one `AudioTrack`, open while the app
 is on screen.** It closes on `onStop` and reopens on `onStart`: an open track,
 silent or not, keeps AudioFlinger's output out of standby and holds an `AudioMix`
-partial wake lock charged to the app.
+partial wake lock charged to the app. The music bed pauses there too, and
+only a bed paused there plays again on `onStart` (`AudioDevice.suspend`).
 `AudioMixer` is the port of the render half of tvOS's `AudioDevice.swift` and
 `CueBank` is the port of its `CueBank.swift`; read those two Swift files for the
 reasoning behind the DSP, which is not repeated in the Kotlin.
@@ -856,8 +857,11 @@ Three things follow that are worth knowing before touching it:
   the cold-play trap above rather than moving it.
 - **The MUSIC is deliberately NOT in the mix**, exactly as on the web and tvOS: it
   is a `MediaPlayer` playing the APK's bundled copy (the origin is the fallback),
-  outside the limiter. It still
-  carries the master 0.6 (`Audio.js` sets the element's volume to
+  outside the limiter, and it LOOPS BY A SECOND PLAYER, never `isLooping`, which
+  leaves an audible hole at every wrap here (`AudioDevice.queueLoop`). To
+  check a loop, wrap it while the race still runs: the results board stops the
+  music by design, so a race that ends near the wrap reads as a loop that died.
+  It still carries the master 0.6 (`Audio.js` sets the element's volume to
   `level * this._volume()`), and without that it sits 1.67x loud against its cues.
   The player lives on its own `ttp-music` thread: standing one up is synchronous
   binder calls and the song starts at GO, so only the engine's song pick stays on
