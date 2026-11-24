@@ -370,9 +370,20 @@ enum Scenarios {
             game.state.countdownCupRace =
                 GameState.CupRaceLine(TTP.obj(ttp_race_preview_cup_race_json(game.trackId)))
         case "paused":
-            // The overlay goes up AFTER the hold: raised at stand-up it stopped the
+            // The pause goes up AFTER the hold: raised at stand-up it stopped the
             // race before the card's moment, so the hold was never reached.
-            game.state.paused = true
+            //
+            // Through the real walk, as `Scenarios.kt` does: `state.paused = true`
+            // painted the overlay without freezing the session, so the race only
+            // held when the post-GO auto-pause sync happened to land after it —
+            // and a launch whose countdown gate let go early ran on under the
+            // board to its results. And only once the gate has let go (racing):
+            // this launch counts from zero, so a pause inside the gate would put
+            // the GO beat, and the race music with it, under the board.
+            for _ in 0..<200 where ttp_racing(game.sessionHandle) == 0 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            game.pauseRace()
         case "finished":
             // One PLAYER home while the field races on: the best-placed car that
             // owns a cell, with the boards' winning time — the web preview's and
