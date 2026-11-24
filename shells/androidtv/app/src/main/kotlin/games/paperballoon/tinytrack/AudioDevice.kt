@@ -374,7 +374,7 @@ class AudioDevice(
     /**
      * THE LOOP IS A SECOND PLAYER, NEVER `isLooping`. NuPlayer loops by draining
      * its AudioTrack at the end, seeking and restarting it, and on the Streamer
-     * the mix pulls no music for 115-170 ms of every wrap (AudioFlinger's frame
+     * the mix pulls no music for over 100 ms of every wrap (AudioFlinger's frame
      * counter for the track stalls; MP3 and AAC alike). `setNextMediaPlayer` is
      * the framework's gapless road: at the end of [music] it hands the same
      * AudioTrack to a copy already prepared ("Recycling track for gapless
@@ -387,8 +387,15 @@ class AudioDevice(
         next.setOnPreparedListener {
             if (music !== playing) { it.release(); return@setOnPreparedListener }
             it.setVolume(musicGain, musicGain)
-            playing.setNextMediaPlayer(it)
-            musicNext = it
+            // Any native refusal throws IllegalStateException, and uncaught on
+            // this thread that is the app; without a copy the wrap rewinds.
+            try {
+                playing.setNextMediaPlayer(it)
+                musicNext = it
+            } catch (t: Throwable) {
+                Log.w(TAG, "music $file could not chain its loop", t)
+                it.release()
+            }
         }
     }
 
