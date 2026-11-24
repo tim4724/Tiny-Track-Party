@@ -1,0 +1,72 @@
+name: ccache
+description: >-
+  Puts a pinned ccache on PATH and restores the leg's compiler cache, newest
+  first. native/CMakeLists.txt picks ccache up by itself when it is on PATH.
+  Pair it with ccache-save after the build.
+
+# WHY NATIVE.YML CACHES COMPILES AT ALL. Every leg compiled the whole tree from
+# nothing on every run, while most runs change a few files.
+#
+# THE RELEASE BINARY, NOT apt OR brew: apt is the step that stalls on these
+# runners (test.yml), and a pinned tarball with its hash is one download that
+# cannot change under the job. musl-static runs on any Linux image; the darwin
+# tarball is the macOS one.
+#
+# KEYED ON THE LEG AND native/, restored by prefix: a run whose native/ matches
+# a saved cache restores it exactly and saves nothing; any other restores the
+# newest for its leg, which a pull request reads from main.
+
+inputs:
+  leg:
+    description: The leg's name; one cache per leg.
+    required: true
+outputs:
+  key:
+    description: The key ccache-save saves under.
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+  hit:
+    description: Whether the cache restored was this exact key.
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install ccache
+      shell: bash
+      env:
+        VERSION: 4.14.2
+      run: |
+        set -eu
+        case "$RUNNER_OS" in
+          Linux) name="ccache-$VERSION-linux-x86_64-musl-static" ext=tar.xz
+                 sum=b20ff6415151226ac5a10dfd6839700c694bd67d1871c8fddb266d366ff25bfb ;;
+          macOS) name="ccache-$VERSION-darwin" ext=tar.gz
+                 sum=cf240009630b605b775c7c5c7b7105a3b196c79f31af322c1557969aa28003fc ;;
+          *) echo "::error::no ccache for $RUNNER_OS"; exit 1 ;;
+        esac
+        curl -sSfL --retry 3 -o "$RUNNER_TEMP/$name.$ext" \
+          "https://github.com/ccache/ccache/releases/download/v$VERSION/$name.$ext"
+        echo "$sum  $RUNNER_TEMP/$name.$ext" | shasum -a 256 -c -
+        tar -xf "$RUNNER_TEMP/$name.$ext" -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+        echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+    # native/'s git tree id: its content, in one lookup.
+    - name: Name the native tree
+      id: tree
+      shell: bash
+      run: echo "id=$(git rev-parse HEAD:native)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the compiler cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ccache-${{ inputs.leg }}-${{ steps.tree.outputs.id }}
+        restore-keys: ccache-${{ inputs.leg }}-
+
+    # Everything restored is older than this, and ccache stamps an entry each
+    # time a build uses it: ccache-save keeps only what is newer.
+    - name: Note when the build starts
+      shell: bash
+      run: echo "CCACHE_SINCE=$(date +%s)" >> "$GITHUB_ENV"

@@ -240,7 +240,7 @@ that way.
 | Workflow | Runs on | Gates |
 |---|---|---|
 | `test.yml` | every push | lint, `npm test`, the E2E suite across runners |
-| `native.yml` | changes under `native/` or `tests/fixtures/` | the ctest suite on every platform leg, plus the full Android link |
+| `native.yml` | changes under `native/` or `tests/fixtures/` | the ctest suite on every platform leg, plus the full Android link; on main it also keeps `release.yml`'s Filament Android cache warm |
 | `tvos.yml`, `androidtv.yml` | changes to a shell or to what it stages | that the TV app still builds |
 | `preview.yml` / `hetzner-deploy.yml` | every branch push / a green `test.yml` on main | see [Deploys](#deploys) |
 | `release.yml` | a version tag | the store builds |

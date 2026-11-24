@@ -60,6 +60,7 @@ jobs:
   # specs, but ~2x the software-rasterized work per test, and the serial job
   # ran ~20 min against a 10-minute cap.
   e2e:
+    needs: e2e-plan
     runs-on: ubuntu-latest
     # Six, measured against four on the real thing rather than reasoned about:
     # 1m40s vs 2m01s for the whole workflow. Both were tried in anger, because
@@ -70,9 +71,10 @@ jobs:
     # standard-runner minutes are free, and wall clock is the only axis that
     # pays.
     #
-    # scripts/e2e-shard.mjs deals the tests out in turn rather than using
-    # --shard, whose contiguous blocks put every slow gallery spec in one shard
-    # and made it run several times longer than the rest.
+    # scripts/e2e-shard.mjs deals the tests out by how long each took (see
+    # e2e-plan) rather than using --shard, whose contiguous blocks put every
+    # slow gallery spec in one shard and made it run several times longer than
+    # the rest.
     #
     # 10 covered the slowest shard plus the retry the config arms, with room for
     # a cold-cache run, and still tripped on a genuine hang. What it did NOT
@@ -140,6 +142,8 @@ jobs:
         timeout-minutes: 4
         run: npx playwright install chromium
       - name: Run E2E tests
+        env:
+          E2E_DURATIONS: ${{ needs.e2e-plan.outputs.durations }}
         # --grep matches the file name too; e2e-webkit runs that spec.
         run: node scripts/e2e-shard.mjs ${{ matrix.shard }}/6 --grep-invert webkit-controller-layout
       - name: Upload traces on failure
@@ -150,6 +154,78 @@ jobs:
           name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+      # What e2e-durations makes the next table from. Main only, as that is.
+      - name: Upload the shard's report
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report-${{ matrix.shard }}
+          path: test-results/e2e-report.json
+          retention-days: 1
+          if-no-files-found: error
+
+  # THE DURATION TABLE the shards deal by, read ONCE here and handed to all six,
+  # because each shard computes the deal on its own, and two shards dealing from
+  # different tables can each leave out a test the other took, and stay green. A
+  # cache restored per shard can change between two shards' restores, whenever
+  # a main run saves a newer one, so the shards must not restore it themselves.
+  # This hop costs the shards a few seconds of start; the deal saves far more
+  # on the slowest shard than that.
+  #
+  # The table is CI's own: e2e-durations saves a fresh one from every green run
+  # on main, and caches written on main are what every branch restores. No
+  # table (the first run, or the cache evicted) is a warning, and the shards
+  # deal with every test weighing the same.
+  e2e-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      durations: ${{ steps.table.outputs.durations }}
+    steps:
+      - name: Restore the duration table
+        uses: actions/cache/restore@v6
+        with:
+          path: e2e-durations.json
+          # The run's own id never exists yet: this is "the newest table".
+          key: e2e-durations-${{ github.run_id }}
+          restore-keys: e2e-durations-
+      - name: Hand it to the shards
+        id: table
+        run: |
+          if [ -s e2e-durations.json ]; then
+            echo "durations=$(jq -c . e2e-durations.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no E2E duration table cached; every test weighs the same"
+            echo "durations={}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The next table, from this run's six reports. Main only, and only from a
+  # GREEN run, so it always covers the whole suite and no test that has since
+  # been deleted lingers in it. A new key per run (cache keys cannot be
+  # overwritten); the old ones go unread and GitHub drops them within the week.
+  # A failed save must not turn the run red: hetzner-deploy waits on it.
+  e2e-durations:
+    needs: e2e
+    if: github.ref == 'refs/heads/main'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-report-*
+          path: reports
+      # The runner's own Node: the script imports node: builtins only.
+      - name: Make the table
+        run: node scripts/e2e-shard.mjs --durations reports/*/e2e-report.json > e2e-durations.json
+      - name: Save the table
+        uses: actions/cache/save@v6
+        with:
+          path: e2e-durations.json
+          key: e2e-durations-${{ github.run_id }}-${{ github.run_attempt }}
 
   # The one spec that opens WEBKIT (tests/CLAUDE.md says why). It is DOM-only,
   # so it is quick, but WebKit's system libraries are not on the stock image and

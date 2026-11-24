@@ -5,9 +5,14 @@ name: Native conformance
 # shared corpora/fixtures bit-for-bit on every leg of the platform matrix —
 # desktop clang (linux x64 + macOS arm64), emscripten/WASM under Node, the
 # tvOS simulator, and an Android NDK cross-compile. Acceptance for Track S
-# M4: every fixture byte-exact on every runnable target. The android-full leg
-# is the one non-conformance job: it links the complete Android artifact,
-# renderer included, against the pinned Filament SDK for both shipped ABIs.
+# M4: every fixture byte-exact on every runnable target. Two jobs are not
+# conformance: android-full links the complete Android artifact, renderer
+# included, against the pinned Filament SDK for both shipped ABIs, and
+# release-android-sdk keeps release.yml's Filament cache warm from main.
+#
+# Every leg that compiles does so through ccache, its cache saved from main
+# (.github/actions/ccache and ccache-save say how, and why it is safe for a
+# tree whose fixtures are byte-exact: native/CMakeLists.txt's ccache notes).
 
 on:
   pull_request:
@@ -15,12 +20,16 @@ on:
       - 'native/**'
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
+      - '.github/actions/ccache*/**'
   push:
     branches: [main]
     paths:
       - 'native/**'
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
+      - '.github/actions/ccache*/**'
+      # release-android-sdk's build, which release.yml shares.
+      - '.github/actions/filament-android-sdk/**'
   # THE CACHE WARMER. GitHub drops a cache nothing has read for a week, and the
   # path filters above let this workflow sit idle for longer than that — after
   # which the next push to touch native/ paid android-full's whole Filament
@@ -54,6 +63,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: conformance-${{ matrix.os }}
       - name: Configure (clang, strict FP)
         run: cmake -S native -B native/build/ci -DCMAKE_BUILD_TYPE=Release
         env:
@@ -61,6 +74,10 @@ jobs:
           CXX: clang++
       - name: Build
         run: cmake --build native/build/ci --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
       - name: Corpus + conformance tests
         run: ctest --test-dir native/build/ci --output-on-failure
 
@@ -72,13 +89,33 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: emscripten-core/setup-emsdk@v16
+      - uses: ./.github/actions/ccache
+        id: ccache
         with:
-          version: 6.0.9    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
+          leg: wasm
+      # Installed at a FIXED path, not with setup-emsdk: that unpacks into a new
+      # directory every run, the path is in every compile, and ccache then
+      # shares nothing between runs.
+      - name: Install emsdk
+        env:
+          VERSION: 6.0.9    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
+        run: |
+          set -eu
+          dir="$RUNNER_TEMP/emsdk"
+          git clone -q --depth 1 https://github.com/emscripten-core/emsdk.git "$dir"
+          "$dir/emsdk" install "$VERSION"
+          "$dir/emsdk" activate "$VERSION"
+          echo "EMSDK=$dir" >> "$GITHUB_ENV"
+          echo "$dir" >> "$GITHUB_PATH"
+          echo "$dir/upstream/emscripten" >> "$GITHUB_PATH"
       - name: Configure (emscripten)
         run: emcmake cmake -S native -B native/build/wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)
       - name: Build
         run: cmake --build native/build/wasm --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
       - name: Corpus + conformance tests (Node)
         run: ctest --test-dir native/build/wasm --output-on-failure
       - name: Link-check the browser module (sim + party, no renderer)
@@ -107,6 +144,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: tvos-sim
       - name: Boot Apple TV simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for k,v in d.items() if 'tvOS' in k for dev in v))")
@@ -122,6 +163,10 @@ jobs:
             "-DCMAKE_CROSSCOMPILING_EMULATOR=$PWD/native/scripts/tvos-sim-spawn.sh;$UDID"
       - name: Build
         run: cmake --build native/build/tvos-sim --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
       - name: Corpus + conformance tests (Apple TV simulator)
         run: ctest --test-dir native/build/tvos-sim --output-on-failure
 
@@ -146,10 +191,18 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: android-ndk-${{ matrix.abi }}
       - name: Configure (NDK, ${{ matrix.abi }})
         run: cmake -S native -B native/build/android -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24
       - name: Build
         run: cmake --build native/build/android --parallel
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
 
   android-full:
     # The WHOLE Android artifact — renderer and display shim included — linked
@@ -211,6 +264,13 @@ jobs:
           cd ..
           mkdir filament-sdk
           cp -R filament-src/out/android-release/filament/. filament-sdk/
+      # AFTER the Filament build: Filament's CMake takes up ccache too when it
+      # is on PATH, and a pin bump's whole Filament build would land in this
+      # leg's cache.
+      - uses: ./.github/actions/ccache
+        id: ccache
+        with:
+          leg: android-full
       - name: Link the full runtime (both ABIs)
         run: |
           for abi in armeabi-v7a arm64-v8a; do
@@ -220,3 +280,39 @@ jobs:
               -DFILAMENT_SDK=$PWD/filament-sdk
             cmake --build native/build/android-$abi --target ttp_runtime_android --parallel
           done
+      - uses: ./.github/actions/ccache-save
+        with:
+          key: ${{ steps.ccache.outputs.key }}
+          hit: ${{ steps.ccache.outputs.hit }}
+
+  release-android-sdk:
+    # THE RELEASE'S CACHE, kept warm from main. release.yml builds the store
+    # bundles on the Filament Android SDK cached under filament-android-<pin>,
+    # and only a run on main writes a cache a tag can restore. Before this job
+    # the only main runs that did were release dispatches, so after a pin bump,
+    # or once a week had passed without a release, the release itself sat in
+    # the cold build. This runs where a pin bump already lands (filament.pin
+    # is under native/) and on the schedule above, which keeps the cache read.
+    #
+    # THE SAME ACTION release.yml runs, not a copy and not android-full's
+    # cache: the key, the paths and the NDK have to be the release's to the
+    # letter or the release misses. android-full builds its SDK in one pass
+    # with whatever NDK the image carries, and caches it under other paths.
+    #
+    # MAIN ONLY: a pull request's cache is invisible to tags, so a build there
+    # would be wasted. A hit costs the fork fetch, the NDK install and the
+    # restore, and nothing waits on it.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # A miss is the release's whole Filament build; the cap is the job limit,
+    # as in release.yml.
+    timeout-minutes: 360
+    # One at a time, the later run WAITING, for android-full's reason: two
+    # cold runs minutes apart would each build Filament from scratch.
+    concurrency:
+      group: filament-android-release-sdk
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: The Filament Android SDK
+        uses: ./.github/actions/filament-android-sdk
