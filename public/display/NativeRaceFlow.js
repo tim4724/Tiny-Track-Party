@@ -60,7 +60,7 @@ export async function init() {
                   ['number', 'number', 'number', 'number', 'number']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
     flourishMs: c('ttp_race_flourish_ms', 'number', []),
-    countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number']),
+    countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number', 'number']),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
     rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
     autoPause: c('ttp_race_auto_pause_live_json', 'string', ['number', 'number', 'number'])
@@ -166,11 +166,11 @@ export function flourishMs() { return fn.flourishMs(); }
 
 // May the launch's held-back countdown start? The facts only a shell has go in —
 // whether its scene build has returned, whether it is feeding the frame monitor
-// at all, and how long ago it walked the launch. The FRAME evidence does not,
-// because the rule reads the same window the readout keeps (ttp_race.h). Poll it
-// once a frame until it says yes.
-export function countdownReady(sceneBuilt, measuring, sinceLaunchMs) {
-  return fn.countdownReady(sceneBuilt ? 1 : 0, measuring ? 1 : 0, sinceLaunchMs) === 1;
+// at all, and how long ago it walked the launch. The FRAME evidence and the
+// race's pause do not: the rule reads them off the window and the session handle
+// (ttp_race.h). Poll it once a frame until it says yes.
+export function countdownReady(sessionHandle, sceneBuilt, measuring, sinceLaunchMs) {
+  return fn.countdownReady(sessionHandle, sceneBuilt ? 1 : 0, measuring ? 1 : 0, sinceLaunchMs) === 1;
 }
 
 export function forfeitCar(sessionHandle, peerIndex) {

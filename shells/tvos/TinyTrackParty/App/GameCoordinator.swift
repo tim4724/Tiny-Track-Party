@@ -751,7 +751,9 @@ final class GameCoordinator: ObservableObject {
         // `measuring` is 1 unconditionally here: this shell feeds
         // `ttp_perf_sample` on every tick of the display link, with no
         // automation or pinned-scale path that turns it off (the web has both).
-        guard ttp_race_countdown_ready(sceneBuildPending ? 0 : 1, 1,
+        // The race's pause is read off the handle inside: a paused launch
+        // stays held, though this loop keeps framing under the board.
+        guard ttp_race_countdown_ready(sessionHandle, sceneBuildPending ? 0 : 1, 1,
                                        nowMs() - waiting.at) != 0 else { return false }
         pendingCountdown = nil
         // WHAT THE GATE ACTUALLY DID, and in RELEASE — the same reason

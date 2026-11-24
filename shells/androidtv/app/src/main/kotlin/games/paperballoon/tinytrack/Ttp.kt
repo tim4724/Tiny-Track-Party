@@ -188,7 +188,7 @@ object Ttp {
     external fun ttp_race_autopilot_players(on: Int)
     external fun ttp_race_bench_field_json(trackId: ByteArray?, players: Int, seed: Double): ByteArray?
     external fun ttp_race_configure(json: ByteArray?): Int
-    external fun ttp_race_countdown_ready(sceneBuilt: Int, measuring: Int, sinceLaunchMs: Double): Int
+    external fun ttp_race_countdown_ready(sessionHandle: Int, sceneBuilt: Int, measuring: Int, sinceLaunchMs: Double): Int
     external fun ttp_race_demo_live_json(roomHandle: Int, trackId: ByteArray?, botCapJson: ByteArray?): ByteArray?
     external fun ttp_race_demo_next_json(roomHandle: Int, trackId: ByteArray?, shownMs: Double): ByteArray?
     external fun ttp_race_effect_ops_json(): ByteArray?

@@ -106,7 +106,11 @@ call came back — and the test is SPREAD (p95 over p50 of the present series), 
 speed, because a 4-cell race on the weakest box is steadily over budget and
 should still start. There is no other shape: EVERY launch answers with both
 lists, and a shell that walks only the first starts a race that never counts
-down.
+down. **A paused race never counts down**: the gate reads the pause off the
+session handle, and it outranks the backstop. The backstop's clock runs on
+through the pause, so a resume past it goes at once. That is the gate's rule and
+not a shell's, because the TV shells keep framing, and so keep asking, under the
+Paused board.
 
 **Three launch knobs were baked in and are now the layer's only behaviour** —
 the humans-at-back grid, the deferred countdown and the finished series banking

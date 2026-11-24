@@ -568,9 +568,10 @@ LaunchResult launchRace(const LaunchInput& in) {
   return out;
 }
 
-bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
-                    double p95Ms, double sinceLaunchMs) {
-  if (sinceLaunchMs >= kSceneWarmCapMs) return true;   // the backstop, first
+bool countdownReady(bool paused, bool sceneBuilt, bool measuring, int frames,
+                    double p50Ms, double p95Ms, double sinceLaunchMs) {
+  if (paused) return false;                            // outranks the backstop
+  if (sinceLaunchMs >= kSceneWarmCapMs) return true;   // the backstop
   if (!sceneBuilt) return false;
   if (!measuring) return true;      // no evidence is coming; the build is all there is
   if (frames < kSceneWarmMinFrames) return false;
