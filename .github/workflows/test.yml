@@ -203,9 +203,11 @@ jobs:
   # GREEN run, so it always covers the whole suite and no test that has since
   # been deleted lingers in it. A new key per run (cache keys cannot be
   # overwritten); the old ones go unread and GitHub drops them within the week.
+  # A failed save must not turn the run red: hetzner-deploy waits on it.
   e2e-durations:
     needs: e2e
     if: github.ref == 'refs/heads/main'
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

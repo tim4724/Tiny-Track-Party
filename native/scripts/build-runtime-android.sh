@@ -197,7 +197,7 @@ build_abi() {
   mkdir -p "$SYMBOLS"
   cp "$dir/libttp_runtime_android.so" "$SYMBOLS/libttp_runtime_android-$abi-$id.so"
   # shellcheck disable=SC2012  # names are ours: no spaces, no newlines
-  ls -t "$SYMBOLS" | tail -n +21 | while read -r old; do rm -f "$SYMBOLS/$old"; done
+  ls -t "$SYMBOLS" | tail -n +5 | while read -r old; do rm -f "$SYMBOLS/$old"; done
   echo "    symbols  $SYMBOLS/libttp_runtime_android-$abi-$id.so"
 }
 

@@ -23,6 +23,11 @@
 #include <filament/DebugRegistry.h>
 #include <utils/Log.h>
 
+static uint64_t fnv1a(const uint8_t* p, size_t n, uint64_t h = 14695981039346656037ull) {
+    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ull; }
+    return h;
+}
+
 // __has_include on bluevk, not just __ANDROID__: CI's android link leg
 // compiles against a BARE SDK install with no fork checkout beside it, so the
 // bluevk headers VulkanPlatform.h includes are absent there and the override
@@ -137,10 +142,7 @@ namespace {
 constexpr size_t kGlProgramBytes = 32u << 20;
 
 std::string glProgramFile(std::string const& dir, const void* key, size_t keySize) {
-    uint64_t h = 1469598103934665603ull;   // FNV-1a
-    for (size_t i = 0; i < keySize; i++) {
-        h = (h ^ static_cast<const unsigned char*>(key)[i]) * 1099511628211ull;
-    }
+    uint64_t const h = fnv1a(static_cast<const uint8_t*>(key), keySize);
     char name[24];
     std::snprintf(name, sizeof name, "/%016llx", (unsigned long long) h);
     return dir + name;
@@ -435,11 +437,6 @@ void TtpRenderer::updateCamera() {
     const double aspect = mHeight ? (double) mWidth / mHeight : 1.0;
     mCamera->setProjection(Camera::Projection::ORTHO,
             -aspect * ZOOM, aspect * ZOOM, -ZOOM, ZOOM, 0.0, 1.0);
-}
-
-static uint64_t fnv1a(const uint8_t* p, size_t n, uint64_t h = 14695981039346656037ull) {
-    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ull; }
-    return h;
 }
 
 // A cheap likeness of a buffer — its length and its two ends, which for a GLB
