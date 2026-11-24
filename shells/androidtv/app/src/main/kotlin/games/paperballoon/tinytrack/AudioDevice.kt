@@ -104,6 +104,8 @@ class AudioDevice(
     private val musicThread = HandlerThread("ttp-music").apply { start() }
     private val musicHandler = Handler(musicThread.looper)
     private var music: MediaPlayer? = null
+    /** The same song, prepared and chained behind [music]: the loop ([queueLoop]). */
+    private var musicNext: MediaPlayer? = null
     /**
      * Whether [music] has reached Prepared. `pause()` and `start()` are documented
      * INVALID before it and throw IllegalStateException, which on the music thread
@@ -131,6 +133,7 @@ class AudioDevice(
         musicGain = if (musicMuted) 0f else musicBed * AudioMixer.MASTER
         try {
             music?.setVolume(musicGain, musicGain)
+            musicNext?.setVolume(musicGain, musicGain)
         } catch (_: IllegalStateException) {
             // A player torn down or not yet prepared; the next start applies it.
         }
@@ -337,6 +340,56 @@ class AudioDevice(
         }
         stopMusic()
         musicUrl = file
+        val mp = openSong(file) ?: return
+        mp.setOnPreparedListener {
+            musicPrepared = true
+            if (musicWantsPause) musicWantsPause = false else it.start()
+            queueLoop(file)
+        }
+        music = mp
+    }
+
+    /**
+     * THE LOOP IS A SECOND PLAYER, NEVER `isLooping`. NuPlayer loops by draining
+     * its AudioTrack at the end, seeking and restarting it, and on the Streamer
+     * the mix pulls no music for 115-170 ms of every wrap (AudioFlinger's frame
+     * counter for the track stalls; MP3 and AAC alike). `setNextMediaPlayer` is
+     * the framework's gapless road: at the end of [music] it hands the same
+     * AudioTrack to a copy already prepared ("Recycling track for gapless
+     * playback" in the log), and the counter runs straight through. It is tvOS's
+     * AVPlayerLooper in the same shape, a queue of copies of one item.
+     */
+    private fun queueLoop(file: String) {
+        val playing = music ?: return
+        val next = openSong(file) ?: return
+        next.setOnPreparedListener {
+            if (music !== playing) { it.release(); return@setOnPreparedListener }
+            it.setVolume(musicGain, musicGain)
+            playing.setNextMediaPlayer(it)
+            musicNext = it
+        }
+    }
+
+    /** [done] played out, and the framework has started [musicNext] in its place. */
+    private fun onSongEnd(done: MediaPlayer) {
+        val file = musicUrl
+        if (done !== music || file == null) return
+        val next = musicNext
+        if (next == null) {
+            // No copy was ready in time: rewind this one, gap and all.
+            done.seekTo(0)
+            done.start()
+            return
+        }
+        Log.i(TAG, "music $file looped")
+        done.release()
+        music = next
+        musicNext = null
+        queueLoop(file)
+    }
+
+    /** One copy of [file], preparing. */
+    private fun openSong(file: String): MediaPlayer? {
         try {
             // PLAYED FROM THE APK, and streamed from the origin only if it is not
             // there. stage-assets.sh bundles the catalogue; the fallback is what
@@ -367,29 +420,33 @@ class AudioDevice(
             } else {
                 mp.setDataSource(baseUrl + file)
             }
-            // WHICH SOURCE WON, once per song. The fallback above degrades in
+            // WHICH SOURCE WON, once per copy. The fallback above degrades in
             // silence by design — that is what makes it safe — so without this
             // line an APK that bundles 62 MB of music and streams anyway looks
             // exactly like one that works.
             Log.i(TAG, "music $file from ${if (local != null) "the APK" else "the origin"}")
-            mp.isLooping = true
             mp.setVolume(musicGain, musicGain)
-            mp.setOnPreparedListener {
-                musicPrepared = true
-                if (musicWantsPause) musicWantsPause = false else it.start()
-            }
+            mp.setOnCompletionListener { onSongEnd(it) }
             // A player in the Error state throws from pause(), start() and
             // isPlaying, so it is released here rather than left for the next
             // pause or resume to call into; the next song stands a fresh one up.
+            // A queued copy that fails takes only itself: the song plays out and
+            // [onSongEnd] rewinds it.
             mp.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "music $file failed ($what/$extra)")
-                if (music === mp) stopMusic()
+                if (music === mp) {
+                    stopMusic()
+                } else {
+                    if (musicNext === mp) { music?.setNextMediaPlayer(null); musicNext = null }
+                    mp.release()
+                }
                 true
             }
             mp.prepareAsync()
-            music = mp
+            return mp
         } catch (t: Throwable) {
             Log.w(TAG, "music $file could not start", t)
+            return null
         }
     }
 
@@ -420,6 +477,8 @@ class AudioDevice(
         musicWantsPause = false
         music?.let { try { it.stop() } catch (_: Throwable) { }; it.release() }
         music = null
+        musicNext?.release()
+        musicNext = null
     }
 
     fun release() {

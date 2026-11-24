@@ -856,7 +856,10 @@ Three things follow that are worth knowing before touching it:
   the cold-play trap above rather than moving it.
 - **The MUSIC is deliberately NOT in the mix**, exactly as on the web and tvOS: it
   is a `MediaPlayer` playing the APK's bundled copy (the origin is the fallback),
-  outside the limiter. It still
+  outside the limiter, and it LOOPS BY A SECOND PLAYER, never `isLooping`, which
+  leaves a hole of over 100 ms at every wrap here (`AudioDevice.queueLoop`). To
+  check a loop, wrap it while the race still runs: the results board stops the
+  music by design, so a race that ends near the wrap reads as a loop that died. It still
   carries the master 0.6 (`Audio.js` sets the element's volume to
   `level * this._volume()`), and without that it sits 1.67x loud against its cues.
   The player lives on its own `ttp-music` thread: standing one up is synchronous
