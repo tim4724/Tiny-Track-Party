@@ -310,8 +310,10 @@ jobs:
       # TAGS ONLY, unlike the artifact above. A dispatch is a build — the
       # end-to-end test and the cache warmer — and a build is not a release, so
       # it must not be able to put anything in front of a tester. Dispatch means
-      # "build it and hand me the artifact"; the tag is the only thing that
-      # publishes.
+      # "build it and hand me the artifact"; pushing the tag is the only thing
+      # that publishes. The gate is the EVENT, because a dispatch can be pointed
+      # at a tag and ref_type says 'tag' there too. `on: push` admits release
+      # tags alone.
       #
       # "tv:" is the Android TV form factor prefix, and the form factor is the
       # one part of this that has NO API: androidpublisher v3 has no form-factor
@@ -333,7 +335,7 @@ jobs:
       # come out identical and the TV upload refuses its own as already used.
       # Recover by moving the tag, not by pressing re-run.
       - name: Publish TV bundle to Play (tv:tv)
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -351,7 +353,7 @@ jobs:
       # android.software.leanback"), which is also why there is no one shared
       # track to put both on.
       - name: Publish phone bundle to Play (alpha)
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -686,7 +688,7 @@ jobs:
       # An accepted upload processes for a few minutes and is then live to
       # internal TestFlight testers with no further step here.
       - name: Upload to App Store Connect
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         run: |
           set -eu
           xcrun altool --upload-app -f "$IPA" -t tvos \
