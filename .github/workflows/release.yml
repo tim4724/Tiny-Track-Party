@@ -4,11 +4,13 @@ name: Release
 #
 #   - the signed store builds: TWO bundles out of ONE native build, kept as a
 #     workflow artifact and, on a release tag, published to Play. The TV bundle
-#     (leanback REQUIRED) goes to tv:tv. The phoneTest bundle (leanback
-#     optional plus a LAUNCHER filter) goes to the ordinary alpha track,
-#     because Play's twelve-testers-for-fourteen-continuous-days gate is per
-#     APP, and a tester who owns no television cannot install the TV one.
-#   - the Apple TV build, archived and uploaded to App Store Connect.
+#     (leanback REQUIRED) goes to tv:beta, the TV open test. The phoneTest
+#     bundle (leanback optional plus a LAUNCHER filter) goes to the ordinary
+#     alpha track, because Play's twelve-testers-for-fourteen-continuous-days
+#     gate is per APP, and a tester who owns no television cannot install the
+#     TV one.
+#   - the Apple TV build, archived, uploaded to App Store Connect and, on a
+#     release tag, sent to the public TestFlight link.
 #
 # NOT the store screenshots: those are the `store` cards of the screens gallery,
 # captured on a dev machine and committed (public/shared/galleryScenarios.js),
@@ -229,22 +231,24 @@ jobs:
       # one part of this that has NO API: androidpublisher v3 has no form-factor
       # resource, and TrackConfig.formFactor enumerates DEFAULT, WEAR and
       # AUTOMOTIVE only. A tv: track cannot be created here, only published to,
-      # so the console declaration comes first. tv:tv is the TV closed track
-      # Play created with the form factor (edits.tracks.list also lists tv,
-      # tv:internal, tv:beta, tv:production); the suffix is the console's track
-      # name verbatim, so renaming the track there breaks this step.
+      # so the console declaration comes first. tv:beta is the TV form factor's
+      # OPEN test: anyone on a television can join from the listing. Its
+      # countries are a console setting with no API either (countryAvailability
+      # is read-only), and until it has some every commit to it is refused
+      # ("Release in track targeting no countries"). tv:tv, the closed track
+      # Play created with the form factor, is no longer published to.
       #
-      # Closed testing goes out completed, not draft: testers opted in, and Play
-      # still reviews the release. Point this at tv:production and the draft gate
-      # has to come back. mapping.txt goes with it or every crash report from an
-      # R8 build is unreadable.
+      # Open testing goes out completed, not draft: Play still reviews the
+      # release, and joining is the tester's choice. Point this at tv:production
+      # and the draft gate has to come back. mapping.txt goes with it or every
+      # crash report from an R8 build is unreadable.
       #
       # TWO STEPS, AND EACH IS ITS OWN PLAY EDIT. There is no transaction across
       # them, so a failure in the second leaves the first published. THAT IS NOT
       # RE-RUNNABLE: GITHUB_RUN_NUMBER does not change on a re-run, so the codes
       # come out identical and the TV upload refuses its own as already used.
       # Recover by moving the tag, not by pressing re-run.
-      - name: Publish TV bundle to Play (tv:tv)
+      - name: Publish TV bundle to Play (tv:beta)
         if: github.event_name == 'push'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
@@ -252,7 +256,7 @@ jobs:
           packageName: games.paperballoon.tinytrack
           releaseFiles: ${{ env.TV_AAB }}
           mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
-          track: tv:tv
+          track: tv:beta
           status: completed
 
       # THE TESTER COUNT LIVES HERE. `alpha` is the default form factor's closed
@@ -274,7 +278,7 @@ jobs:
           status: completed
 
   # THE APPLE TV STORE BUILD: archive, export, validate, and — on a tag only —
-  # upload to App Store Connect.
+  # upload to App Store Connect and send to the public TestFlight link.
   #
   # WHY THIS IS NOT tvos.yml WITH A CERTIFICATE. That leg builds the SIMULATOR
   # slice unsigned, because it runs on pull requests where secrets must not be
@@ -287,9 +291,10 @@ jobs:
   # inside a release. The Android SDK is warmed the same way, by native.yml.
   #
   # NO TRACKS, unlike Play. Apple has no track concept: an accepted upload
-  # processes and is then available to internal TestFlight testers, and external
-  # testing needs a beta review in the console. So there is nothing here that
-  # corresponds to the tv:tv / alpha split above, and no status to choose.
+  # processes and is then available to internal TestFlight testers, and the
+  # public link's testers get it once it is in that link's group and has passed
+  # beta app review — the last step below. So there is nothing here that
+  # corresponds to the tv:beta / alpha split above, and no status to choose.
   #
   # Secrets (Settings > Environments > release, which admits only main and
   # release tags, so no other branch can read them):
@@ -594,14 +599,26 @@ jobs:
 
       # TAGS ONLY, for the reason the Play steps give: a dispatch is a build —
       # the end-to-end test and the cache warmer — and a build is not a release.
-      # An accepted upload processes for a few minutes and is then live to
-      # internal TestFlight testers with no further step here.
       - name: Upload to App Store Connect
         if: github.event_name == 'push'
         run: |
           set -eu
           xcrun altool --upload-app -f "$IPA" -t tvos \
             --apiKey "${{ secrets.ASC_KEY_ID }}" --apiIssuer "${{ secrets.ASC_ISSUER_ID }}"
+
+      # Waits for Apple's processing, then adds the build to the "Public" group
+      # and submits it for beta app review; the script's header says why that
+      # is not an altool verb. The review itself takes hours and is not waited
+      # on. A failure here comes AFTER the upload, so do not move the tag: run
+      # the script by hand with the same three arguments.
+      - name: Send the build to the public TestFlight link
+        if: github.event_name == 'push'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          node shells/tvos/scripts/testflight-public.mjs games.paperballoon.tinytrack \
+            "$GITHUB_REF_NAME" "$GITHUB_RUN_NUMBER"
 
       # always(), because a failed run that leaves a certificate and an API key
       # on the runner is the one outcome worth preventing unconditionally.

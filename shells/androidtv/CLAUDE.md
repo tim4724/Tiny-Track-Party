@@ -1185,7 +1185,7 @@ leg is: a runner has no TV. Nothing built the app at all before it.
 
 **A release tag ships TWO store bundles** (`.github/workflows/release.yml`), both
 signed, both from one native build: the `release` variant to Play's Android TV
-closed track, and the `phoneTest` variant to the ordinary closed track. Two,
+open test (`tv:beta`), and the `phoneTest` variant to the ordinary closed track. Two,
 because Play's twelve-testers gate is per APP and most testers own no television
 — and two TRACKS rather than one shared release, because a `tv:` track refuses
 any bundle that does not REQUIRE leanback. It is a separate workflow rather than
