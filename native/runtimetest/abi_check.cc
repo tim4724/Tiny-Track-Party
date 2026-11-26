@@ -4716,10 +4716,10 @@ void raceLiveWalks() {
       bool spread = !bots.arr.empty();
       for (size_t i = 0; i < bots.arr.size(); i++) {
         const Value* m = bots.arr[i].find("mistakes");
-        const double want = ttp::aiSeatMistakes(ttp::aiMistakesForTier(1), (int) i, (int) bots.arr.size());
+        const double want = ttp::aiSeatMistakes(TTP_CUPS[0].botMistakes, (int) i, (int) bots.arr.size());
         spread = spread && (want > 1 ? m && m->type == Value::NUM && m->num == want : !m);
       }
-      check(spread, "a Beach Cup race spreads the tier-1 mistake rate over its CPU seats, front seat clean");
+      check(spread, "a Beach Cup race spreads its cup's mistake rate over its CPU seats, front seat clean");
       check(at(*createSession, "forceItem").type == Value::NUL,
             "no ?item override crosses as null, not \"\"");
       check(json::str_field(*createSession, "trackId") == "tidepool",

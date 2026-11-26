@@ -970,8 +970,9 @@ export const TRACKS = {
   riptide: {
     name: 'Riptide', sand: STRIP, waypoints: GEN_TRACKS.riptide,
     // no sand on the causeway: over the water the kerbs stand at the asphalt's edge.
-    // The strip has eased out on the land, by the ring where the hop's piles begin.
-    sandOff: [[0.413, 0.585]],
+    // The strip has eased out on the land, by the ring where the hop's piles begin,
+    // and stays out to the end of the causeway's rail.
+    sandOff: [[0.409, 0.607]],
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
     // A seaside town. Past the line the road runs along the beach under the
     // Point, the coastguard's lookout on its green flank, by the surf club,
@@ -1103,7 +1104,8 @@ export const TRACKS = {
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
   // fraction, no hairpins, roomy radii, but real crossings + hills; auto-placed furniture).
   powder: {
-    name: 'Powder', waypoints: GEN_TRACKS.powder,
+    sandOff: [[0.036, 0.066]],   // the chairlift's pylons stand at the kerb
+    name: 'Powder', sand: STRIP, waypoints: GEN_TRACKS.powder,
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
     // A ski resort in its valley: the ski mountain and its lift to the west,
     // the resort's back wall of peaks over the start straight to the north
@@ -1120,7 +1122,7 @@ export const TRACKS = {
       { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
       { model: 'set-ski-school', u: 0.54, lat: -10.2, yaw: 160 },
       { model: 'set-powder-peaks', u: 0.03, lat: -60 },
-      { model: 'set-powder-chairlift', u: 0.0317, lat: 0 },
+      { model: 'set-powder-chairlift', u: 0.058, lat: 0 },
       { model: 'set-powder-forest-a', u: 0.9749, lat: -17.75 },
       { model: 'set-powder-forest-b', u: 0.0691, lat: -18.92 },
       { model: 'set-powder-forest-c', u: 0.1109, lat: -13.45 },
@@ -1287,7 +1289,8 @@ export const TRACKS = {
     ]
   },
   glacier: {
-    name: 'Glacier', waypoints: GEN_TRACKS.glacier,
+    sandOff: [[0.388, 0.482], [0.889, 0.917]],   // the dog trail runs along the kerb
+    name: 'Glacier', sand: STRIP, waypoints: GEN_TRACKS.glacier,
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
       // the expedition's igloo camp, its doorways to the road
@@ -1419,7 +1422,8 @@ export const TRACKS = {
     ]
   },
   avalanche: {
-    name: 'Avalanche', waypoints: GEN_TRACKS.avalanche,
+    sandOff: [[0.061, 0.082], [0.887, 0.913]],   // a forest and the windsock stand at the kerb
+    name: 'Avalanche', sand: STRIP, waypoints: GEN_TRACKS.avalanche,
     oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes,
     set: [
       { model: 'set-avalanche-slide', u: 0.76, lat: 16 },
@@ -1631,7 +1635,8 @@ export const TRACKS = {
     ]
   },
   pretzel: {
-    name: 'Pretzel', waypoints: GEN_TRACKS.pretzel,
+    sandOff: [[0.875, 0.945]],   // the football pitch lies between the road and a ramp
+    name: 'Pretzel', sand: STRIP, waypoints: GEN_TRACKS.pretzel,
     oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes,
     // The children's summer on sun-yellowed downs (the theme's ground colour;
     // theme.cc backyardTrack): the treehouse oak on the flat outside the
@@ -1674,7 +1679,7 @@ export const TRACKS = {
     ]
   },
   tangle: {
-    name: 'Tangle', waypoints: GEN_TRACKS.tangle,
+    name: 'Tangle', sand: STRIP, waypoints: GEN_TRACKS.tangle,
     oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes,
     // The mill valley: wooded sides (set-mill-wood, -b, -c: three woods on the hills in `land`)
     // and the brook down its floor, set below its slate walls (set-brook-*,
@@ -1752,7 +1757,8 @@ export const TRACKS = {
     ]
   },
   cloverleaf: {
-    name: 'Cloverleaf', waypoints: GEN_TRACKS.cloverleaf,
+    sandOff: [[0.922, 0.943]],   // the park's rails stand at the kerb
+    name: 'Cloverleaf', sand: STRIP, waypoints: GEN_TRACKS.cloverleaf,
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
     // A spring park: cherries in pale blossom, planted as a park plants them,
     // in avenues beside the straights (set-cherry-avenue) and in groves at the
@@ -1843,7 +1849,8 @@ export const TRACKS = {
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
   // crossings, width pinches, crest hills; auto-placed furniture).
   wash: {
-    name: 'Wash', waypoints: GEN_TRACKS.wash,
+    sandOff: [[0.285, 0.36], [0.698, 0.729], [0.863, 0.894], [0.924, 0.951]],   // the bench ledge, the tinaja and the cottonwood stand between two strands
+    name: 'Wash', sand: STRIP, waypoints: GEN_TRACKS.wash,
     oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes,
     // A dry wash and the canyon it cut: out of the start the road drops into
     // the wash's canyon, mountainsides of banded rock rising from both verges
@@ -1874,7 +1881,7 @@ export const TRACKS = {
     set: [
       // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-dead-cottonwood', u: 0.302, lat: 9.5 },   // (nearer, its rocks lay on the start straight below)
+      { model: 'set-dead-cottonwood', u: 0.324, lat: 9.5 },   // (nearer, its rocks lay on the start straight below)
       { model: 'set-fallen-cottonwood', u: 0.95, lat: -7, yaw: -150 },
       { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
       { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
@@ -1947,7 +1954,7 @@ export const TRACKS = {
   },
   gulch: {
     // no strip under the headframe, by the tailings at the line, through the boomtown
-    sandOff: [[0.18, 0.23], [0.33, 0.385], [0.73, 0.77]],
+    sandOff: [[0.037, 0.06], [0.18, 0.23], [0.33, 0.385], [0.592, 0.619], [0.73, 0.853], [0.88, 0.902]],
     name: 'Gulch', sand: STRIP, waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
     // A gold mine at its own size, reached down a canyon of mountainsides off
@@ -2006,7 +2013,7 @@ export const TRACKS = {
       // launder from the tables' house (the mill's clearing takes in the
       // heap's, so both stand at one level)
       { model: 'set-stamp-mill', u: 0.005, lat: -11, yaw: 180 },
-      { model: 'set-tailings-dump', u: 0.005, lat: -11, yaw: 180 },
+      { model: 'set-tailings-dump', u: 0.005, lat: -10, yaw: 180 },
       // the boomtown down the north loop's top, both sides of the road; the
       // miners' camp before the canyon, the left there left open for the
       // sight line to the mill
@@ -2070,7 +2077,8 @@ export const TRACKS = {
     ]
   },
   crag: {
-    name: 'Crag', waypoints: GEN_TRACKS.crag,
+    sandOff: [[0.297, 0.42], [0.579, 0.619], [0.845, 0.881]],   // the rimrock and the hoodoos stand between two strands
+    name: 'Crag', sand: STRIP, waypoints: GEN_TRACKS.crag,
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
     // A ranch in butte country. The long straight runs from the ranch on
     // the open plain at its head (house, barn, water tower, the windpump
@@ -2169,7 +2177,8 @@ export const TRACKS = {
     ]
   },
   sidewinder: {
-    name: 'Sidewinder', waypoints: GEN_TRACKS.sidewinder,
+    sandOff: [[0.066, 0.141], [0.29, 0.385]],   // the tunnel, and two strands side by side
+    name: 'Sidewinder', sand: STRIP, waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
     // An oil field in the desert, one company's (white and red, its mark a
     // red drop on a white disc). Past the start the long straight runs into
@@ -2347,7 +2356,8 @@ export const TRACKS = {
   // problem at bake time instead (scripts/track-gen.mjs chooseAnchor). Gauntlet needs none:
   // its walk already opens with enough straight behind the line.
   skysnake: {
-    name: 'Skysnake', segments: SKYSNAKE, startU: 0.026,
+    name: 'Skysnake', sand: STRIP, segments: SKYSNAKE, startU: 0.026,
+    sandOff: [[0.855, 0.93]],   // two strands side by side
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
     // Snakes and ladders, raced across the board at the toy cars' own scale,
     // and the board stood up where the racers look: two of its printed
@@ -2399,7 +2409,7 @@ export const TRACKS = {
     ]
   },
   gauntlet: {
-    sandOff: [[0.065, 0.195], [0.3, 0.41], [0.585, 0.665], [0.82, 0.915]],   // the siege camp, the barbican, two strands side by side
+    sandOff: [[0.065, 0.195], [0.216, 0.239], [0.3, 0.446], [0.585, 0.665], [0.82, 0.915]],   // the siege camp, the fortress, the barbican, two strands side by side
     name: 'Gauntlet', sand: STRIP, segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege, one set of toy knights split into two sides,
@@ -2460,7 +2470,8 @@ export const TRACKS = {
     ]
   },
   helix: {
-    name: 'Helix', segments: HELIX, startU: 0.020,
+    sandOff: [[0.102, 0.15], [0.765, 0.88], [0.915, 0.953]],   // the marble run's head and stair, and two strands side by side
+    name: 'Helix', sand: STRIP, segments: HELIX, startU: 0.020,
     oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix,
     // The marble run: ONE run round the whole room in the race's direction,
     // its marbles rolling only downhill but at its three lifts, each a
@@ -2504,6 +2515,7 @@ export const TRACKS = {
     ]
   },
   skyline: {
+    // No strip: the block city stands at the kerb round most of the lap.
     name: 'Skyline', segments: SKYLINE, startU: 0.024,
     oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline,
     // Block city: the lap is laid through a town of wooden blocks on city
@@ -2563,14 +2575,21 @@ export const TRACKS = {
 // `stripSpeed` is a car's speed ceiling on the cup's road strip, as a share of
 // what it would be on the asphalt. It follows how the strip LOOKS (theme.cc),
 // not the ladder: deep powder holds a car back most, flat felt least.
+//
+// `botMistakes` spreads the cup's bot field: how many times as often as the
+// front bot the last one runs wide, the seats between evenly spaced
+// (ttp::aiSeatMistakes). Per cup, not per difficulty: tuned with
+// `npm run probe:balance` so its regular driver's top-half share falls from
+// cup to cup, and its casual driver reaches the top half of about half the
+// Beach cups. 1 keeps the whole field at the cup's skill.
 export const CUPS = [
-  { id: 'beach',    name: 'Beach Cup',    difficulty: 1, stripSpeed: 0.85, tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
-  { id: 'snow',     name: 'Snow Cup',     difficulty: 2, stripSpeed: 0.65, tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings, hills and jumps (snow biome)
-  { id: 'backyard', name: 'Backyard Cup', difficulty: 3, stripSpeed: 0.80, tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
-  { id: 'canyon',   name: 'Canyon Cup',   difficulty: 3, stripSpeed: 0.70, tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
+  { id: 'beach',    name: 'Beach Cup',    difficulty: 1, stripSpeed: 0.85, botMistakes: 3, tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
+  { id: 'snow',     name: 'Snow Cup',     difficulty: 2, stripSpeed: 0.65, botMistakes: 5, tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings, hills and jumps (snow biome)
+  { id: 'backyard', name: 'Backyard Cup', difficulty: 3, stripSpeed: 0.80, botMistakes: 8, tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
+  { id: 'canyon',   name: 'Canyon Cup',   difficulty: 3, stripSpeed: 0.70, botMistakes: 5, tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
   // crazy: stunts (playroom biome — orange plastic track).
   // id stays 'rooftop' (wired into CUP_BIOME/selections); only the display name moved.
-  { id: 'rooftop',  name: 'Playroom Cup', difficulty: 4, stripSpeed: 0.85, tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] }
+  { id: 'rooftop',  name: 'Playroom Cup', difficulty: 4, stripSpeed: 0.85, botMistakes: 1, tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] }
 ];
 
 // id → { cup, cupName, cupDifficulty } so each track knows its cup for the picker. Validate

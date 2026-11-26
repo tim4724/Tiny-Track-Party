@@ -61,11 +61,10 @@ double aiSkillForTier(int tier);
 // A cup's bot field is a spread of strengths. At one strength the bots finish
 // within a couple of seconds of each other and a player slightly slower than
 // them is last. So only the front seat drives as the cup's skill says; each
-// seat behind it makes its kerb mistakes more often, evenly up to
-// aiMistakesForTier times as often at the last seat (1 for anything that is not
-// a cup). Earlier corner braking for the back seats was tried first and is no
-// lever: it costs a bot little and parks it in the player's way.
-double aiMistakesForTier(int tier);
+// seat behind it makes its kerb mistakes more often, evenly up to the cup's
+// rate (CupDef::botMistakes) at the last seat. Earlier corner braking for the
+// back seats was tried first and is no lever: it costs a bot little and parks
+// it in the player's way.
 inline double aiSeatMistakes(double cupRate, int seat, int seats) {
   return seats > 1 ? 1 + (cupRate - 1) * seat / (seats - 1) : 1.0;
 }

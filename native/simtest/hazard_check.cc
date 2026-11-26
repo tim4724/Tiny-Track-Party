@@ -87,10 +87,10 @@ int main() {
   {
     BuiltRaceTrack bt;
     std::string err;
-    // Not a Beach Cup track: their sand puts the finish gantry's pylons on the
-    // road as poles.
-    if (!build_race_track_by_id("powder", 3, 42u, bt, err)) {
-      std::fprintf(stderr, "FAIL build powder: %s\n", err.c_str());
+    // Skyline, the one track without a road strip: a strip puts the finish
+    // gantry's pylons on the road as poles.
+    if (!build_race_track_by_id("skyline", 3, 42u, bt, err)) {
+      std::fprintf(stderr, "FAIL build skyline: %s\n", err.c_str());
       return 2;
     }
     check(bt.game.poles.empty(),

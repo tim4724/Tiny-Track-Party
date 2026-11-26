@@ -724,6 +724,13 @@ int shippedCupDifficulty(const std::string& trackId) {
   return 0;
 }
 
+double shippedCupBotMistakes(const std::string& trackId) {
+  for (int i = 0; i < TTP_CUP_COUNT; i++)
+    for (int t = 0; t < TTP_CUPS[i].nTracks; t++)
+      if (trackId == TTP_CUPS[i].tracks[t]) return TTP_CUPS[i].botMistakes;
+  return 1.0;
+}
+
 std::vector<CatalogEntry> shippedCatalog() {
   // CUPS order, flattened — the catalogue's own arrangement, which every picker
   // draws and which ttp_ui.h's contract requires. Walking the cups rather than

@@ -240,7 +240,7 @@ struct FieldWorld {
   // cup by the caller, so this layer stays catalogue-agnostic. Player seats
   // under autopilot keep 1.
   double botSkill = 1.0;
-  // ...and how much more often its last seat runs wide (ttp::aiMistakesForTier,
+  // ...and how much more often its last seat runs wide (CupDef::botMistakes,
   // spread over the seats by ttp::aiSeatMistakes), resolved the same way.
   double botMistakes = 1.0;
   // Deals the CPU fill a random car and persona each (buildField). Set by the

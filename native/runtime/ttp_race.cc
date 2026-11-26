@@ -164,7 +164,7 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.forceItem = optStrOfC(forceItemOrNull);
   li.world = worldWithCap(botCapJson);
   li.world.botSkill = botSkillFor(li.trackId);
-  li.world.botMistakes = ttp::aiMistakesForTier(rtui::shippedCupDifficulty(li.trackId));
+  li.world.botMistakes = rtui::shippedCupBotMistakes(li.trackId);
   const auto dealt = g_fieldSeed.find(roomHandle);
   li.world.fieldSeed = dealt != g_fieldSeed.end() ? dealt->second : seed;
   li.autopilotPlayers = g_autopilotPlayers;
@@ -637,7 +637,7 @@ const char* ttp_race_bench_field_json(const char* trackId, int players, double s
   // is two different races.
   li.world = g_world;
   li.world.botSkill = botSkillFor(li.trackId);
-  li.world.botMistakes = ttp::aiMistakesForTier(rtui::shippedCupDifficulty(li.trackId));
+  li.world.botMistakes = rtui::shippedCupBotMistakes(li.trackId);
   li.world.fieldSeed = seed;
   // The grid rule is the layer's now, so a bench with no room draws what the
   // walk would for free. Autopilot is the one thing this composes for itself: a

@@ -509,7 +509,7 @@ constexpr FurnDef kBoxes_riptide[] = {
   { 0x1.4395810624dd3p-3, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SpanDef kSandOff_riptide[] = {
-  { 0x1.a6e978d4fdf3bp-2, 0x1.2b851eb851eb8p-1 },
+  { 0x1.a2d0e56041893p-2, 0x1.36c8b43958106p-1 },
 };
 constexpr SetDef kSet_riptide[] = {
   { "set-lifeguard-tower", 0x1.999999999999ap-3, -0x1.4p+3, 0x0p+0, 0x1.8f5c28f5c28f6p-1, 0x1p+0, 1 },
@@ -647,11 +647,14 @@ constexpr FurnDef kBoxes_powder[] = {
   { 0x1.8c49ba5e353f8p-2, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.8c49ba5e353f8p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_powder[] = {
+  { 0x1.26e978d4fdf3bp-5, 0x1.0e5604189374cp-4 },
+};
 constexpr SetDef kSet_powder[] = {
   { "set-ski-lift", 0x1.ccccccccccccdp-1, -0x1.04p+5, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-ski-school", 0x1.147ae147ae148p-1, -0x1.4666666666666p+3, 0x1.4p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-powder-peaks", 0x1.eb851eb851eb8p-6, -0x1.ep+5, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
-  { "set-powder-chairlift", 0x1.03afb7e90ff97p-5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-powder-chairlift", 0x1.db22d0e560419p-5, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-powder-forest-a", 0x1.f32617c1bda51p-1, -0x1.1cp+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-powder-forest-b", 0x1.1b089a0275254p-4, -0x1.2eb851eb851ecp+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-powder-forest-c", 0x1.c63f141205bcp-4, -0x1.ae66666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -924,6 +927,10 @@ constexpr FurnDef kBoxes_glacier[] = {
   { 0x1.8fdf3b645a1cbp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.8fdf3b645a1cbp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_glacier[] = {
+  { 0x1.8d4fdf3b645a2p-2, 0x1.ed916872b020cp-2 },
+  { 0x1.c72b020c49ba6p-1, 0x1.d5810624dd2f2p-1 },
+};
 constexpr SetDef kSet_glacier[] = {
   { "set-igloo-camp", 0x1.db22d0e560419p-3, -0x1.9p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-expedition-camp", 0x1.79db22d0e5604p-1, -0x1.8p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -1082,6 +1089,10 @@ constexpr FurnDef kBoxes_avalanche[] = {
   { 0x1.b74bc6a7ef9dbp-2, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.b74bc6a7ef9dbp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.b74bc6a7ef9dbp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+};
+constexpr SpanDef kSandOff_avalanche[] = {
+  { 0x1.f3b645a1cac08p-5, 0x1.4fdf3b645a1cbp-4 },
+  { 0x1.c624dd2f1a9fcp-1, 0x1.d374bc6a7ef9ep-1 },
 };
 constexpr SetDef kSet_avalanche[] = {
   { "set-avalanche-slide", 0x1.851eb851eb852p-1, 0x1p+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -1375,6 +1386,9 @@ constexpr FurnDef kBoxes_pretzel[] = {
   { 0x1.ef9db22d0e56p-2, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.ef9db22d0e56p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_pretzel[] = {
+  { 0x1.cp-1, 0x1.e3d70a3d70a3dp-1 },
+};
 constexpr SetDef kSet_pretzel[] = {
   { "set-avenue-oaks", 0x1.4b48d3ae685dbp-7, 0x1.6p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-avenue-oaks", 0x1.4b48d3ae685dbp-7, -0x1.6p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
@@ -1651,6 +1665,9 @@ constexpr FurnDef kBoxes_cloverleaf[] = {
   { 0x1.f5c28f5c28f5cp-2, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.f5c28f5c28f5cp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_cloverleaf[] = {
+  { 0x1.d810624dd2f1bp-1, 0x1.e2d0e56041893p-1 },
+};
 constexpr SetDef kSet_cloverleaf[] = {
   { "set-playground", 0x1.604189374bc6ap-4, -0x1.4p+3, 0x1.2cp+7, 0x0p+0, 0x1.8p+0, 1 },
   { "set-playground-lawn", 0x1.604189374bc6ap-4, -0x1.4p+3, 0x1.2cp+7, 0x0p+0, 0x1.8p+0, 1 },
@@ -1777,9 +1794,15 @@ constexpr FurnDef kBoxes_wash[] = {
   { 0x1.ec8b439581062p-2, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.ec8b439581062p-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_wash[] = {
+  { 0x1.23d70a3d70a3dp-2, 0x1.70a3d70a3d70ap-2 },
+  { 0x1.65604189374bcp-1, 0x1.753f7ced91687p-1 },
+  { 0x1.b9db22d0e5604p-1, 0x1.c9ba5e353f7cfp-1 },
+  { 0x1.d916872b020c5p-1, 0x1.e6e978d4fdf3bp-1 },
+};
 constexpr SetDef kSet_wash[] = {
   { "set-dry-creek", 0x1.d81d7dbf487fdp-1, -0x1.28p+4, 0x1.cp+6, 0x0p+0, 0x1p+0, 1 },
-  { "set-dead-cottonwood", 0x1.353f7ced91687p-2, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
+  { "set-dead-cottonwood", 0x1.4bc6a7ef9db23p-2, 0x1.3p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-fallen-cottonwood", 0x1.e666666666666p-1, -0x1.cp+2, -0x1.2cp+7, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-bed", 0x1.6acd9e83e425bp-1, -0x1.9333333333333p+4, -0x1.2p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-wash-bed-ford", 0x1.5c28f5c28f5c3p-1, -0x1.ccccccccccccdp+1, 0x1.34p+6, 0x0p+0, 0x1p+0, 1 },
@@ -1940,9 +1963,12 @@ constexpr FurnDef kBoxes_gulch[] = {
   { 0x1.dd2f1a9fbe76dp-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
 constexpr SpanDef kSandOff_gulch[] = {
+  { 0x1.2f1a9fbe76c8bp-5, 0x1.eb851eb851eb8p-5 },
   { 0x1.70a3d70a3d70ap-3, 0x1.d70a3d70a3d71p-3 },
   { 0x1.51eb851eb851fp-2, 0x1.8a3d70a3d70a4p-2 },
-  { 0x1.75c28f5c28f5cp-1, 0x1.8a3d70a3d70a4p-1 },
+  { 0x1.2f1a9fbe76c8bp-1, 0x1.3ced916872b02p-1 },
+  { 0x1.75c28f5c28f5cp-1, 0x1.b4bc6a7ef9db2p-1 },
+  { 0x1.c28f5c28f5c29p-1, 0x1.cdd2f1a9fbe77p-1 },
 };
 constexpr SetDef kSet_gulch[] = {
   { "set-mine-portal", 0x1.26e978d4fdf3bp-6, 0x1p+4, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -1955,7 +1981,7 @@ constexpr SetDef kSet_gulch[] = {
   { "set-canyon-yard-gulch", 0x1.ef9db22d0e56p-1, 0x1.4cccccccccccdp+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-canyon-inside-gulch", 0x1.b6c8b43958106p-1, -0x1.4cccccccccccdp+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-stamp-mill", 0x1.47ae147ae147bp-8, -0x1.6p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
-  { "set-tailings-dump", 0x1.47ae147ae147bp-8, -0x1.6p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
+  { "set-tailings-dump", 0x1.47ae147ae147bp-8, -0x1.4p+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-boomtown-north", 0x1.6b851eb851eb8p-2, 0x1.b333333333333p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-boomtown-south", 0x1.6b851eb851eb8p-2, -0x1.8p+2, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-miners-camp", 0x1.91eb851eb851fp-1, 0x1.099999999999ap+3, -0x1.ep+4, 0x0p+0, 0x1.3333333333333p+0, 1 },
@@ -2108,6 +2134,11 @@ constexpr FurnDef kBoxes_crag[] = {
   { 0x1.126e978d4fdf4p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.126e978d4fdf4p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_crag[] = {
+  { 0x1.3020c49ba5e35p-2, 0x1.ae147ae147ae1p-2 },
+  { 0x1.2872b020c49bap-1, 0x1.3ced916872b02p-1 },
+  { 0x1.b0a3d70a3d70ap-1, 0x1.c3126e978d4fep-1 },
+};
 constexpr SetDef kSet_crag[] = {
   { "set-ranch", 0x1.f8d4fdf3b645ap-1, -0x1.ap+3, 0x1.68p+7, 0x0p+0, 0x1p+0, 1 },
   { "set-loading-chute", 0x1.53f7ced916873p-3, 0x1.2666666666666p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -2229,6 +2260,10 @@ constexpr FurnDef kBoxes_sidewinder[] = {
   { 0x1.fae147ae147aep-2, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.fae147ae147aep-2, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.fae147ae147aep-2, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+};
+constexpr SpanDef kSandOff_sidewinder[] = {
+  { 0x1.0e5604189374cp-4, 0x1.20c49ba5e353fp-3 },
+  { 0x1.28f5c28f5c28fp-2, 0x1.8a3d70a3d70a4p-2 },
 };
 constexpr SetDef kSet_sidewinder[] = {
   { "set-telegraph-line", 0x1.47ae147ae147bp-6, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -2368,6 +2403,9 @@ constexpr FurnDef kBoxes_skysnake[] = {
   { 0x1.4395810624dd3p-1, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.4395810624dd3p-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
 };
+constexpr SpanDef kSandOff_skysnake[] = {
+  { 0x1.b5c28f5c28f5cp-1, 0x1.dc28f5c28f5c3p-1 },
+};
 constexpr SetDef kSet_skysnake[] = {
   { "set-snake-board", 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
   { "set-dice-tower", 0x1.916872b020c4ap-3, 0x1.6p+3, 0x0p+0, 0x0p+0, 0x1p+0, 1 },
@@ -2440,7 +2478,8 @@ constexpr FurnDef kBoxes_gauntlet[] = {
 };
 constexpr SpanDef kSandOff_gauntlet[] = {
   { 0x1.0a3d70a3d70a4p-4, 0x1.8f5c28f5c28f6p-3 },
-  { 0x1.3333333333333p-2, 0x1.a3d70a3d70a3dp-2 },
+  { 0x1.ba5e353f7ced9p-3, 0x1.e978d4fdf3b64p-3 },
+  { 0x1.3333333333333p-2, 0x1.c8b4395810625p-2 },
   { 0x1.2b851eb851eb8p-1, 0x1.547ae147ae148p-1 },
   { 0x1.a3d70a3d70a3dp-1, 0x1.d47ae147ae148p-1 },
 };
@@ -2500,6 +2539,11 @@ constexpr FurnDef kBoxes_helix[] = {
   { 0x1.68f5c28f5c28fp-1, -0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.68f5c28f5c28fp-1, 0x1.6666666666666p-2, false, 0x0p+0 },
   { 0x1.68f5c28f5c28fp-1, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+};
+constexpr SpanDef kSandOff_helix[] = {
+  { 0x1.a1cac083126e9p-4, 0x1.3333333333333p-3 },
+  { 0x1.87ae147ae147bp-1, 0x1.c28f5c28f5c29p-1 },
+  { 0x1.d47ae147ae148p-1, 0x1.e7ef9db22d0e5p-1 },
 };
 constexpr SetDef kSet_helix[] = {
   { "set-marble-tower", 0x1.009d495182a99p-3, 0x1.dp+3, -0x1.68p+5, 0x0p+0, 0x1p+0, 1 },
@@ -2758,21 +2802,21 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "cove", "Cove", "beach", true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x1.199999999999ap+0, nullptr, 0, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cove, 26, kLand_cove, 35 },
   { "driftwood", "Driftwood", "beach", true, nullptr, 0, kW_driftwood, 56, 0x1.4p+1, 0x1.199999999999ap+0, nullptr, 0, 0x0p+0, kOils_driftwood, 1, kPads_driftwood, 2, kBoxes_driftwood, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_driftwood, 50, kLand_driftwood, 26 },
   { "riptide", "Riptide", "beach", true, nullptr, 0, kW_riptide, 51, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_riptide, 1, 0x0p+0, kOils_riptide, 1, kPads_riptide, 2, kBoxes_riptide, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_riptide, 28, kLand_riptide, 21 },
-  { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 20, kLand_powder, 23 },
+  { "powder", "Powder", "snow", true, nullptr, 0, kW_powder, 63, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_powder, 1, 0x0p+0, kOils_powder, 1, kPads_powder, 2, kBoxes_powder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_powder, 20, kLand_powder, 23 },
   { "flurry", "Flurry", "snow", true, nullptr, 0, kW_flurry, 61, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_flurry, 2, 0x0p+0, kOils_flurry, 2, kPads_flurry, 2, kBoxes_flurry, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_flurry, 25, kLand_flurry, 21 },
-  { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 22, kLand_glacier, 39 },
-  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 30, kLand_avalanche, 28 },
+  { "glacier", "Glacier", "snow", true, nullptr, 0, kW_glacier, 73, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_glacier, 2, 0x0p+0, kOils_glacier, 2, kPads_glacier, 2, kBoxes_glacier, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_glacier, 22, kLand_glacier, 39 },
+  { "avalanche", "Avalanche", "snow", true, nullptr, 0, kW_avalanche, 73, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_avalanche, 2, 0x0p+0, kOils_avalanche, 2, kPads_avalanche, 2, kBoxes_avalanche, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_avalanche, 30, kLand_avalanche, 28 },
   { "ribbon", "Ribbon", "backyard", true, nullptr, 0, kW_ribbon, 81, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_ribbon, 1, 0x0p+0, kOils_ribbon, 2, kPads_ribbon, 2, kBoxes_ribbon, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_ribbon, 28, kLand_ribbon, 9 },
-  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 12, kLand_pretzel, 7 },
-  { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 33, kLand_tangle, 18 },
-  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 33, kLand_cloverleaf, 9 },
-  { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 29, kLand_wash, 28 },
-  { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_gulch, 3, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 16, kLand_gulch, 43 },
-  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 20, kLand_crag, 9 },
-  { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 68, kLand_sidewinder, 20 },
-  { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 25, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 21, kLand_skysnake, 1 },
-  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_gauntlet, 4, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 22, nullptr, 0 },
-  { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 15, nullptr, 0 },
+  { "pretzel", "Pretzel", "backyard", true, nullptr, 0, kW_pretzel, 63, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_pretzel, 1, 0x0p+0, kOils_pretzel, 2, kPads_pretzel, 2, kBoxes_pretzel, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_pretzel, 12, kLand_pretzel, 7 },
+  { "tangle", "Tangle", "backyard", true, nullptr, 0, kW_tangle, 78, 0x1.4p+1, 0x1.199999999999ap+0, nullptr, 0, 0x0p+0, kOils_tangle, 2, kPads_tangle, 2, kBoxes_tangle, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_tangle, 33, kLand_tangle, 18 },
+  { "cloverleaf", "Cloverleaf", "backyard", true, nullptr, 0, kW_cloverleaf, 78, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_cloverleaf, 1, 0x0p+0, kOils_cloverleaf, 2, kPads_cloverleaf, 2, kBoxes_cloverleaf, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_cloverleaf, 33, kLand_cloverleaf, 9 },
+  { "wash", "Wash", "canyon", true, nullptr, 0, kW_wash, 60, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_wash, 4, 0x0p+0, kOils_wash, 1, kPads_wash, 2, kBoxes_wash, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_wash, 29, kLand_wash, 28 },
+  { "gulch", "Gulch", "canyon", true, nullptr, 0, kW_gulch, 80, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_gulch, 6, 0x0p+0, kOils_gulch, 2, kPads_gulch, 2, kBoxes_gulch, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gulch, 16, kLand_gulch, 43 },
+  { "crag", "Crag", "canyon", true, nullptr, 0, kW_crag, 81, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_crag, 3, 0x0p+0, kOils_crag, 1, kPads_crag, 2, kBoxes_crag, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_crag, 20, kLand_crag, 9 },
+  { "sidewinder", "Sidewinder", "canyon", true, nullptr, 0, kW_sidewinder, 68, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_sidewinder, 2, 0x0p+0, kOils_sidewinder, 2, kPads_sidewinder, 2, kBoxes_sidewinder, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_sidewinder, 68, kLand_sidewinder, 20 },
+  { "skysnake", "Skysnake", "rooftop", false, kS_skysnake, 25, nullptr, 0, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_skysnake, 1, 0x1.a9fbe76c8b439p-6, kOils_skysnake, 2, kPads_skysnake, 2, kBoxes_skysnake, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skysnake, 21, kLand_skysnake, 1 },
+  { "gauntlet", "Gauntlet", "rooftop", false, kS_gauntlet, 23, nullptr, 0, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_gauntlet, 5, 0x0p+0, kOils_gauntlet, 2, kPads_gauntlet, 2, kBoxes_gauntlet, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_gauntlet, 22, nullptr, 0 },
+  { "helix", "Helix", "rooftop", false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x1.199999999999ap+0, kSandOff_helix, 3, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_helix, 15, nullptr, 0 },
   { "skyline", "Skyline", "rooftop", false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0, nullptr, 0, kSet_skyline, 13, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "warp", "Warp Ladder", nullptr, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
@@ -2800,11 +2844,11 @@ constexpr const char* kCupTracks_backyard[] = { "ribbon", "pretzel", "tangle", "
 constexpr const char* kCupTracks_canyon[] = { "wash", "gulch", "crag", "sidewinder" };
 constexpr const char* kCupTracks_rooftop[] = { "skysnake", "skyline", "helix", "gauntlet" };
 constexpr CupDef TTP_CUPS[] = {
-  { "beach", "Beach Cup", kCupTracks_beach, 4, 1, 0xE0C070, 0x1.b333333333333p-1 },
-  { "snow", "Snow Cup", kCupTracks_snow, 4, 2, 0x7FB2DC, 0x1.4cccccccccccdp-1 },
-  { "backyard", "Backyard Cup", kCupTracks_backyard, 4, 3, 0x7FBF63, 0x1.999999999999ap-1 },
-  { "canyon", "Canyon Cup", kCupTracks_canyon, 4, 3, 0xC4713F, 0x1.6666666666666p-1 },
-  { "rooftop", "Playroom Cup", kCupTracks_rooftop, 4, 4, 0xF5842B, 0x1.b333333333333p-1 },
+  { "beach", "Beach Cup", kCupTracks_beach, 4, 1, 0xE0C070, 0x1.b333333333333p-1, 0x1.8p+1 },
+  { "snow", "Snow Cup", kCupTracks_snow, 4, 2, 0x7FB2DC, 0x1.4cccccccccccdp-1, 0x1.4p+2 },
+  { "backyard", "Backyard Cup", kCupTracks_backyard, 4, 3, 0x7FBF63, 0x1.999999999999ap-1, 0x1p+3 },
+  { "canyon", "Canyon Cup", kCupTracks_canyon, 4, 3, 0xC4713F, 0x1.6666666666666p-1, 0x1.4p+2 },
+  { "rooftop", "Playroom Cup", kCupTracks_rooftop, 4, 4, 0xF5842B, 0x1.b333333333333p-1, 0x1p+0 },
 };
 constexpr int TTP_CUP_COUNT = 5;
 

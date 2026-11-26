@@ -376,8 +376,9 @@ for (const c of CUPS) {
   // cup somebody forgot to paint.
   if (!CUP_COLOR[c.id]) fail(`cup "${c.id}" has no CUP_COLOR in public/shared/trackPicker.js`);
   if (!(c.stripSpeed > 0 && c.stripSpeed <= 1)) fail(`cup "${c.id}" needs a stripSpeed in (0, 1]`);
+  if (!(c.botMistakes >= 1)) fail(`cup "${c.id}" needs a botMistakes of 1 or more`);
   out.push(`  { ${JSON.stringify(c.id)}, ${JSON.stringify(c.name)}, kCupTracks_${sym}, `
-    + `${c.tracks.length}, ${c.difficulty}, ${hexColor(CUP_COLOR[c.id])}, ${D(c.stripSpeed)} },`);
+    + `${c.tracks.length}, ${c.difficulty}, ${hexColor(CUP_COLOR[c.id])}, ${D(c.stripSpeed)}, ${D(c.botMistakes)} },`);
 }
 out.push('};');
 out.push(`constexpr int TTP_CUP_COUNT = ${CUPS.length};`);

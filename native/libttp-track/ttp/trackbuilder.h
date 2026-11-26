@@ -173,6 +173,9 @@ struct CupDef {
   // A car's speed ceiling on the cup's road strip, as a share of what it would
   // be on the asphalt (GameTrack::sandSpeed).
   double stripSpeed;
+  // The spread of the cup's bot field: how many times as often as its front
+  // bot the last one runs wide (ttp::aiSeatMistakes).
+  double botMistakes;
 };
 
 // ---- built-track OUTPUT (the augmented race-track object) --------------------

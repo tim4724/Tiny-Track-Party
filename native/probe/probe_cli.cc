@@ -688,7 +688,7 @@ GpOut runGp(const CupDef& cup, const DriverModel& model, size_t car, uint32_t se
       const Persona& p = AI_PERSONALITIES[(size_t)(e + seed) % 7];
       bots.push_back(std::make_unique<AiController>(
           p.caution, LOOKAHEAD, STEER_GAIN, p.laneBias, raceSeed + (uint32_t)e, skill,
-          aiSeatMistakes(aiMistakesForTier(cup.difficulty), e, HUMAN)));
+          aiSeatMistakes(cup.botMistakes, e, HUMAN)));
     }
     Car* me = nullptr;
     for (const auto& c : game.cars()) if (c->id == Id::Num(HUMAN)) me = c.get();

@@ -1534,8 +1534,9 @@ export function runDisplayScenario(opts, ctx) {
           track: track.id, aspect, lap: secs(path.length), length: layout.length,
           pieces: layout.pieces.map((p, i) => {
             const { eye, ...read } = readOver(path, p, aspect);
+            const spot = clashOf(p, i);
             return { index: i, model: p.model, label: labelOf(p.model), s: p.s, lat: p.lat, yaw: p.yaw,
-                     face: eye && faceYaw(p, eye), spot: clashOf(p, i), ...read };
+                     face: eye && faceYaw(p, eye), spot, roadAt: spot === 'road' ? roadUnder(p, i) : [], ...read };
           })
         };
       }
@@ -1609,6 +1610,28 @@ export function runDisplayScenario(opts, ctx) {
           }
         }
         return '';
+      }
+      // Where the road row q stands on runs: the lap stations nearest the
+      // cells of its shape that spotIssue calls road (a strip to switch off
+      // there, tracks.js `sandOff`, or a piece to move).
+      function roadUnder(q, skip) {
+        const sh = shapes.get(q.model);
+        if (!sh) return [];
+        const sc = sh.w >= sh.d ? (2 * q.hx) / sh.w : (2 * q.hz) / sh.d;
+        const pts = roadPoints(), at = new Set();
+        for (let k = 0; k < sh.nz; k++) {
+          for (let i = 0; i < sh.nx; i++) {
+            const c = k * sh.nx + i;
+            if (!(sh.hi[c] > -Infinity)) continue;
+            const lx = (sh.x0 + (i + 0.5) * SHAPE_CELL) * sc, lz = (sh.z0 + (k + 0.5) * SHAPE_CELL) * sc;
+            const x = q.x + lx * q.ax - lz * q.az, z = q.z + lx * q.az + lz * q.ax;
+            if (display.spotIssue(x, z, q.y + sh.lo[c] * sc, q.y + sh.hi[c] * sc, skip) !== 'road') continue;
+            let best = 0, bd = Infinity;
+            pts.forEach((f, j) => { const d = Math.hypot(f.x - x, f.z - z); if (d < bd) { bd = d; best = j; } });
+            at.add(Math.round((layout.length * best) / pts.length));
+          }
+        }
+        return [...at].sort((a, b) => a - b);
       }
       // Whether a road deck passes over row q: a cell of its shape inside a
       // road sample's stretch, the deck over the piece's foot. spotIssue lets

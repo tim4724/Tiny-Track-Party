@@ -111,16 +111,6 @@ double aiSkillForTier(int tier) {
   return AI_TIER_SKILL[tier - 1];
 }
 
-// Tuned with probe_cli balance, to its human driver models: the casual one
-// reaches the top half of about four Beach cups in ten, the regular one of
-// about half the middle cups, and the last cup keeps its whole field.
-static const double AI_TIER_MISTAKES[4] = {3.0, 5.0, 8.0, 1.0};
-
-double aiMistakesForTier(int tier) {
-  if (tier < 1 || tier > 4) return 1.0;
-  return AI_TIER_MISTAKES[tier - 1];
-}
-
 // ---- RacingLine --------------------------------------------------------------
 RacingLine::RacingLine(Centerline& centerline) {
   double L = centerline.length();

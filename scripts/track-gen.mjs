@@ -553,7 +553,9 @@ export function measureGrid(t, source, s0 = 0) {
     curvature = Math.max(curvature, curvatureFrom(before, after, H));
     grade = Math.max(grade, Math.abs(f.tangent.y));
     bank = Math.max(bank, Math.abs(f.lateral.y));
-    minWidth = Math.min(minWidth, f.width); maxWidth = Math.max(maxWidth, f.width);
+    // The width is the slots' and the gantry's: along the launch run a sand
+    // strip may already be narrowing into the first bend.
+    if (stations[i] <= s0 + 2) { minWidth = Math.min(minWidth, f.width); maxWidth = Math.max(maxWidth, f.width); }
     rise = Math.max(rise, f.pos.y - groundY);
   }
   return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank,
