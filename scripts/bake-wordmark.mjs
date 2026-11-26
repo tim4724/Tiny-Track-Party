@@ -295,9 +295,7 @@ const ADAPT_WHEELS = 0.5 + ADAPT_BODY_W / CAR_BODY_ASPECT / 2;
 //
 // NO <monochrome> LAYER. Themed icons are an Android 13 LAUNCHER feature, and the
 // shipping build requires leanback, so it reaches only televisions and no TV
-// launcher themes icons. The `phoneTest` variant does reach a tester's phone,
-// where an Android 13 launcher would draw this pair unthemed beside its themed
-// neighbours — which is the whole cost, and not worth a third layer.
+// launcher themes icons.
 const ADAPT_LAYER = (layer) => {
   const car = carBox(ADAPT, ADAPT, ADAPT_BODY_W, ADAPT_WHEELS);
   // Where the band's top edge lands on the CANVAS, once ADAPT_GRASS of the
