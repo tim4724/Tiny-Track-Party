@@ -143,33 +143,6 @@ android {
                 "proguard-rules.pro",
             )
         }
-
-        // THE RELEASE BUILD, PLUS A PHONE MANIFEST (src/phoneTest/
-        // AndroidManifest.xml). Play's closed testing wants a dozen testers for
-        // fourteen continuous days, and a tester who owns no television cannot
-        // install a leanback-required app at all — so this variant is what goes
-        // on the ordinary closed track while the TV bundle goes on tv:beta.
-        // Same applicationId, so both are the same app to Play and each upload
-        // still needs a versionCode nothing has used.
-        //
-        // A RELEASE TAG SHIPS THIS TOO. release.yml builds both bundles from
-        // one native build and gives THIS ONE THE LOWER versionCode of the
-        // pair — read the reason there before changing either, it is not a
-        // formality. By hand it is `./gradlew bundlePhoneTest
-        // -PttpVersionCode=<n>`, taking a code from the band below 100 that
-        // release.yml's versionCode comment reserves for hand uploads.
-        //
-        // DELIBERATELY A BUILD TYPE AND NOT A FLAG ON `release`: release is what
-        // the tag builds, so no flag can be left set and ship the
-        // phone-installable manifest to the TV listing by accident.
-        //
-        // initWith carries R8, the proguard rules and the signing config over,
-        // which is the point — a phone tester should be running the same
-        // shrunk, upload-signed app the TV testers get, not a second
-        // configuration whose crashes prove nothing about the one that ships.
-        create("phoneTest") {
-            initWith(getByName("release"))
-        }
     }
 
     // The engine .so files are BUILD OUTPUT of native/scripts/build-runtime-

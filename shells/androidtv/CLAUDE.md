@@ -1183,12 +1183,8 @@ R8 nor memory ("Gradle build daemon has been stopped").
 variant, without an engine. It is compile-only for the reason `native.yml`'s NDK
 leg is: a runner has no TV. Nothing built the app at all before it.
 
-**A release tag ships TWO store bundles** (`.github/workflows/release.yml`), both
-signed, both from one native build: the `release` variant to Play's Android TV
-open test (`tv:beta`), and the `phoneTest` variant to the ordinary closed track. Two,
-because Play's twelve-testers gate is per APP and most testers own no television
-— and two TRACKS rather than one shared release, because a `tv:` track refuses
-any bundle that does not REQUIRE leanback. It is a separate workflow rather than
+**A release tag ships the signed `release` bundle** (`.github/workflows/release.yml`)
+to Play's Android TV open test (`tv:beta`). It is a separate workflow rather than
 `androidtv.yml` with a keystore because a store build needs the REAL engine, so
 it carries the whole native chain a runner lacks — the pinned Filament fork built
 for both ABIs, the NDK that fork pins, and the host `matc` for the SPIR-V
@@ -1198,8 +1194,6 @@ pin bump.
 
 `versionCode` is pinned at 1 in the build file and overridden per upload with
 `-PttpVersionCode`, because Play refuses a code it has already seen while a
-sideload refuses one lower than what is installed. **The TV bundle always takes
-the higher code of the pair** — codes are one space across all tracks, and
-`phoneTest` makes leanback optional, so a television is compatible with both and
-Play installs the highest code it can. The workflow's comment carries the full
-reasoning; do not invert the pair.
+sideload refuses one lower than what is installed. Codes are one space across
+every track, including the ones a retired phone-test bundle used, which is why
+the workflow's formula looks odd; its comment says why it must not be simplified.
