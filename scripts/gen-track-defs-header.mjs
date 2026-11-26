@@ -154,7 +154,7 @@ function bananaInit(f) {
 }
 
 // ---- descriptor ----
-const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'sandOffFrom', 'sandOffTo', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
+const DESC_KEYS = ['name', 'waypoints', 'segments', 'startU', 'width', 'sand', 'sandOff', 'oils', 'pads', 'boxes', 'poles', 'bananas', 'kickers', 'set', 'land'];
 
 // ---- set pieces (renderer-only: the builder never reads them) ----
 // `model` names a GLB under public/assets/toycar that scripts/gen-set-prototypes.mjs
@@ -284,6 +284,17 @@ for (const id of [...trackIds, ...devIds]) {
   const poles = emitFurn('Poles', desc.poles, (f) => furnInit(f, false));
   const bananas = emitFurn('Bananas', desc.bananas, bananaInit);
   const kickers = emitFurn('Kickers', desc.kickers, kickerInit);
+  let offRef = 'nullptr';
+  const offs = desc.sandOff || [];
+  if (offs.length) {
+    for (const o of offs) {
+      if (!Array.isArray(o) || o.length !== 2 || !(o[1] > o[0])) fail(`track "${id}" sandOff wants [from, to] pairs`);
+    }
+    out.push(`constexpr SpanDef kSandOff_${sym}[] = {`);
+    for (const o of offs) out.push(`  { ${D(o[0])}, ${D(o[1])} },`);
+    out.push('};');
+    offRef = `kSandOff_${sym}`;
+  }
   let setRef = 'nullptr', nSet = 0;
   if (desc.set && desc.set.length) {
     out.push(`constexpr SetDef kSet_${sym}[] = {`);
@@ -308,7 +319,7 @@ for (const id of [...trackIds, ...devIds]) {
   const cup = CUP_OF[id] ? JSON.stringify(CUP_OF[id]) : 'nullptr';
   perTrack.push(`  { ${JSON.stringify(id)}, ${JSON.stringify(desc.name || id)}, ${cup}, `
     + `${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
-    + `${D(trackWidth)}, ${D(desc.sand ?? 0)}, ${D(desc.sandOffFrom ?? 0)}, ${D(desc.sandOffTo ?? 0)}, ${D(startU)}, `
+    + `${D(trackWidth)}, ${D(desc.sand ?? 0)}, ${offRef}, ${offs.length}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
     + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n}, ${kickers.ref}, ${kickers.n}, ${setRef}, ${nSet}, `
     + `${landRef}, ${lands.length} }`);
@@ -364,8 +375,9 @@ for (const c of CUPS) {
   // fallback: the fallback exists for a cup-LESS selection (Random), not for a
   // cup somebody forgot to paint.
   if (!CUP_COLOR[c.id]) fail(`cup "${c.id}" has no CUP_COLOR in public/shared/trackPicker.js`);
+  if (!(c.stripSpeed > 0 && c.stripSpeed <= 1)) fail(`cup "${c.id}" needs a stripSpeed in (0, 1]`);
   out.push(`  { ${JSON.stringify(c.id)}, ${JSON.stringify(c.name)}, kCupTracks_${sym}, `
-    + `${c.tracks.length}, ${c.difficulty}, ${hexColor(CUP_COLOR[c.id])} },`);
+    + `${c.tracks.length}, ${c.difficulty}, ${hexColor(CUP_COLOR[c.id])}, ${D(c.stripSpeed)} },`);
 }
 out.push('};');
 out.push(`constexpr int TTP_CUP_COUNT = ${CUPS.length};`);

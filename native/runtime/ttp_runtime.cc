@@ -101,6 +101,7 @@ struct ParsedTrackDef {
   std::vector<WptDef> wpts;
   std::vector<FurnDef> oils, pads, boxes, poles, kickers;
   std::vector<BananaDef> bananas;
+  std::vector<SpanDef> sandOff;
 };
 
 static const double kRoadWidthFallback = 2.5;  // TrackBuilder ROAD_WIDTH
@@ -212,8 +213,16 @@ static bool parse_track_def(const Value& desc, ParsedTrackDef& p) {
   const double width = numOr(desc, "width", 0);
   p.def.width = width != 0 ? width : kRoadWidthFallback;
   p.def.sand = numOr(desc, "sand", 0);
-  p.def.sandOffFrom = numOr(desc, "sandOffFrom", 0);
-  p.def.sandOffTo = numOr(desc, "sandOffTo", 0);
+  // `sandOff: [[from, to], ...]`
+  if (!parseList(desc, "sandOff", p.sandOff, [](const Value& s, SpanDef& out) {
+        if (s.type != Value::ARR || s.arr.size() != 2) return false;
+        if (s.arr[0].type != Value::NUM || s.arr[1].type != Value::NUM) return false;
+        out.from = s.arr[0].num;
+        out.to = s.arr[1].num;
+        return true;
+      })) return false;
+  p.def.sandOff = p.sandOff.empty() ? nullptr : p.sandOff.data();
+  p.def.nSandOff = (int) p.sandOff.size();
   p.def.startU = numOr(desc, "startU", 0);
 
   if (isSpline) {
@@ -263,7 +272,7 @@ struct BotEntry {
   Id id;
   bool hasStats = false;
   Stats stats;
-  double caution = 1, laneBias = 0, skill = 1;
+  double caution = 1, laneBias = 0, skill = 1, mistakes = 1;
   uint32_t aiSeed = 0;
   std::unique_ptr<AiController> ai;  // built at start
   // The autopilot marker (ttp/race_flow.h, BotSpec::player). This bucket is
@@ -411,7 +420,8 @@ static const char* EMPTY_ARR = "[]";
 // identically either way.
 static void buildBots(RuntimeSession& rs) {
   for (auto& b : rs.bots)
-    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed, b.skill);
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed, b.skill,
+                                          b.mistakes);
   if (!rs.bots.empty()) rs.eng->racingLine();
 }
 
@@ -678,9 +688,10 @@ const char* const AUDIO_CUES[] = {
   "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
   "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
   "boost", "corner", "brake", "engine_putt", "rocket_fire", "drift", "land", "sand", "rain",
+  "sand_snow", "sand_gravel", "sand_dirt", "sand_felt",
 };
 const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
-static_assert(AUDIO_CUE_COUNT == TTP_CUE_RAIN,
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_SAND_FELT,
               "TTP_CUE_* must run 1..N over the table above");
 
 int32_t audioCueCode(const char* name) {
@@ -752,8 +763,9 @@ void ttp_audio_bind(int session) {
   // reading). A dev ?biome= override restyles the picture, not the weather.
   RuntimeSession* rs = get(session);
   const char* track = rs ? rs->trackId.c_str() : "";
-  b.dec.weather(rs ? ttp::rt::resolve_theme(ttp::rt::biome_for_track(track), track).ambient.kind
-                   : (uint32_t) ttp::rt::AMB_NONE, b.cmds);
+  const ttp::rt::Theme theme = ttp::rt::resolve_theme(ttp::rt::biome_for_track(track), track);
+  b.dec.weather(rs ? theme.ambient.kind : (uint32_t) ttp::rt::AMB_NONE, b.cmds);
+  b.dec.strip(rs ? theme.road.stripCue : "sand");
 }
 
 void ttp_audio_frame(double nowMs) {
@@ -1041,6 +1053,7 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
         b.caution = optNum(it->second, "caution", 1);
         b.laneBias = optNum(it->second, "laneBias", 0);
         b.skill = optNum(it->second, "skill", 1);
+        b.mistakes = optNum(it->second, "mistakes", 1);
         b.aiSeed = jsToUint32(optNum(it->second, "seed", 1));
         // THE THIRD BUCKET. `player` on a spec means this seat carries a
         // controller AND is still a participant, so it is filed under `humans`
@@ -1120,6 +1133,25 @@ static void stepSession(RuntimeSession* rs, double dtMs) {
       rs->eng->processInput(rs->showcaseHolder, in);
     }
     holdBanana(*rs, step.hold);
+    return;
+  }
+  if (rs->showcase == ttp::rt::shot_hold::Showcase::Strip || rs->showcase == ttp::rt::shot_hold::Showcase::StripOn
+      || rs->showcase == ttp::rt::shot_hold::Showcase::StripOff) {
+    // Each autopiloted player takes the strip on its right for part of the
+    // loop, mid-strip, wherever the road carries enough of one; the next
+    // driveBots steers for it.
+    namespace sh = ttp::rt::shot_hold;
+    rs->showcaseState.stripT += dtMs / 1000;
+    const bool out = rs->showcase == sh::Showcase::StripOn
+        || (rs->showcase == sh::Showcase::Strip
+            && std::fmod(rs->showcaseState.stripT, sh::SHOWCASE_STRIP_CYCLE_S) > sh::SHOWCASE_STRIP_ROAD_S);
+    for (auto& b : rs->bots) {
+      if (!b.player || !b.ai) continue;
+      const Car* car = nullptr;
+      for (const auto& cp : rs->eng->cars()) if (cp->id == b.id) car = cp.get();
+      if (car && out && car->sandHere > 1.0) b.ai->holdLane(rs->track.roadWidth / 2 + 0.5 * car->sandHere);
+      else b.ai->releaseLane();
+    }
     return;
   }
   const int pick = ttp::rt::shot_hold::showcasePick(rs->showcase, rs->showcaseState, dtMs / 1000, cars);
@@ -1399,6 +1431,7 @@ void ttp_dispose(int h) {
 void ttp_set_steer_expo(double v) { setSteerExpo(v); }
 double ttp_get_steer_expo(void) { return getSteerExpo(); }
 double ttp_debug_curb_speed(double frac) { return debugCurbSpeed(frac); }
+double ttp_debug_strip_speed(double frac) { return debugSandSpeed(frac); }
 double ttp_debug_curb_turn(double rate) { return debugCurbTurn(rate); }
 double ttp_debug_curb_turn_max(double rate) { return debugCurbTurnMax(rate); }
 double ttp_debug_curb_impact(double k) { return debugCurbImpact(k); }

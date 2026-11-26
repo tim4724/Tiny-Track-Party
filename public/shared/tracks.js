@@ -11,7 +11,7 @@ import { GEN_TRACKS, GEN_FURNITURE } from './genTracks.js';
 // registry can name a new track BEFORE gen-tracks.mjs runs (the bake pipeline itself
 // imports this module; a hard read here would deadlock that workflow).
 const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
-const BEACH_SAND = 1.1;
+const STRIP = 1.1;
 
 // Track catalogue — DATA ONLY, no renderer. The single source of truth for "what
 // tracks exist": each track is a display name, a default road `width`, and an ordered
@@ -498,7 +498,7 @@ export const TRACKS = {
   // rolling hills + hops, width play, no crossings; auto-placed furniture).
   // Every Beach track carries a sand strip beside the asphalt (plan units per side).
   tidepool: {
-    name: 'Tidepool', sand: BEACH_SAND, waypoints: GEN_TRACKS.tidepool,
+    name: 'Tidepool', sand: STRIP, waypoints: GEN_TRACKS.tidepool,
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
     // Low tide: the reef the sea left bare is the land the lap drives
     // beside. On the two outer bends the sea comes in to a few strides past
@@ -636,7 +636,7 @@ export const TRACKS = {
     ]
   },
   cove: {
-    name: 'Cove', sand: BEACH_SAND, waypoints: GEN_TRACKS.cove,
+    name: 'Cove', sand: STRIP, waypoints: GEN_TRACKS.cove,
     oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
     // The pirates' island, jungle down to its coves. Its
     // peak, green with jungle, fills the middle of the lap, its foothills
@@ -799,7 +799,7 @@ export const TRACKS = {
     ]
   },
   driftwood: {
-    name: 'Driftwood', sand: BEACH_SAND, waypoints: GEN_TRACKS.driftwood,
+    name: 'Driftwood', sand: STRIP, waypoints: GEN_TRACKS.driftwood,
     oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes,
     // A storm coast of dunes: the long diagonal is a pass between them, bare
     // sand inland and grass-topped on the seaward side, and it drives
@@ -968,10 +968,10 @@ export const TRACKS = {
     ]
   },
   riptide: {
-    name: 'Riptide', sand: BEACH_SAND, waypoints: GEN_TRACKS.riptide,
+    name: 'Riptide', sand: STRIP, waypoints: GEN_TRACKS.riptide,
     // no sand on the causeway: over the water the kerbs stand at the asphalt's edge.
     // The strip has eased out on the land, by the ring where the hop's piles begin.
-    sandOffFrom: 0.413, sandOffTo: 0.585,
+    sandOff: [[0.413, 0.585]],
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes,
     // A seaside town. Past the line the road runs along the beach under the
     // Point, the coastguard's lookout on its green flank, by the surf club,
@@ -1182,7 +1182,9 @@ export const TRACKS = {
     ]
   },
   flurry: {
-    name: 'Flurry', waypoints: GEN_TRACKS.flurry,
+    // no strip past the forest that stands between two strands, nor over the stream
+    sandOff: [[0.165, 0.215], [0.79, 0.84]],
+    name: 'Flurry', sand: STRIP, waypoints: GEN_TRACKS.flurry,
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
       { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
@@ -1550,7 +1552,8 @@ export const TRACKS = {
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
   // decorated mid profile; auto-placed furniture).
   ribbon: {
-    name: 'Ribbon', waypoints: GEN_TRACKS.ribbon,
+    sandOff: [[0.865, 0.94]],   // the farm's fences stand at the kerb
+    name: 'Ribbon', sand: STRIP, waypoints: GEN_TRACKS.ribbon,
     oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes,
     // The village in its valley, and the farms round it. The church on the
     // east terrace where the grid straight looks, the maypole on its green;
@@ -1943,7 +1946,9 @@ export const TRACKS = {
     ]
   },
   gulch: {
-    name: 'Gulch', waypoints: GEN_TRACKS.gulch,
+    // no strip under the headframe, by the tailings at the line, through the boomtown
+    sandOff: [[0.18, 0.23], [0.33, 0.385], [0.73, 0.77]],
+    name: 'Gulch', sand: STRIP, waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
     // A gold mine at its own size, reached down a canyon of mountainsides off
     // the crest (the long left-hander and the tight bend into the yard). The
@@ -2394,7 +2399,8 @@ export const TRACKS = {
     ]
   },
   gauntlet: {
-    name: 'Gauntlet', segments: GAUNTLET,
+    sandOff: [[0.065, 0.195], [0.3, 0.41], [0.585, 0.665], [0.82, 0.915]],   // the siege camp, the barbican, two strands side by side
+    name: 'Gauntlet', sand: STRIP, segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege, one set of toy knights split into two sides,
     // and the race runs the gauntlet between them. The block castle stands
@@ -2553,14 +2559,18 @@ export const TRACKS = {
 // `difficulty` (1–4) belongs to the CUP, never to a track: it sets how well the CPU
 // fill drives (ttp::aiSkillForTier). It is data only — no screen renders it — and
 // the codegen refuses a cup without one.
+//
+// `stripSpeed` is a car's speed ceiling on the cup's road strip, as a share of
+// what it would be on the asphalt. It follows how the strip LOOKS (theme.cc),
+// not the ladder: deep powder holds a car back most, flat felt least.
 export const CUPS = [
-  { id: 'beach',    name: 'Beach Cup',    difficulty: 1, tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
-  { id: 'snow',     name: 'Snow Cup',     difficulty: 2, tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings, hills and jumps (snow biome)
-  { id: 'backyard', name: 'Backyard Cup', difficulty: 3, tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
-  { id: 'canyon',   name: 'Canyon Cup',   difficulty: 3, tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
+  { id: 'beach',    name: 'Beach Cup',    difficulty: 1, stripSpeed: 0.85, tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
+  { id: 'snow',     name: 'Snow Cup',     difficulty: 2, stripSpeed: 0.65, tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings, hills and jumps (snow biome)
+  { id: 'backyard', name: 'Backyard Cup', difficulty: 3, stripSpeed: 0.80, tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
+  { id: 'canyon',   name: 'Canyon Cup',   difficulty: 3, stripSpeed: 0.70, tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
   // crazy: stunts (playroom biome — orange plastic track).
   // id stays 'rooftop' (wired into CUP_BIOME/selections); only the display name moved.
-  { id: 'rooftop',  name: 'Playroom Cup', difficulty: 4, tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] }
+  { id: 'rooftop',  name: 'Playroom Cup', difficulty: 4, stripSpeed: 0.85, tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] }
 ];
 
 // id → { cup, cupName, cupDifficulty } so each track knows its cup for the picker. Validate
@@ -2590,6 +2600,6 @@ export const TRACK_LIST = TRACK_ORDER.map((id) => ({
   id, name: TRACKS[id].name,
   cup: CUP_OF[id].cup, cupName: CUP_OF[id].cupName, cupDifficulty: CUP_OF[id].cupDifficulty,
   segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints, startU: TRACKS[id].startU, sand: TRACKS[id].sand,
-  sandOffFrom: TRACKS[id].sandOffFrom, sandOffTo: TRACKS[id].sandOffTo,
+  sandOff: TRACKS[id].sandOff,
   oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes, poles: TRACKS[id].poles
 }));

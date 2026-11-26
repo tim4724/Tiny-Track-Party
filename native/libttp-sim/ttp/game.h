@@ -146,6 +146,10 @@ struct GameTrack {
   int totalLaps;
   double roadWidth;
   double sand = 0;
+  // The speed ceiling with the car's centre past the asphalt, on a track that
+  // has a strip between the asphalt and the curb, as a share of what it would
+  // be. The cup's own (CupDef::stripSpeed) on a catalogue track.
+  double sandSpeed = 0.75;
   uint32_t seed;
   std::vector<Zone> hazards;
   std::vector<PadRt> pads;
@@ -209,6 +213,8 @@ double getSteerExpo();
 // constant; each answers the AUTHORED value, so a slider reads its default by
 // resetting.
 double debugCurbSpeed(double frac);
+// Likewise the strip's speed ceiling, over every track's own (GameTrack::sandSpeed).
+double debugSandSpeed(double frac);
 double debugCurbTurn(double rate);
 double debugCurbTurnMax(double rate);
 double debugCurbImpact(double k);
@@ -371,6 +377,7 @@ class Game {
   double length_;
   int totalLaps_;
   double maxLat_;
+  double sandSpeed_;
   std::function<void(const Event&)> onEvent_;
   std::string forceItem_;
   double elapsed_ = 0;

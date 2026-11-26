@@ -74,12 +74,14 @@ double intrusionOf(const Post& post, const std::vector<OutSample>& samples) {
 // startU relabel. Fed by both the segment walk and the waypoint sampler.
 // The sand strip, per sample and per side, between the asphalt and the kerb:
 // `full` wherever the corner allows it, narrowed (SAND_FOLD_MAX) where it does
-// not. The allowance is ERODED then averaged, both over SAND_EASE: each averaged
-// value is at most the allowance at its own sample, so the ease never reaches
-// into the corner it eases toward. All zero for a track without sand.
+// not, and none on raised road (a bridge, a deck on pillars), where the kerbs
+// stand at the asphalt's edge. The allowance is ERODED then averaged, both over
+// SAND_EASE: each averaged value is at most the allowance at its own sample, so
+// the ease never reaches into the corner or onto the bridge it eases toward.
+// All zero for a track without sand.
 std::vector<double> sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>& tangents,
-                               const std::vector<double>& widths, double full,
-                               double offFrom, double offTo) {
+                               const std::vector<double>& widths, const std::vector<char>& raised,
+                               double full, const SpanDef* off, int nOff) {
   const int n = (int) worldPts.size();
   std::vector<double> sandAt(n, 0.0);
   if (!(full > 0)) return sandAt;
@@ -97,7 +99,9 @@ std::vector<double> sandWidths(const std::vector<Vec3>& worldPts, const std::vec
     allowed[i] = js_max(0.0, js_min(full, room));
     // A stretch authored without sand allows none: the same erosion and
     // average then ease the strip out before it and back in after it.
-    if (offTo > offFrom && cum[i] >= offFrom * ring && cum[i] <= offTo * ring) allowed[i] = 0.0;
+    for (int o = 0; o < nOff; o++)
+      if (cum[i] >= off[o].from * ring && cum[i] <= off[o].to * ring) allowed[i] = 0.0;
+    if (raised[i]) allowed[i] = 0.0;
   }
   const int R = (int)std::ceil(SAND_EASE / (ring / n));
   std::vector<double> eroded(n);
@@ -118,7 +122,7 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
                         std::vector<double> banks, std::vector<char> pillarFlags,
                         std::vector<char> hillFlags, std::vector<int> loopEntryIdx,
                         double trackWidth, bool startGate, double startU,
-                        double sand, double sandOffFrom = 0, double sandOffTo = 0) {
+                        double sand, const SpanDef* sandOff = nullptr, int nSandOff = 0) {
   double gap = worldPts.back().distanceTo(worldPts.front());
   bool closed = gap < 0.5;
   if (worldPts.size() > 3 && worldPts.back().distanceTo(worldPts.front()) < DS) {
@@ -143,7 +147,7 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
   for (int i = 0; i < n; i++)
     tangents.push_back(worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize());
 
-  const std::vector<double> sandAt = sandWidths(worldPts, tangents, widths, sand * SCALE, sandOffFrom, sandOffTo);
+  const std::vector<double> sandAt = sandWidths(worldPts, tangents, widths, pillarFlags, sand * SCALE, sandOff, nSandOff);
   for (int i = 0; i < n; i++) widths[i] += 2 * sandAt[i];
 
   // Parallel transport an `up` vector around the ring (rotation-minimizing frame).
@@ -515,7 +519,7 @@ RaceTrack buildTrackSegments(const TrackDef& def) {
 
   return finalizeTrack(std::move(worldPts), std::move(widths), std::move(banks),
                        std::move(pillarFlags), std::move(hillFlags), std::move(loopEntryIdx),
-                       trackWidth, true, startU, 0.0);
+                       trackWidth, true, startU, def.sand, def.sandOff, def.nSandOff);
 }
 
 // ---- Waypoint centripetal Catmull-Rom sampler (buildSplineTrack).
@@ -559,7 +563,7 @@ RaceTrack buildSplineTrack(const TrackDef& def) {
   }
   return finalizeTrack(std::move(worldPts), std::move(widths), std::move(banks),
                        std::move(pillarFlags), std::move(hillFlags), std::vector<int>{},
-                       trackWidth, true, startU, def.sand, def.sandOffFrom, def.sandOffTo);
+                       trackWidth, true, startU, def.sand, def.sandOff, def.nSandOff);
 }
 
 // ---- Furniture resolve: descriptor (fraction-of-lap u) → arclength s.

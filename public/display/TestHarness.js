@@ -9,7 +9,7 @@
 // WASM) in bare mode — racing from frame 0, no countdown, no session lifecycle — with
 // every car driven by an in-wasm AI bot, so the split-screen chase cams, HUD, lean,
 // and dust all show real motion in the preview.
-import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js';
+import { init as initNativeSim, NativeRaceSession, debugStripSpeed } from './NativeRaceSession.js';
 // The HUD cadence, from the file that owns the HUD — this preview paints the
 // same chrome through the same setCarHud, and used to carry its own copy of the
 // number.
@@ -417,7 +417,13 @@ export function runDisplayScenario(opts, ctx) {
   // engine deals toUint32(seed + n), so every gallery race was watching bots no
   // real race has. The seed is the SESSION's, so the field and the race it
   // drives are one draw.
-  const raceField = () => benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
+  // `?alone=1` — the player seats with no CPU fill: a card about the road
+  // itself (the strip cards), where a field would only be in the way.
+  const alone = new URLSearchParams(location.search).get('alone') === '1';
+  const raceField = () => {
+    const f = benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
+    return alone ? { field: f.field.filter((e) => !e.ai), bots: f.bots.filter((b) => b.player) } : f;
+  };
 
   // The lobby demo's shape (buildDemoField): the roster and the CPU fill in
   // livery order, EVERY entry driven by the persona at its grid slot — the fill
@@ -3266,7 +3272,7 @@ export function runDisplayScenario(opts, ctx) {
     // `?showcase=` — a live card's item loop (ttp_item_showcase), for an item no
     // race shows on its own. A capture names its moment with a hold instead, and
     // the loop would change the race on the way there, so a hold switches it off.
-    const showcase = hold ? null : new URLSearchParams(location.search).get('showcase');
+    let showcase = hold ? null : new URLSearchParams(location.search).get('showcase');
     const newSession = () => {
       const s = bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
       if (hold && !s.shotHold(hold)) console.error(`[harness] the engine refused hold ${holdParam}`);
@@ -3275,6 +3281,10 @@ export function runDisplayScenario(opts, ctx) {
     };
     let engine = newSession();
     window.__engine = engine;
+    // The loop, changed live (/strip-compare.html's car buttons).
+    window.__showcase = (kind) => { showcase = kind; engine.itemShowcase(kind); };
+    // The strip's speed ceiling, live (stripTuner.js's slow-down slider).
+    window.__stripSpeed = debugStripSpeed;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
     // Humans get their split-screen cell, the CPU fill drives cell-less — the

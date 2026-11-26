@@ -334,6 +334,18 @@ struct TtpRenderer::TrackBin {
     std::vector<uint32_t> carColors;
     std::vector<int32_t> carModels; // per slot: TtpRosterCar::carIndex
     uint32_t pal[8]; // asphalt line dash kerbA kerbB skirt shoulder sand (sRGB)
+    uint32_t sandRut = 0xccb894; // what a tyre track multiplies the sand by (theme.road.rut)
+    bool sandDust = true;        // theme.road.sandDust
+    float sandRutInk = 2.2f;     // theme.road.rutInk
+    float sandStep = 0;          // theme.road.sandStep (stepOf)
+    float dustMul[6] = { 1, 1, 1, 1, 1, 1 };   // theme.road.dust
+    float sandSlope = 0;         // theme.road.sandSlope: the strip's outer edge over its inner
+    // What makes a sloped strip READ as one: its shade runs from darker at the
+    // road to lighter at the kerb, this much of its colour per world unit of
+    // slope (a few degrees of tilt change no light a viewer can see).
+    float sandShade = 8.0f;
+    uint32_t sandEdge = 0;      // theme.road.sandEdge: the band at the road's edge (0 = the edge line)
+    float sandSink = 0;         // theme.road.sandSink: how far a tyre sinks into it (deckPoint)
     float kerbW = 0.22f, kerbH = 0.20f;
     bool kerbBank = false;      // the kerb as a plough's snowbank (theme.road.kerbBank)
     uint32_t kerbSlush = 0;     //   and the slush on its road face (sRGB)
@@ -570,7 +582,46 @@ struct TtpRenderer::TrackBin {
     // ring, and a body posed off it steps once per ring crossing.
     float3 deckPoint(float s, float l) const {
         const Sample f = frameAt(s);
-        return f.pos + f.lat * l;
+        return f.pos + f.lat * l + f.up * stripLift(f, l);
+    }
+    // Where a wheel stands over the ruled deck: the strip's step, less what a
+    // tyre sinks into it (theme.road.sandSink: loose snow gives, the drawn
+    // surface stays), plus its cross slope. `up` is the direction it is along.
+    float stripLift(const Sample& f, float l) const {
+        return (sandStep - sandSink) * stripRamp(f, l) + slopeAt(f, l);
+    }
+    float stripLift(float s, float l, float3& up) const {
+        const Sample f = frameAt(s);
+        up = f.up;
+        return stripLift(f, l);
+    }
+
+    // THE STRIP'S STEP. A biome's sand strip stands a few cm over or under the
+    // asphalt (theme.road.sandStep): flat at that height from the kerb's foot
+    // to its inner edge, where a vertical face (buildRoadMesh's step points)
+    // meets the edge line's flat band. It eases with the strip's own width, so
+    // it is gone where the strip is. Drawn only: the sim's deck stays the
+    // ruled line. One rule for the mesh (buildRoadMesh), the wheels
+    // (deckPoint) and the car shadows' planes (deckTri).
+    float stepOf(const Sample& f) const { return sand > 0 ? sandStep * std::min(1.0f, f.sand / sand) : 0.0f; }
+    // How much of the strip a WHEEL at lateral `l` is on: 0 on the asphalt, 1
+    // on the strip, across kStepEase past the strip's edge (a tyre has width:
+    // it rolls over the step, it does not teleport down it), scaled by how
+    // much strip the ring has.
+    static constexpr float kStepEase = 0.08f;
+    float stripRamp(const Sample& f, float l) const {
+        if (!(sand > 0) || !(f.sand > 0)) return 0;
+        const float in = f.width * 0.5f - gapOf(f);   // the strip's inner edge
+        const float t = (std::fabs(l) - in) / kStepEase;
+        return std::min(1.0f, f.sand / sand) * std::min(1.0f, std::max(0.0f, t));
+    }
+    // The strip's cross slope (theme.road.sandSlope): its kerb edge stands that
+    // much over its road edge, rising evenly across it (snow piled to the bank).
+    float slopeOf(const Sample& f) const { return sand > 0 ? sandSlope * std::min(1.0f, f.sand / sand) : 0.0f; }
+    float slopeAt(const Sample& f, float l) const {
+        if (sandSlope == 0 || !(sand > 0) || !(f.sand > 0.05f)) return 0;
+        const float in = f.width * 0.5f - gapOf(f);
+        return slopeOf(f) * std::min(1.0f, std::max(0.0f, (std::fabs(l) - in) / f.sand));
     }
 
     // dP/ds at (s, l) — the deck's along-track direction AT THAT LATERAL
@@ -682,6 +733,8 @@ struct TtpRenderer::TrackBin {
         float sa = 0, sb = 0;
         float bA[8], bB[8];
         float3 posA, latA, posB, latB;
+        float3 liftA, liftB;   // the strip's step at each ring (stepOf), along its up
+        float3 outA, outB;     // ...and its kerb edge's, the cross slope more (slopeOf)
     };
     int deckRingAt(float sWrapped) const {
         const size_t n = rings.size();
@@ -702,6 +755,10 @@ struct TtpRenderer::TrackBin {
         deckStripBounds(b, q.bB);
         q.posA = a.pos; q.latA = a.lat;
         q.posB = b.pos; q.latB = b.lat;
+        q.liftA = a.up * stepOf(a);
+        q.liftB = b.up * stepOf(b);
+        q.outA = a.up * (stepOf(a) + slopeOf(a));
+        q.outB = b.up * (stepOf(b) + slopeOf(b));
     }
     // The triangle of quad `q` holding (sWrapped, lat): false off the deck.
     bool deckTriIn(const DeckQuad& q, float sWrapped, float lat, DeckTri& out) const {
@@ -734,14 +791,24 @@ struct TtpRenderer::TrackBin {
         out.ring = q.ring;
         out.strip = j;
         out.side = side;
+        // The two sand strips (j 0 and 6) stand at the strip's step, their
+        // kerb edges (bounds 0 and 7) the cross slope higher. The edge line's
+        // strips beside them are flat on the slab: the step between is a
+        // vertical face, which no stamp lies on.
+        const bool onStrip = j == 0 || j == 6;
+        const auto lift = [onStrip](int k, const float3& in, const float3& out) {
+            return !onStrip ? float3{} : (k == 0 || k == 7) ? out : in;
+        };
+        const auto wA = [&](int k) { return q.posA + q.latA * q.bA[k] + lift(k, q.liftA, q.outA); };
+        const auto wB = [&](int k) { return q.posB + q.latB * q.bB[k] + lift(k, q.liftB, q.outB); };
         out.U[0] = A;
-        out.W[0] = q.posA + q.latA * q.bA[j];
+        out.W[0] = wA(j);
         if (side == 0) {
-            out.U[1] = B; out.W[1] = q.posA + q.latA * q.bA[j + 1];
-            out.U[2] = C; out.W[2] = q.posB + q.latB * q.bB[j + 1];
+            out.U[1] = B; out.W[1] = wA(j + 1);
+            out.U[2] = C; out.W[2] = wB(j + 1);
         } else {
-            out.U[1] = C; out.W[1] = q.posB + q.latB * q.bB[j + 1];
-            out.U[2] = D; out.W[2] = q.posB + q.latB * q.bB[j];
+            out.U[1] = C; out.W[1] = wB(j + 1);
+            out.U[2] = D; out.W[2] = wB(j);
         }
     }
     bool deckTriAt(float s, float lat, DeckTri& out) const {

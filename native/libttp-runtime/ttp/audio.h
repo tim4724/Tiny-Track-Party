@@ -256,6 +256,11 @@ class Decider {
   // everywhere at once, so no distance, and its subject is no car (Id::None).
   void weather(uint32_t ambient, std::vector<Command>& out);
 
+  // The cue a tyre on the track's strip plays: its theme's (theme.road.stripCue,
+  // a literal), held until the next call. The race's end stops every voice, so
+  // a change of track never leaves the last one's running.
+  void strip(const char* cue) { strip_ = cue; }
+
   // ---- race events ----
   // `pos` is the event's source world point, or null: the car's own point for a
   // car event (null = that car is already gone), the rocket's track point for
@@ -307,6 +312,7 @@ class Decider {
   std::string musicFile_;             // last picked song's file ("" = none yet)
   int rosterCount_ = 0;
   uint32_t ambient_ = 0;              // weather(): AMB_NONE until a race names its sky
+  const char* strip_ = "sand";        // strip(): the track's strip cue
 };
 
 // The C++ `Math.random`: the source Decider draws from when none is injected.

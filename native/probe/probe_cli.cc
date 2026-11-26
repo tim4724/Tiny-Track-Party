@@ -25,6 +25,10 @@
 //   probe_cli packed             all four cars together, every grid rotation; also how
 //                                often an empty-handed car leaves a box row holding an item
 //   probe_cli cost               CPU cost of a sim frame (see runCost)
+//   probe_cli balance            HUMAN driver models (casual/regular/expert) in every
+//                                car, raced through each cup's Grand Prix against its
+//                                bots as a live cup seats them (see runBalance)
+//   probe_cli balance --runs=N   Grand Prix per cup x driver x car (default 8)
 //   probe_cli <mode> --track=ID  restrict to one track (quick iteration)
 //   probe_cli <mode> --seed=N    item-roll RNG seed (default 1)
 //   probe_cli <mode> --nobrake   force b=0: humans hold flat-out, so this is the
@@ -37,19 +41,24 @@
 // AI_PERSONALITIES, and the same seeds the JS probes used (the JS AiController
 // defaults seed=1 when a persona omits it, which every persona does).
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "ttp/ai_driver.h"
 #include "ttp/game.h"
-#include "ttp/grand_prix.h"   // POINTS_BY_RANK, POINTS_RANKS
+#include "ttp/grand_prix.h"   // POINTS_BY_RANK, POINTS_RANKS, CupSeries
 #include "ttp/protocol.h"
+#include "ttp/race_session.h"
 #include "ttp/race_track.h"
 
 using namespace ttp;
@@ -99,6 +108,33 @@ std::string padStart(const std::string& s, size_t n) {
   return o;
 }
 
+Stats statsOf(const protocol::CarStat& cs) {
+  Stats st;
+  st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
+  st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
+  return st;
+}
+
+// The engine's own results board, one row per car.
+struct Placing { double id; int rank; bool finished; double time; };
+std::vector<Placing> placings(Game& game) {
+  std::vector<Placing> out;
+  Value res = game.getResults();
+  const Value* rows = res.find("results");
+  if (!rows || rows->type != Value::ARR) return out;
+  for (const Value& row : rows->arr) {
+    Placing p{-1, 0, false, 0};
+    for (const auto& kv : row.obj) {
+      if (kv.first == "playerId") p.id = kv.second.num;
+      else if (kv.first == "rank") p.rank = (int)kv.second.num;
+      else if (kv.first == "finished") p.finished = kv.second.b;
+      else if (kv.first == "time") p.time = kv.second.num;
+    }
+    out.push_back(p);
+  }
+  return out;
+}
+
 // Game::driveBot minus the brake: the AI decides steering and item use as in a
 // real race, but the applied brake is forced to 0 — the flat-out driving humans
 // actually do. `out` still reports the ASKED brake so brakeFrac keeps measuring
@@ -128,10 +164,7 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
   if (!build_race_track_by_id(trackId, laps, seed, bt, err)) { totalOut = 0; return {}; }
 
   Stats st;
-  if (hasStats) {
-    st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
-    st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
-  }
+  if (hasStats) st = statsOf(cs);
   std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st, true}};
   Game game(players, bt.game, [](const Event&) {}, g_item);
   AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED,
@@ -300,13 +333,8 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
       if (!build_race_track_by_id(id, LAPS, seed, bt, err)) continue;
 
       std::vector<PlayerDesc> players;
-      for (size_t slot = 0; slot < N; slot++) {
-        const protocol::CarStat& cs = protocol::CAR_STATS[order[slot]];
-        Stats st;
-        st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
-        st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
-        players.push_back(PlayerDesc{Id::Num((double)slot), true, st, true});
-      }
+      for (size_t slot = 0; slot < N; slot++)
+        players.push_back(PlayerDesc{Id::Num((double)slot), true, statsOf(protocol::CAR_STATS[order[slot]]), true});
       Game game(players, bt.game, [](const Event&) {});
       std::vector<std::unique_ptr<AiController>> ais;
       for (size_t slot = 0; slot < N; slot++) {
@@ -351,24 +379,15 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
       }
 
       // Rank by the engine's own results board, then credit the CAR (not the slot).
-      Value res = game.getResults();
-      const Value* rows = nullptr;
-      for (const auto& kv : res.obj) if (kv.first == "results") rows = &kv.second;
-      if (!rows || rows->type != Value::ARR) continue;
+      const std::vector<Placing> board = placings(game);
+      if (board.empty()) continue;
       races++;
-      for (const Value& row : rows->arr) {
-        double slot = -1, rank = 0, time = 0; bool fin = false;
-        for (const auto& kv : row.obj) {
-          if (kv.first == "playerId") slot = kv.second.num;
-          else if (kv.first == "rank") rank = kv.second.num;
-          else if (kv.first == "finished") fin = kv.second.b;
-          else if (kv.first == "time") time = kv.second.num;
-        }
-        if (slot < 0 || slot >= (double)N) continue;
-        const size_t car = order[(size_t)slot];
-        if (rank >= 1 && rank <= POINTS_RANKS) points[car] += POINTS_BY_RANK[(int)rank - 1];
-        if ((int)rank == 1) wins[car]++;
-        if (fin) { timeSum[car] += time; finishes[car]++; }
+      for (const Placing& p : board) {
+        if (p.id < 0 || p.id >= (double)N) continue;
+        const size_t car = order[(size_t)p.id];
+        if (p.rank >= 1 && p.rank <= POINTS_RANKS) points[car] += POINTS_BY_RANK[p.rank - 1];
+        if (p.rank == 1) wins[car]++;
+        if (p.finished) { timeSum[car] += p.time; finishes[car]++; }
       }
     }
   }
@@ -430,13 +449,9 @@ int runCost(const std::string& only, uint32_t seed, int cars) {
     frames = 0;
     for (const BuiltRaceTrack& bt : built) {
       std::vector<PlayerDesc> players;
-      for (int i = 0; i < cars; i++) {
-        const protocol::CarStat& cs = protocol::CAR_STATS[(size_t)i % protocol::CAR_STATS.size()];
-        Stats st;
-        st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
-        st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
-        players.push_back(PlayerDesc{Id::Num((double)i), true, st, true});
-      }
+      for (int i = 0; i < cars; i++)
+        players.push_back(PlayerDesc{Id::Num((double)i), true,
+                                     statsOf(protocol::CAR_STATS[(size_t)i % protocol::CAR_STATS.size()]), true});
       Game game(players, bt.game, [](const Event&) {});
       std::vector<std::unique_ptr<AiController>> ais;
       for (int i = 0; i < cars; i++) {
@@ -471,12 +486,400 @@ int runCost(const std::string& only, uint32_t seed, int cars) {
   return 0;
 }
 
+// ---- balance -----------------------------------------------------------------
+// Every mode above prices a car with the BOT at the wheel, and the bot is the
+// wrong driver for the couch's question. It reacts on the frame, never wavers,
+// and leans exactly as far as the corner asks, so its lap prices a car for
+// nobody who plays.
+//
+// A driver model keeps the bot's INTENT (its line, its dodges, its box-seeking:
+// what a player is trying to do) and puts a person between that intent and the
+// car: a reaction delay, a hand that wanders, a lean that stops short, and a
+// person's habits with the brake and the item button. DRIVERS is a first guess,
+// to be fitted to real players: the "how they drive" table is what a logged
+// player is compared against.
+//
+// Each model then races every cup the way a live cup runs it: an 8-car grid with
+// the human starting last and each next race gridding on the last finish, the
+// cup's bot skill, RaceSession's DNF ladder and CupSeries' points. One human
+// per race, the single-player couch: the hardest seat to reach the top half from.
+struct DriverModel {
+  const char* name;
+  double lagSec;  // reaction + the phone-to-screen path: the steer applied is the one wanted this long ago
+  double noise;   // the hand's wander, steer units (1 = full lock = STEER.ROLL_LOCK_DEG of tilt)
+  double cap;     // the furthest this player leans, steer units
+  double slide;   // share of hard corners slid with the brake held through, 0..1
+  bool aims;      // holds an item for its moment (the bot's rule), else fires it on pickup
+};
+const DriverModel DRIVERS[] = {
+    {"casual", 0.30, 0.08, 0.75, 0.0, false},
+    {"regular", 0.22, 0.05, 0.90, 0.5, true},
+    {"expert", 0.15, 0.03, 1.00, 1.0, true},
+};
+constexpr int N_DRIVERS = (int)(sizeof(DRIVERS) / sizeof(DRIVERS[0]));
+constexpr double HAND_TAU = 0.5;                    // s: how slowly the hand's wander turns over
+constexpr double SLIDE_RELEASE = 0.2;               // the slide's brake comes up once the lean eases under this
+constexpr double FIRE_MIN = 0.4, FIRE_SPAN = 0.8;   // s: a thumb that fires on pickup
+constexpr int HUMAN = protocol::FIELD_SIZE - 1;     // the human's entrant id; bots are 0..HUMAN-1
+
+class HumanDriver {
+ public:
+  HumanDriver(const DriverModel& m, uint32_t seed)
+      : m_(m), intent_(1.0, LOOKAHEAD, STEER_GAIN, 0.0, seed, 1.0), rng_(seed ^ 0x68756d61u),
+        lagFrames_((size_t)std::lround(m.lagSec * 60.0)) {}
+
+  Input drive(Car& car, Game& game) {
+    const Input want = intent_.drive(car, *game.centerline(), game);
+    // The hand: an Ornstein-Uhlenbeck wander of standard deviation m_.noise.
+    const double dt = DT_MS / 1000.0;
+    const double g = (rng_.next() + rng_.next() + rng_.next() + rng_.next() - 2.0) * std::sqrt(3.0);
+    hand_ += -hand_ * dt / HAND_TAU + m_.noise * std::sqrt(2.0 * dt / HAND_TAU) * g;
+    seen_.push_back(std::max(-m_.cap, std::min(m_.cap, want.s + hand_)));
+    double s = 0;   // nothing has reached the wheel yet: straight
+    if (seen_.size() > lagFrames_) { s = seen_.front(); seen_.pop_front(); }
+
+    // The slide, by the bot's own rule but on the steer this player applies.
+    const bool hard = std::fabs(s) >= (hard_ ? SLIDE_RELEASE : DRIFT_START);
+    if (hard && !hard_) slideCorner_ = rng_.next() < m_.slide;
+    hard_ = hard;
+
+    Input out;
+    out.hasS = true; out.s = s;
+    out.hasB = true; out.b = slideCorner_ && hard && (car.drifting || canStartSlide(car)) ? 1 : 0;
+    out.hasU = true; out.u = m_.aims ? want.u : fireOnPickup(car);
+    return out;
+  }
+
+ private:
+  double fireOnPickup(const Car& car) {
+    if (car.item != held_) {
+      held_ = car.item;
+      heldFor_ = 0;
+      fireAt_ = FIRE_MIN + rng_.next() * FIRE_SPAN;
+    }
+    if (!held_.empty() && (heldFor_ += DT_MS / 1000.0) >= fireAt_) useSeq_ = (useSeq_ + 1) & 255;
+    return useSeq_;
+  }
+
+  DriverModel m_;
+  AiController intent_;
+  Mulberry32 rng_;
+  size_t lagFrames_;
+  std::deque<double> seen_;
+  double hand_ = 0;
+  bool hard_ = false, slideCorner_ = false;
+  std::string held_;
+  double heldFor_ = 0, fireAt_ = 0;
+  int useSeq_ = 0;
+};
+
+// What a driven car did, for the table a logged player is compared against.
+struct DriveStats {
+  long frames = 0, wall = 0, sand = 0, slide = 0;
+  int spins = 0;
+  void tally(const Car& c, double& prevSpinT) {
+    frames++;
+    wall += c.onWall;
+    sand += c.onSand;
+    slide += c.drifting;
+    if (c.spinT > 0 && prevSpinT <= 0) spins++;
+    prevSpinT = c.spinT;
+  }
+  void add(const DriveStats& o) { frames += o.frames; wall += o.wall; sand += o.sand; slide += o.slide; spins += o.spins; }
+};
+
+// The balance modes race many sessions at once. build_catalogue_track keeps a
+// one-entry cache in statics, so building is the one step that must not overlap.
+std::mutex g_trackMu;
+bool buildTrack(const std::string& id, uint32_t seed, BuiltRaceTrack& bt) {
+  std::lock_guard<std::mutex> lock(g_trackMu);
+  std::string err;
+  return build_race_track_by_id(id, protocol::TOTAL_LAPS, seed, bt, err);
+}
+
+template <class Job>
+void runAll(size_t n, Job job) {
+#ifdef __EMSCRIPTEN__
+  for (size_t i = 0; i < n; i++) job(i);   // no threads in the wasm build
+#else
+  std::atomic<size_t> next{0};
+  std::vector<std::thread> pool;
+  const unsigned k = std::max(1u, std::thread::hardware_concurrency());
+  for (unsigned w = 0; w < k; w++)
+    pool.emplace_back([&] { for (size_t i; (i = next++) < n;) job(i); });
+  for (std::thread& t : pool) t.join();
+#endif
+}
+
+auto noEvent = [](const Event&) {};
+auto noEnd = [](const Value&) {};
+auto noTick = [](int) {};
+
+// One human alone on a track: the flying-lap pace of a driver in a car, and how they drove it.
+struct SoloOut { double lap = 0; int laps = 0; DriveStats st; };
+SoloOut runSolo(const std::string& trackId, const DriverModel& model, size_t car, uint32_t seed) {
+  SoloOut out;
+  BuiltRaceTrack bt;
+  if (!buildTrack(trackId, seed, bt)) return out;
+  std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), true, statsOf(protocol::CAR_STATS[car]), false}};
+  RaceSession session(players, bt.game, noEvent, noEnd, noTick);
+  session.startCountdown(0);
+  Game& game = session.engine();
+  Car& c = *game.cars()[0];
+  HumanDriver human(model, seed);
+  double t = 0, lapStart = 0, prevSpinT = 0;
+  int lastLap = 0;
+  while (!session.ended()) {
+    if (!c.finished) session.processInput(c.id, human.drive(c, game));
+    session.update(DT_MS);
+    t += DT_MS / 1000.0;
+    if (!c.finished) out.st.tally(c, prevSpinT);
+    if (c.lap > lastLap) {
+      // Lap 1 is the standing start; the flying laps after it are the pace.
+      if (lastLap >= 1) { out.lap += t - lapStart; out.laps++; }
+      lapStart = t;
+      lastLap = (int)c.lap;
+    }
+  }
+  if (out.laps) out.lap /= out.laps;
+  return out;
+}
+
+// One cup's Grand Prix with the human in `car` against the cup's bots. The bots'
+// cars, personas and seeds come off `seed`, as a live cup deals them once per series.
+const char* const SPIN_CAUSES[] = {"banana", "oil", "rocket", "monster"};
+constexpr int N_CAUSES = 4;
+struct GpOut {
+  int final = 0, races = 0;
+  int place[8] = {};
+  double gap4[8] = {};    // s behind the car in 4th at the flag (0 when the human is 4th, < 0 ahead)
+  bool timed[8] = {};     // both the human and 4th took the flag, so gap4 means something
+  int spins[N_CAUSES] = {};
+};
+GpOut runGp(const CupDef& cup, const DriverModel& model, size_t car, uint32_t seed) {
+  GpOut out;
+  const size_t nCars = protocol::CAR_STATS.size();
+  const double skill = aiSkillForTier(cup.difficulty);
+  GpCup gc{cup.id, cup.name, std::vector<std::string>(cup.tracks, cup.tracks + cup.nTracks)};
+  CupSeries series(gc);
+  std::vector<GpFieldEntry> field;
+  for (int e = 0; e <= HUMAN; e++) field.push_back(GpFieldEntry{Id::Num(e), "", e, e != HUMAN});
+
+  std::vector<int> grid;   // entrants, pole first: the human starts last
+  for (int e = 0; e <= HUMAN; e++) grid.push_back(e);
+  for (int r = 0; r < cup.nTracks; r++) {
+    const uint32_t raceSeed = seed * 1000u + (uint32_t)r + 1u;
+    BuiltRaceTrack bt;
+    if (!buildTrack(cup.tracks[r], raceSeed, bt)) return out;
+    std::vector<PlayerDesc> players;
+    for (int e : grid) {
+      const size_t c = e == HUMAN ? car : (size_t)(e + seed) % nCars;
+      players.push_back(PlayerDesc{Id::Num(e), true, statsOf(protocol::CAR_STATS[c]), e != HUMAN});
+    }
+    auto onEvent = [&out](const Event& ev) {
+      if (ev.type != "spin" || !(ev.id == Id::Num(HUMAN))) return;
+      for (int i = 0; i < N_CAUSES; i++) if (ev.cause == SPIN_CAUSES[i]) out.spins[i]++;
+    };
+    RaceSession session(players, bt.game, onEvent, noEnd, noTick);
+    session.startCountdown(0);
+    Game& game = session.engine();
+    std::vector<std::unique_ptr<AiController>> bots;
+    for (int e = 0; e < HUMAN; e++) {
+      const Persona& p = AI_PERSONALITIES[(size_t)(e + seed) % 7];
+      bots.push_back(std::make_unique<AiController>(
+          p.caution, LOOKAHEAD, STEER_GAIN, p.laneBias, raceSeed + (uint32_t)e, skill,
+          aiSeatMistakes(aiMistakesForTier(cup.difficulty), e, HUMAN)));
+    }
+    Car* me = nullptr;
+    for (const auto& c : game.cars()) if (c->id == Id::Num(HUMAN)) me = c.get();
+    HumanDriver human(model, raceSeed ^ 0x9e3779b9u);
+    while (!session.ended()) {
+      for (int e = 0; e < HUMAN; e++) game.driveBot(Id::Num(e), *bots[(size_t)e], nullptr);
+      if (!me->finished) session.processInput(me->id, human.drive(*me, game));
+      session.update(DT_MS);
+    }
+    std::vector<GpResult> results;
+    const Placing* mine = nullptr;
+    const Placing* fourth = nullptr;
+    const std::vector<Placing> board = placings(game);
+    for (const Placing& p : board) {
+      results.push_back(GpResult{Id::Num(p.id), p.rank, p.finished});
+      if ((int)p.id == HUMAN) mine = &p;
+      if (p.rank == 4) fourth = &p;
+    }
+    if (mine) out.place[r] = mine->rank;
+    if (mine && fourth && mine->finished && fourth->finished) {
+      out.timed[r] = true;
+      out.gap4[r] = mine->time - fourth->time;
+    }
+    series.applyRace(results, field);
+    series.advance();
+    out.races++;
+    grid.clear();
+    for (const Id& id : series.lastRaceOrder()) grid.push_back((int)id.num);
+  }
+  const std::vector<GpStanding> table = series.standings();
+  for (size_t i = 0; i < table.size(); i++)
+    if ((int)table[i].playerId.num == HUMAN) out.final = (int)i + 1;
+  return out;
+}
+
+int runBalance(uint32_t seed, int runs) {
+  const size_t nCars = protocol::CAR_STATS.size();
+  const int SOLO_SEEDS = 8;
+  std::vector<std::string> tracks;    // the cups' tracks, in cup order
+  std::vector<int> cupOf;
+  for (int ci = 0; ci < TTP_CUP_COUNT; ci++)
+    for (int t = 0; t < TTP_CUPS[ci].nTracks; t++) { tracks.push_back(TTP_CUPS[ci].tracks[t]); cupOf.push_back(ci); }
+
+  // Jobs, flattened: solo = track x driver x car x seed, gp = cup x driver x car x run.
+  const size_t nSolo = tracks.size() * N_DRIVERS * nCars * SOLO_SEEDS;
+  const size_t nGp = (size_t)TTP_CUP_COUNT * N_DRIVERS * nCars * (size_t)runs;
+  std::vector<SoloOut> solo(nSolo);
+  std::vector<GpOut> gps(nGp);
+  const std::clock_t t0 = std::clock();
+  runAll(nSolo + nGp, [&](size_t i) {
+    if (i < nSolo) {
+      const size_t k = i % SOLO_SEEDS, car = i / SOLO_SEEDS % nCars, d = i / SOLO_SEEDS / nCars % N_DRIVERS;
+      const size_t tr = i / SOLO_SEEDS / nCars / N_DRIVERS;
+      solo[i] = runSolo(tracks[tr], DRIVERS[d], car, seed + (uint32_t)k);
+    } else {
+      const size_t j = i - nSolo;
+      const size_t k = j % (size_t)runs, car = j / (size_t)runs % nCars, d = j / (size_t)runs / nCars % N_DRIVERS;
+      const size_t ci = j / (size_t)runs / nCars / N_DRIVERS;
+      gps[j] = runGp(TTP_CUPS[ci], DRIVERS[d], car, seed + (uint32_t)k);
+    }
+  });
+  const double cpu = (double)(std::clock() - t0) / CLOCKS_PER_SEC;
+  auto soloAt = [&](size_t tr, size_t d, size_t car, size_t k) -> const SoloOut& {
+    return solo[((tr * N_DRIVERS + d) * nCars + car) * SOLO_SEEDS + k];
+  };
+  auto gpAt = [&](size_t ci, size_t d, size_t car, size_t k) -> const GpOut& {
+    return gps[((ci * N_DRIVERS + d) * nCars + car) * (size_t)runs + k];
+  };
+  auto pct = [](int n, int of) { return padStart(std::to_string(of ? (int)std::lround(100.0 * n / of) : 0), 4) + "%"; };
+
+  std::printf("# balance: human drivers against each cup's bots, run as a live cup runs\n");
+  std::printf("# %d-car grid, the human starts last, then grids on the last finish; %d laps; DNF ladder\n",
+              protocol::FIELD_SIZE, protocol::TOTAL_LAPS);
+  std::printf("# %d Grands Prix per cup x driver x car, solo pace over %d seeds per track (%.0f s CPU)\n\n",
+              runs, SOLO_SEEDS, cpu);
+  std::printf("drivers (a first guess, to be fitted to logged players):\n");
+  for (const DriverModel& m : DRIVERS)
+    std::printf("  %-8s lag %3.0f ms  hand %.2f  leans to %.2f  slides %3.0f%%  items %s\n", m.name,
+                m.lagSec * 1000, m.noise, m.cap, m.slide * 100, m.aims ? "aimed" : "on pickup");
+
+  std::string carHead;
+  for (size_t c = 0; c < nCars; c++) carHead += padStart(protocol::CAR_NAMES[c], 7);
+
+  std::printf("\nthe cup: final standing (share of Grands Prix), and its single races\n");
+  std::printf("%-9s%-10s%8s%8s%6s%11s%7s%9s  spins/race: ban  oil  rkt  mon   top 4 by car:%s\n", "driver",
+              "cup", "top 4", "podium", "win", "race top4", "place", "gap 4th", carHead.c_str());
+  for (int d = 0; d < N_DRIVERS; d++) {
+    for (int ci = 0; ci < TTP_CUP_COUNT; ci++) {
+      int n = 0, top = 0, pod = 0, win = 0, races = 0, raceTop = 0, placeSum = 0, timed = 0;
+      int spins[N_CAUSES] = {};
+      double gapSum = 0;
+      std::string byCar;
+      for (size_t car = 0; car < nCars; car++) {
+        int carN = 0, carTop = 0;
+        for (int k = 0; k < runs; k++) {
+          const GpOut& g = gpAt((size_t)ci, (size_t)d, car, (size_t)k);
+          if (!g.final) continue;
+          n++; carN++;
+          if (g.final <= 4) { top++; carTop++; }
+          if (g.final <= 3) pod++;
+          if (g.final == 1) win++;
+          for (int r = 0; r < g.races; r++) {
+            races++;
+            placeSum += g.place[r];
+            if (g.place[r] <= 4) raceTop++;
+            if (g.timed[r]) { timed++; gapSum += g.gap4[r]; }
+          }
+          for (int i = 0; i < N_CAUSES; i++) spins[i] += g.spins[i];
+        }
+        byCar += padStart(std::to_string(carN ? (int)std::lround(100.0 * carTop / carN) : 0), 7);
+      }
+      std::string spinCells;
+      for (int i = 0; i < N_CAUSES; i++) spinCells += fixed(races ? (double)spins[i] / races : 0, 1, 5);
+      std::printf("%-9s%-10s%8s%8s%6s%11s%7s%9s%12s%s%15s%s\n", DRIVERS[d].name, TTP_CUPS[ci].id,
+                  pct(top, n).c_str(), pct(pod, n).c_str(), pct(win, n).c_str(), pct(raceTop, races).c_str(),
+                  fixed(races ? (double)placeSum / races : 0, 1, 0).c_str(),
+                  timed ? fixed(gapSum / timed, 1, 0).c_str() : "-", "", spinCells.c_str(), "", byCar.c_str());
+    }
+  }
+
+  std::printf("\nsolo pace: flying lap, %% behind the fastest car for that driver, track by track\n");
+  std::printf("%-9s%-10s%s%9s\n", "driver", "cup", carHead.c_str(), "lap s");
+  for (int d = 0; d < N_DRIVERS; d++) {
+    std::vector<double> allBehind(nCars, 0);
+    int allTracks = 0;
+    for (int ci = 0; ci <= TTP_CUP_COUNT; ci++) {   // the extra row is the whole catalogue
+      const bool all = ci == TTP_CUP_COUNT;
+      std::vector<double> behind(nCars, 0);
+      double lapSum = 0;
+      int nTracks = 0;
+      for (size_t tr = 0; tr < tracks.size(); tr++) {
+        if (all || cupOf[tr] != ci) continue;
+        std::vector<double> lap(nCars, 0);
+        for (size_t car = 0; car < nCars; car++) {
+          for (int k = 0; k < SOLO_SEEDS; k++) lap[car] += soloAt(tr, (size_t)d, car, (size_t)k).lap;
+          lap[car] /= SOLO_SEEDS;
+        }
+        const double best = *std::min_element(lap.begin(), lap.end());
+        for (size_t car = 0; car < nCars; car++) {
+          behind[car] += 100.0 * (lap[car] - best) / best;
+          lapSum += lap[car] / nCars;
+        }
+        nTracks++;
+      }
+      if (all) { behind = allBehind; nTracks = allTracks; }
+      std::string cells;
+      for (size_t car = 0; car < nCars; car++) {
+        cells += padStart("+" + fixed(nTracks ? behind[car] / nTracks : 0, 1, 0), 7);
+        if (!all) allBehind[car] += behind[car];
+      }
+      if (!all) allTracks += nTracks;
+      std::printf("%-9s%-10s%s%9s\n", DRIVERS[d].name, all ? "all" : TTP_CUPS[ci].id, cells.c_str(),
+                  all ? "" : fixed(nTracks ? lapSum / nTracks : 0, 1, 0).c_str());
+    }
+  }
+
+  std::printf("\nhow they drive: solo, per lap of the race, every car (compare a logged player here)\n");
+  std::printf("%-9s%-10s%8s%8s%8s%8s%8s\n", "driver", "cup", "lap s", "curb s", "sand s", "slide s", "spins");
+  for (int d = 0; d < N_DRIVERS; d++) {
+    for (int ci = 0; ci < TTP_CUP_COUNT; ci++) {
+      DriveStats st;
+      double lapSum = 0;
+      int laps = 0, runsN = 0;
+      for (size_t tr = 0; tr < tracks.size(); tr++) {
+        if (cupOf[tr] != ci) continue;
+        for (size_t car = 0; car < nCars; car++)
+          for (int k = 0; k < SOLO_SEEDS; k++) {
+            const SoloOut& o = soloAt(tr, (size_t)d, car, (size_t)k);
+            st.add(o.st);
+            lapSum += o.lap;
+            laps += protocol::TOTAL_LAPS;
+            runsN++;
+          }
+      }
+      auto perLap = [&](long frames) { return fixed(laps ? frames / 60.0 / laps : 0, 2, 8); };
+      std::printf("%-9s%-10s%8s%s%s%s%8s\n", DRIVERS[d].name, TTP_CUPS[ci].id,
+                  fixed(runsN ? lapSum / runsN : 0, 1, 0).c_str(), perLap(st.wall).c_str(),
+                  perLap(st.sand).c_str(), perLap(st.slide).c_str(),
+                  fixed(laps ? (double)st.spins / laps : 0, 2, 0).c_str());
+    }
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   std::string mode, only;
   uint32_t seed = 1;
   int cars = protocol::FIELD_SIZE;
+  int runs = 8;
   bool json = false, noBrake = false;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -487,6 +890,7 @@ int main(int argc, char** argv) {
     else if (a.compare(0, 8, "--skill=") == 0) g_skill = std::strtod(a.substr(8).c_str(), nullptr);
     else if (a.compare(0, 7, "--item=") == 0) g_item = a.substr(7);
     else if (a.compare(0, 7, "--cars=") == 0) cars = (int)std::strtol(a.substr(7).c_str(), nullptr, 10);
+    else if (a.compare(0, 7, "--runs=") == 0) runs = std::max(1, (int)std::strtol(a.substr(7).c_str(), nullptr, 10));
     else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     else if (mode.empty()) mode = a;
     else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return 2; }
@@ -495,8 +899,9 @@ int main(int argc, char** argv) {
   if (mode == "matrix") return runMatrix(only, seed, noBrake);
   if (mode == "packed") return runPacked(only, seed, noBrake);
   if (mode == "cost") return runCost(only, seed, cars);
+  if (mode == "balance") return runBalance(seed, runs);
   std::fprintf(stderr,
-               "usage: probe_cli <laptime|matrix|packed|cost> [--track=ID] [--seed=N] "
-               "[--cars=N] [--skill=X] [--item=ID] [--nobrake] [--json]\n");
+               "usage: probe_cli <laptime|matrix|packed|cost|balance> [--track=ID] [--seed=N] "
+               "[--cars=N] [--runs=N] [--skill=X] [--item=ID] [--nobrake] [--json]\n");
   return 2;
 }

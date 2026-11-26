@@ -175,6 +175,27 @@ const VOICES = {
     param: () => ({ bandpassHz: [340, 3200], Q: [1, 0.8], flutterLfoHz: [23, 37] }),
     note: 'ONE file, like drift: both bands and both flutters are static, so only the output gain moves with level.',
   },
+  // The other cups' strips: the sand's graph with other numbers (cues.js stripCue).
+  sand_snow: {
+    variant: 'crunch', levels: [1], levelInvariant: true,
+    param: () => ({ bandpassHz: [520, 5200], Q: [0.8, 0.7], flutterLfoHz: [9, 13] }),
+    note: 'ONE file, like sand.',
+  },
+  sand_gravel: {
+    variant: 'crackle', levels: [1], levelInvariant: true,
+    param: () => ({ bandpassHz: [900, 4200], Q: [1.2, 1.0], flutterLfoHz: [41, 59] }),
+    note: 'ONE file, like sand.',
+  },
+  sand_dirt: {
+    variant: 'rush', levels: [1], levelInvariant: true,
+    param: () => ({ bandpassHz: [260, 2200], Q: [1, 0.8], flutterLfoHz: [19, 31] }),
+    note: 'ONE file, like sand.',
+  },
+  sand_felt: {
+    variant: 'rub', levels: [1], levelInvariant: true,
+    param: () => ({ bandpassHz: [220, 900], Q: [0.7, 0.7], flutterLfoHz: [5, 7] }),
+    note: 'ONE file, like sand.',
+  },
   rain: {
     variant: 'storm',
     levels: [1],

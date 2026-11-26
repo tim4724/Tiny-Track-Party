@@ -635,8 +635,18 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
             if (std::max(q.bA[k + 1], q.bB[k + 1]) <= l0 || std::min(q.bA[k], q.bB[k]) >= l1) continue;
             // The cell's two triangles, (a@i, b@i, b@ni) and (a@i, b@ni, a@ni),
             // in (t, lat) with their world corners — the road's own soup.
-            const float3 WAlo = q.posA + q.latA * q.bA[k], WAhi = q.posA + q.latA * q.bA[k + 1];
-            const float3 WBlo = q.posB + q.latB * q.bB[k], WBhi = q.posB + q.latB * q.bB[k + 1];
+            // The two sand strips stand at the strip's step, their kerb edges
+            // the cross slope higher (TrackBin::deckTri's rule): a stamp left
+            // on the slab's plane is buried under a raised strip and cuts
+            // through the tyres over a sunk one.
+            const bool onStrip = k == 0 || k == 6;
+            const auto lift = [&](int b, const float3& in, const float3& out) {
+                return !onStrip ? float3{} : (b == 0 || b == 7) ? out : in;
+            };
+            const float3 WAlo = q.posA + q.latA * q.bA[k] + lift(k, q.liftA, q.outA);
+            const float3 WAhi = q.posA + q.latA * q.bA[k + 1] + lift(k + 1, q.liftA, q.outA);
+            const float3 WBlo = q.posB + q.latB * q.bB[k] + lift(k, q.liftB, q.outB);
+            const float3 WBhi = q.posB + q.latB * q.bB[k + 1] + lift(k + 1, q.liftB, q.outB);
             ClipV Alo{ 0.0f, q.bA[k], 0, 0 }, Ahi{ 0.0f, q.bA[k + 1], 0, 0 };
             ClipV Blo{ 1.0f, q.bB[k], 0, 0 }, Bhi{ 1.0f, q.bB[k + 1], 0, 0 };
             stampUV(WAlo, Alo.u, Alo.v); stampUV(WAhi, Ahi.u, Ahi.v);
@@ -881,6 +891,8 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     // saturates there instead of going black.
     mi->setParameter("skidColor",
             math::float4{ srgbUnit(0x241f1c), 0.48f });
+    // What the same ink multiplies the sand strip by (the biome's, buildRoadMesh).
+    mi->setParameter("rutTint", math::float4{ srgbUnit(mSandRut), mSandRutInk });
 }
 
 // The deck's own instance, created on first use so the road (built before the

@@ -165,7 +165,9 @@ const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.g
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
 // ?laps=<n> — DEBUG: every race, lobby start and cup race alike, runs n laps
 // instead of TOTAL_LAPS (?laps=1 tours the catalogue quickly).
-const RACE_LAPS = Math.max(0, parseInt(_trackParams.get('laps'), 10) || 0) || TOTAL_LAPS;
+// The strip tuner (?striptune=1, stripTuner.js) drives on without a finish.
+const RACE_LAPS = Math.max(0, parseInt(_trackParams.get('laps'), 10) || 0)
+  || (_trackParams.get('striptune') === '1' ? 999 : TOTAL_LAPS);
 // ?bootdelay=<ms> — DEBUG: hold the engine boot this long, so the pre-boot NEW
 // GAME path (the caught click held pressed, then the lobby reveal and the
 // ticket's QR/URL fade) can be watched by hand instead of racing a fast machine.
@@ -255,6 +257,22 @@ const sceneBooted = scene.boot().catch((e) => {
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_biomes.has(_qBiome)) scene.biomeOverride = _qBiome;
+
+// The debug panel's road-strip overrides (?stripstep= and its siblings),
+// handed over before the first scene build reads them: the knobs past the
+// dust's, in TtpRenderer's order (kStripStep on). Lengths arrive in cm, a
+// colour as rrggbb.
+sceneBooted.then(() => {
+  const cm = (v) => parseFloat(v) / 100, hex = (v) => parseInt(v, 16);
+  [['stripstep', cm], ['striprut', parseFloat], ['stripdust', parseFloat], ['stripslope', cm],
+    ['stripsink', cm], ['stripcolor', hex], ['striprutcolor', hex], ['stripedge', hex],
+    ['stripshade', parseFloat]].forEach(([key, read], i) => {
+    const n = read(_trackParams.get(key) || '');
+    if (Number.isFinite(n)) scene.display.debugSandDust(13 + i, n);
+  });
+  // ?striptune=1: the same knobs as an always-on overlay (stripTuner.js).
+  if (_trackParams.get('striptune') === '1') import('./stripTuner.js').then((m) => m.initStripTuner(scene));
+}).catch(() => {});
 
 // ?scenario=assets — the asset gallery's SHOWROOM look: the biome above (or the
 // track's own) carrying every biome's vocabulary, so one scene holds the whole

@@ -156,6 +156,9 @@ struct BotSpec {
   // ttp::AI_TIER_SKILL for the race's cup; 1 = the full bot. Emitted only when
   // below 1, so a launch at full skill keeps its recorded bots array.
   double skill = 1.0;
+  // The seat's share of the cup's mistake rate (ttp::aiSeatMistakes); likewise
+  // emitted only when above 1.
+  double mistakes = 1.0;
   double seed = 0;   // already >>>0'd; double so it round-trips as a JS Number
   bool player = false;
 };
@@ -237,6 +240,9 @@ struct FieldWorld {
   // cup by the caller, so this layer stays catalogue-agnostic. Player seats
   // under autopilot keep 1.
   double botSkill = 1.0;
+  // ...and how much more often its last seat runs wide (ttp::aiMistakesForTier,
+  // spread over the seats by ttp::aiSeatMistakes), resolved the same way.
+  double botMistakes = 1.0;
   // Deals the CPU fill a random car and persona each (buildField). Set by the
   // live launch to a seed that holds for a whole cup, so a bot keeps its name
   // and car across the series; 0 keeps the fixed colour/table order the bench,

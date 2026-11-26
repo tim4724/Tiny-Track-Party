@@ -31,8 +31,8 @@ static const double WANDER_CURB = 1.3;
 // at skill 0. A steer offset alone is cancelled by the pursuit into a lane shift.
 static const double WOBBLE_LANE = 1.2;
 // The kerb mistake: every so often a weaker bot runs wide, aiming this far past
-// the road edge on the side it is already on for MISTAKE_FRAMES, so it reaches
-// the barrier and scrapes along it. A single touch costs almost nothing (the
+// the road edge (the kerb, past any road strip) on the side it is already on
+// for MISTAKE_FRAMES, so it reaches the barrier and scrapes along it. A single touch costs almost nothing (the
 // wall bills its decel per frame of contact); the scrape is the cost. The gap
 // between mistakes is drawn from [MIN, MIN+SPAN) frames and divided by
 // (1 - skill), so skill 1 never makes one.
@@ -109,6 +109,16 @@ static const uint32_t SLIDE_RNG_SALT = 0x9e3779b9u;
 double aiSkillForTier(int tier) {
   if (tier < 1 || tier > 4) return 1.0;
   return AI_TIER_SKILL[tier - 1];
+}
+
+// Tuned with probe_cli balance, to its human driver models: the casual one
+// reaches the top half of about four Beach cups in ten, the regular one of
+// about half the middle cups, and the last cup keeps its whole field.
+static const double AI_TIER_MISTAKES[4] = {3.0, 5.0, 8.0, 1.0};
+
+double aiMistakesForTier(int tier) {
+  if (tier < 1 || tier > 4) return 1.0;
+  return AI_TIER_MISTAKES[tier - 1];
 }
 
 // ---- RacingLine --------------------------------------------------------------
@@ -358,14 +368,15 @@ static bool seekBox(const Car& car, Game& game, double lane, double reach, doubl
 
 // ---- AiController ------------------------------------------------------------
 AiController::AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed,
-                           double skill)
+                           double skill, double mistakes)
     : caution_(clampd(caution, 0.5, 1.1)),
       lookahead_(lookahead),
       gain_(gain),
       laneBias_(laneBias),
       skill_(clampd(skill, 0, 1)),
       rng_(seed ? seed : 1u),
-      slideRng_((seed ? seed : 1u) ^ SLIDE_RNG_SALT) {}
+      slideRng_((seed ? seed : 1u) ^ SLIDE_RNG_SALT),
+      mistakes_(js_max(1.0, mistakes)) {}
 
 Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   if (--weaveT_ <= 0) {
@@ -391,7 +402,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
     if (mistakeGap_ < 0) drawMistakeGap();
     if (mistakeT_ > 0) {
       mistakeT_--;
-      lane = mistakeSide_ * (maxLat + MISTAKE_OVERSHOOT);
+      lane = mistakeSide_ * (maxLat + car.sandHere + MISTAKE_OVERSHOOT);
     } else if (--mistakeGap_ <= 0) {
       mistakeT_ = MISTAKE_FRAMES;
       mistakeSide_ = car.lat >= 0 ? 1 : -1;
@@ -407,6 +418,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   Dodge dodge = avoidThreat(car, laneFor, game, maxLat, dodgeSet_, dodgeLane_);
   dodgeSet_ = dodge.has; dodgeLane_ = dodge.lane;
   if (dodge.has) { lane = dodge.lane; look = EVADE_LOOK; }
+  if (held_) lane = heldLat_;   // the strip showcase's lane outranks all of it
 
   double s = pursue(car, centerline, look, gain_, lane);
   if (!dodge.has) {
@@ -440,7 +452,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
 }
 
 void AiController::drawMistakeGap() {
-  mistakeGap_ = (MISTAKE_GAP_MIN + rng_.next() * MISTAKE_GAP_SPAN) / (1 - skill_);
+  mistakeGap_ = (MISTAKE_GAP_MIN + rng_.next() * MISTAKE_GAP_SPAN) / (1 - skill_) / mistakes_;
 }
 
 bool AiController::wantsToUse(const std::string& item, Car& car, Game& game, double corner) {

@@ -105,12 +105,13 @@ test('the cue codes name cues the device can actually play', async () => {
     names.push(id);
     assert.ok(resolveVariant(id, {}), `TTP_CUE code ${code} ("${id}") resolves to a variant`);
   }
-  assert.equal(names.length, 20, 'the cue vocabulary is twenty wide');
+  assert.equal(names.length, 24, 'the cue vocabulary is twenty-four wide');
   // The ORDER is the code, so it is pinned, not just the set.
   assert.deepEqual(names, [
     'pickup', 'roulette', 'banana_drop', 'monster_inflate', 'monster_deflate',
     'banana_slip', 'rocket_hit', 'screech', 'lap', 'join', 'countdown',
-    'boost', 'corner', 'brake', 'engine_putt', 'rocket_fire', 'drift', 'land', 'sand', 'rain'
+    'boost', 'corner', 'brake', 'engine_putt', 'rocket_fire', 'drift', 'land', 'sand', 'rain',
+    'sand_snow', 'sand_gravel', 'sand_dirt', 'sand_felt'
   ]);
   assert.equal(cuePtr(0), 0, 'code 0 is "no cue", not the first one');
   assert.equal(cuePtr(-1), 0, 'nothing below the table');

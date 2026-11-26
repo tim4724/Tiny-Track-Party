@@ -1673,8 +1673,8 @@ void audioThroughAbi() {
   check(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT) != nullptr
         && std::strcmp(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT), "engine_putt") == 0,
         "TTP_CUE_ENGINE_PUTT names the engine loop");
-  check(ttp_audio_cue_id(TTP_CUE_RAIN) != nullptr, "the last code names a cue");
-  check(ttp_audio_cue_id(TTP_CUE_RAIN + 1) == nullptr, "and nothing past it");
+  check(ttp_audio_cue_id(TTP_CUE_SAND_FELT) != nullptr, "the last code names a cue");
+  check(ttp_audio_cue_id(TTP_CUE_SAND_FELT + 1) == nullptr, "and nothing past it");
   {
     Value s = parseOrNull(ttp_audio_song_json(0), "audio_song_json(0)");
     check(s.type == Value::OBJ && s.find("file") && s.find("gain") && s.find("artist"),
@@ -4712,6 +4712,14 @@ void raceLiveWalks() {
         beachSkill = beachSkill && sk && sk->type == Value::NUM && sk->num == ttp::aiSkillForTier(1);
       }
       check(beachSkill, "a Beach Cup race hands every CPU the tier-1 skill");
+      // ...and each seat its share of the cup's mistake rate, none at the front.
+      bool spread = !bots.arr.empty();
+      for (size_t i = 0; i < bots.arr.size(); i++) {
+        const Value* m = bots.arr[i].find("mistakes");
+        const double want = ttp::aiSeatMistakes(ttp::aiMistakesForTier(1), (int) i, (int) bots.arr.size());
+        spread = spread && (want > 1 ? m && m->type == Value::NUM && m->num == want : !m);
+      }
+      check(spread, "a Beach Cup race spreads the tier-1 mistake rate over its CPU seats, front seat clean");
       check(at(*createSession, "forceItem").type == Value::NUL,
             "no ?item override crosses as null, not \"\"");
       check(json::str_field(*createSession, "trackId") == "tidepool",

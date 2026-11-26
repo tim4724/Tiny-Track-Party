@@ -89,6 +89,10 @@ extern "C" {
 #define TTP_CUE_LAND            18
 #define TTP_CUE_SAND            19
 #define TTP_CUE_RAIN            20 /* the weather's bed: its subject is no car     */
+#define TTP_CUE_SAND_SNOW       21 /* the other cups' strips, voiced as TTP_CUE_SAND is */
+#define TTP_CUE_SAND_GRAVEL     22
+#define TTP_CUE_SAND_DIRT       23
+#define TTP_CUE_SAND_FELT       24
 
 /* TtpAudioCmd.flags */
 #define TTP_AUD_F_GO  1u /* COUNTDOWN: the GO beat rather than a tick           */

@@ -21,9 +21,6 @@ static const double MAX_HEADING = 1.25;
 // The speed cap while scraping the curb, as a fraction of vmax.
 static const double WALL_SPEED_FRAC = 0.30;
 static const double WALL_DECEL = 20.0;
-// The speed ceiling with the car's centre past the asphalt, on a track that has
-// sand between the asphalt and the curb, as a fraction of what it would be.
-static const double SAND_SPEED_FRAC = 0.75;
 // While pinned, the wall turns the car along itself, so a car never hangs
 // nose-first on the curb: the angle into the wall eases at WALL_TURN_RATE (1/s)
 // until the car points WALL_PEEL (rad) away from it. Contact only, into-wall
@@ -203,6 +200,7 @@ static double g_wallSpeedFrac = WALL_SPEED_FRAC;
 static double g_wallTurnRate = WALL_TURN_RATE;
 static double g_wallTurnMax = WALL_TURN_MAX;
 static double g_wallImpact = WALL_IMPACT;
+static double g_sandSpeed = -1;   // debugSandSpeed's override; negative = each track's own
 // The drift's live copy, moved only by debugDriftRelease — traces never move it.
 static double g_driftRelease = DRIFT_RELEASE_T;
 
@@ -214,6 +212,11 @@ double debugDriftRelease(double sec) {
 double debugCurbSpeed(double frac) {
   g_wallSpeedFrac = frac < 0 ? WALL_SPEED_FRAC : js_min(1.0, frac);
   return WALL_SPEED_FRAC;
+}
+
+double debugSandSpeed(double frac) {
+  g_sandSpeed = frac < 0 ? -1 : js_min(1.0, frac);
+  return GameTrack().sandSpeed;
 }
 double debugCurbTurn(double rate) {
   g_wallTurnRate = rate < 0 ? WALL_TURN_RATE : rate;
@@ -305,6 +308,7 @@ Game::Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
       forceItem_(std::move(forceItem)),
       rng_(track.seed ? track.seed : 1u) {
   maxLat_ = js_max(0.1, (track.roadWidth ? track.roadWidth : 1) / 2 - LAT_MARGIN);
+  sandSpeed_ = track.sandSpeed;
 
   for (const Zone& h : track.hazards)
     hazards_.push_back(Zone{h.s, h.lat, h.radius ? h.radius : OIL_RADIUS});
@@ -1249,7 +1253,7 @@ void Game::update(double dtMs) {
     double targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);
     c.onSand = c.sandHere > 0 && grounded && c.curbLimSet
                && std::fabs(c.lat) > c.curbLim + LAT_MARGIN - c.sandHere;
-    if (c.onSand && !boosting) targetV *= SAND_SPEED_FRAC;
+    if (c.onSand && !boosting) targetV *= g_sandSpeed >= 0 ? g_sandSpeed : sandSpeed_;
     if (c.wallRashT > 0) {
       c.wallRashT -= dt;
       if (!boosting) {

@@ -35,6 +35,7 @@
     "film:laps": "node scripts/film-laps.mjs",
     "score:verge": "node scripts/score-verge.mjs",
     "pretest:e2e": "node scripts/require-e2e-deps.mjs",
+    "probe:balance": "node scripts/build-probe.mjs && native/build/probe_cli balance",
     "probe:cars": "node scripts/build-probe.mjs && native/build/probe_cli matrix && native/build/probe_cli packed",
     "probe:cost": "node scripts/build-probe.mjs && native/build/probe_cli cost",
     "probe:difficulty": "node scripts/build-probe.mjs && node scripts/probe-difficulty.mjs",

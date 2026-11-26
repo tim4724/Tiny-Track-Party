@@ -8,7 +8,7 @@
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "4605d20799eda3836e70b292f0181a59acc959a3b0c6dc4b89ee26195f485df4",
+    "sharedSha256": "2fd903d3a0ca4e6e6c68bc407417d6398f21f9d5499bdd91c3d9231c7f8fcb40",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -1065,6 +1065,178 @@
       ],
       "note": "ONE file, like drift: both bands and both flutters are static, so only the output gain moves with level.",
       "sourceSha256": "c611f2b78637f43a3485f0ca0454aa7f477961f3ccb8003195da0770dec2cf60"
+    },
+    "sand_snow": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "crunch",
+      "playback": {
+        "gainFormula": "0.14 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "sand_snow.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.385784,
+          "rms": 0.080826,
+          "sha256": "4ce7bc0e337aec6586defe912b0da4c78b13e6695b65fb108c389ebc36e47dc4",
+          "bandpassHz": [
+            520,
+            5200
+          ],
+          "Q": [
+            0.8,
+            0.7
+          ],
+          "flutterLfoHz": [
+            9,
+            13
+          ],
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, like sand.",
+      "sourceSha256": "32adf480d5a1d6c2d6a35989460a62ecc841fec9489811965dbee54f7a6b45c8"
+    },
+    "sand_gravel": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "crackle",
+      "playback": {
+        "gainFormula": "0.17 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "sand_gravel.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.626881,
+          "rms": 0.122835,
+          "sha256": "fd758110b92508b6e582020b7213ac4068c938446762b720d92d5ae762af8f4a",
+          "bandpassHz": [
+            900,
+            4200
+          ],
+          "Q": [
+            1.2,
+            1
+          ],
+          "flutterLfoHz": [
+            41,
+            59
+          ],
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, like sand.",
+      "sourceSha256": "105b0a74afb25dd139c733197fe810edc72ed87320267bd658060158fc3738d4"
+    },
+    "sand_dirt": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "rush",
+      "playback": {
+        "gainFormula": "0.16 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "sand_dirt.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.342296,
+          "rms": 0.078182,
+          "sha256": "5abfe38462832a2c3373702ebb998339e8e0714da7ad1006e4daed2e440e033a",
+          "bandpassHz": [
+            260,
+            2200
+          ],
+          "Q": [
+            1,
+            0.8
+          ],
+          "flutterLfoHz": [
+            19,
+            31
+          ],
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, like sand.",
+      "sourceSha256": "a270134fd3a51bfd35a7c9ca3aecd8b7e8bf8776636aa6afaefff5a016b293b4"
+    },
+    "sand_felt": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "rub",
+      "playback": {
+        "gainFormula": "0.08 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "sand_felt.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.322733,
+          "rms": 0.08012,
+          "sha256": "bb59982d2ce9f84a3a9cf1ab126cacfe48d20d93341ebf575041667ec51bc7f0",
+          "bandpassHz": [
+            220,
+            900
+          ],
+          "Q": [
+            0.7,
+            0.7
+          ],
+          "flutterLfoHz": [
+            5,
+            7
+          ],
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file, like sand.",
+      "sourceSha256": "f9eb7f18541313f5fd616a1663fdbf3a5d8ddb2a9471bb75d894b14074d2a3ea"
     }
   }
 }

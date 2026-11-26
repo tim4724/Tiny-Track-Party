@@ -4,6 +4,7 @@
 #include <cmath>
 #include <utility>
 
+#include "ttp/ai_driver.h"  // aiSeatMistakes — the field's spread
 #include "ttp/jsmath.h"   // js_max — Math.max's ±0 ordering, not std::max's
 #include "ttp/jsonnum.h"  // js_number_to_string — Number::toString, not printf
 #include "ttp/util.h"     // Mulberry32 — the field deal
@@ -256,6 +257,7 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
     b.caution = s.persona.caution;
     b.laneBias = s.persona.laneBias;
     b.skill = w.botSkill;
+    b.mistakes = aiSeatMistakes(w.botMistakes, static_cast<int>(out.bots.size()), static_cast<int>(seats.size()));
     const double base = (seed != 0 && !std::isnan(seed)) ? seed : 1.0;
     b.seed = toUint32(base + s.n);
     out.bots.push_back(std::move(b));

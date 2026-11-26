@@ -175,6 +175,8 @@ TTP_ABI double ttp_get_steer_expo(void);
 // DEBUG: the curb's feel, live (ttp/game.h debugCurb*). Negative restores the
 // authored value; each answers the authored value.
 TTP_ABI double ttp_debug_curb_speed(double frac);
+// DEBUG: the road strip's speed ceiling over every track's own (debugSandSpeed).
+TTP_ABI double ttp_debug_strip_speed(double frac);
 TTP_ABI double ttp_debug_curb_turn(double rate);
 TTP_ABI double ttp_debug_curb_turn_max(double rate);
 TTP_ABI double ttp_debug_curb_impact(double k);

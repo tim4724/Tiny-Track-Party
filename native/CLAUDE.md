@@ -197,6 +197,14 @@ targets are the determinism contract (root rule 5).
 
 `npm run probe:cars` / `probe:laptime` / `probe:difficulty` drive `probe_cli`. The
 old JS probes ran the AI with no game context and unseeded items, so **readings
-from before the native probe are not comparable.** The probe is a tuning
+from before the native probe are not comparable.**
+
+Those modes put the BOT at the wheel, which reacts on the frame and never
+wavers. `npm run probe:balance` puts human driver models there instead (lag, a
+wandering hand, a short lean, their own brake and item habits) and races them
+through every cup as a live Grand Prix seats them; it is the instrument for car
+balance per skill tier and for "can a casual player reach the top half". Its
+DRIVERS table is a guess until fitted to logged players, and race outcomes are
+far more sensitive to lag than lap times are. The probe is a tuning
 instrument, not a gate, but `probe_smoke` keeps it from rotting — it is what
 surfaced the racing-line bug, as lap times that moved between identical sweeps.

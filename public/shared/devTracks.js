@@ -251,5 +251,18 @@ export const DEV_TRACKS = {
       { kind: 'straight', length: 3 },
       { kind: 'arc', radius: 1.35, angle: -122.5714 }               // Sidewinder kink again
     ]
+  },
+  // The road-strip comparison track: a flat oval carrying the strip all the
+  // way round, nothing else on it, so the gallery's strip cards (one per
+  // biome, `?biome=`) differ in the strip's look and in nothing else.
+  strip: {
+    name: 'Strip Oval',
+    sand: 1.1,
+    segments: [
+      { kind: 'straight', length: 40 },
+      { kind: 'arc', radius: 4, angle: -180 },
+      { kind: 'straight', length: 40 },
+      { kind: 'arc', radius: 4, angle: -180 }
+    ]
   }
 };

@@ -53,6 +53,9 @@ Showcase parseShowcase(const char* kind) {
   if (k == "rocket") return Showcase::Rocket;
   if (k == "monster") return Showcase::Monster;
   if (k == "banana") return Showcase::Banana;
+  if (k == "strip") return Showcase::Strip;
+  if (k == "strip-on") return Showcase::StripOn;
+  if (k == "strip-off") return Showcase::StripOff;
   return Showcase::None;
 }
 

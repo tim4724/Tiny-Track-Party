@@ -93,7 +93,9 @@ is the mistake.
   lean noise.
 - **Nothing in the conform is damped.** A filter buys smoothness with lag, and
   lag on a hill drags the car behind its contract position. **If a filter ever
-  looks necessary here again, the probe is what is wrong.**
+  looks necessary here again, the probe is what is wrong.** The one sprung
+  term is the road strip's step under a wheel, which is no part of the smooth
+  surface: the body takes it through a spring, the wheel at once.
 - **`deckFoot`'s step clamp is not a tuning constant.** A lateral offset near a
   tight corner's own radius stalls the offset curve and an unclamped step
   "converges" onto another part of the circuit.

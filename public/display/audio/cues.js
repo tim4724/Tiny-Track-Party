@@ -230,7 +230,11 @@ export const DEFAULT_PICKS = {
   brake: 'rubber',
   drift: 'grain',           // Tim's pick from the drift sound lineup (2026-10-13)
   sand: 'grit',
-  rain: 'storm',            // the weather's bed, under a race whose sky rains
+  sand_snow: 'crunch',
+  sand_gravel: 'crackle',
+  sand_dirt: 'rush',
+  sand_felt: 'rub',
+  rain: 'storm',           // the weather's bed, under a race whose sky rains
   banana_drop: 'plop',
   banana_slip: 'dizzy',
   monster_inflate: 'turbo', // Tim's gallery pick (2026-06-21)
@@ -555,6 +559,222 @@ export const CUES = [
             set(level) {
               const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
               out.gain.setTargetAtTime(0.16 * l, at, 0.05);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.06);
+              try { src.stop(at + 0.4); flutterA.stop(at + 0.4); flutterB.stop(at + 0.4); } catch (_) {}
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'sand_snow',
+    label: 'Snow strip',
+    desc: 'STATE-DRIVEN: tyres through the loose powder beside a snow road: a soft, slow crunch. The sand cue\'s graph with this ground\'s numbers.',
+    continuous: true,
+    variants: [
+      {
+        id: 'crunch', label: 'powder crunch',
+        start(ctx, dest) {
+          const t = ctx.currentTime;
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf(ctx);
+          src.loop = true;
+          const lo = ctx.createBiquadFilter();
+          lo.type = 'bandpass';
+          lo.frequency.value = 520;
+          lo.Q.value = 0.8;
+          const hi = ctx.createBiquadFilter();
+          hi.type = 'bandpass';
+          hi.frequency.value = 5200;
+          hi.Q.value = 0.7;
+          const hiGain = ctx.createGain();
+          hiGain.gain.value = 0.22;
+          const grain = ctx.createGain();
+          grain.gain.value = 0.55;
+          const flutterA = ctx.createOscillator();
+          flutterA.frequency.value = 9;
+          const flutterB = ctx.createOscillator();
+          flutterB.frequency.value = 13;
+          const flutterDepth = ctx.createGain();
+          flutterDepth.gain.value = 0.225;
+          flutterA.connect(flutterDepth);
+          flutterB.connect(flutterDepth);
+          flutterDepth.connect(grain.gain);
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(lo); src.connect(hi); hi.connect(hiGain);
+          lo.connect(grain); hiGain.connect(grain); grain.connect(out); out.connect(dest);
+          src.start(t); flutterA.start(t); flutterB.start(t);
+          return {
+            set(level) {
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.14 * l, at, 0.05);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.06);
+              try { src.stop(at + 0.4); flutterA.stop(at + 0.4); flutterB.stop(at + 0.4); } catch (_) {}
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'sand_gravel',
+    label: 'Gravel strip',
+    desc: 'STATE-DRIVEN: tyres on the gravel beside a backyard road: a bright, fast crackle. The sand cue\'s graph with this ground\'s numbers.',
+    continuous: true,
+    variants: [
+      {
+        id: 'crackle', label: 'gravel crackle',
+        start(ctx, dest) {
+          const t = ctx.currentTime;
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf(ctx);
+          src.loop = true;
+          const lo = ctx.createBiquadFilter();
+          lo.type = 'bandpass';
+          lo.frequency.value = 900;
+          lo.Q.value = 1.2;
+          const hi = ctx.createBiquadFilter();
+          hi.type = 'bandpass';
+          hi.frequency.value = 4200;
+          hi.Q.value = 1;
+          const hiGain = ctx.createGain();
+          hiGain.gain.value = 0.6;
+          const grain = ctx.createGain();
+          grain.gain.value = 0.55;
+          const flutterA = ctx.createOscillator();
+          flutterA.frequency.value = 41;
+          const flutterB = ctx.createOscillator();
+          flutterB.frequency.value = 59;
+          const flutterDepth = ctx.createGain();
+          flutterDepth.gain.value = 0.225;
+          flutterA.connect(flutterDepth);
+          flutterB.connect(flutterDepth);
+          flutterDepth.connect(grain.gain);
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(lo); src.connect(hi); hi.connect(hiGain);
+          lo.connect(grain); hiGain.connect(grain); grain.connect(out); out.connect(dest);
+          src.start(t); flutterA.start(t); flutterB.start(t);
+          return {
+            set(level) {
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.17 * l, at, 0.05);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.06);
+              try { src.stop(at + 0.4); flutterA.stop(at + 0.4); flutterB.stop(at + 0.4); } catch (_) {}
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'sand_dirt',
+    label: 'Dirt strip',
+    desc: 'STATE-DRIVEN: tyres in the loose dirt beside a canyon road: a low, dry rush. The sand cue\'s graph with this ground\'s numbers.',
+    continuous: true,
+    variants: [
+      {
+        id: 'rush', label: 'dirt rush',
+        start(ctx, dest) {
+          const t = ctx.currentTime;
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf(ctx);
+          src.loop = true;
+          const lo = ctx.createBiquadFilter();
+          lo.type = 'bandpass';
+          lo.frequency.value = 260;
+          lo.Q.value = 1;
+          const hi = ctx.createBiquadFilter();
+          hi.type = 'bandpass';
+          hi.frequency.value = 2200;
+          hi.Q.value = 0.8;
+          const hiGain = ctx.createGain();
+          hiGain.gain.value = 0.3;
+          const grain = ctx.createGain();
+          grain.gain.value = 0.75;
+          const flutterA = ctx.createOscillator();
+          flutterA.frequency.value = 19;
+          const flutterB = ctx.createOscillator();
+          flutterB.frequency.value = 31;
+          const flutterDepth = ctx.createGain();
+          flutterDepth.gain.value = 0.125;
+          flutterA.connect(flutterDepth);
+          flutterB.connect(flutterDepth);
+          flutterDepth.connect(grain.gain);
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(lo); src.connect(hi); hi.connect(hiGain);
+          lo.connect(grain); hiGain.connect(grain); grain.connect(out); out.connect(dest);
+          src.start(t); flutterA.start(t); flutterB.start(t);
+          return {
+            set(level) {
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.16 * l, at, 0.05);
+            },
+            stop() {
+              const at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001, at, 0.06);
+              try { src.stop(at + 0.4); flutterA.stop(at + 0.4); flutterB.stop(at + 0.4); } catch (_) {}
+            }
+          };
+        }
+      },
+    ]
+  },
+  {
+    id: 'sand_felt',
+    label: 'Felt strip',
+    desc: 'STATE-DRIVEN: tyres on the felt beside a playroom track: a quiet, muffled rub. The sand cue\'s graph with this ground\'s numbers.',
+    continuous: true,
+    variants: [
+      {
+        id: 'rub', label: 'felt rub',
+        start(ctx, dest) {
+          const t = ctx.currentTime;
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf(ctx);
+          src.loop = true;
+          const lo = ctx.createBiquadFilter();
+          lo.type = 'bandpass';
+          lo.frequency.value = 220;
+          lo.Q.value = 0.7;
+          const hi = ctx.createBiquadFilter();
+          hi.type = 'bandpass';
+          hi.frequency.value = 900;
+          hi.Q.value = 0.7;
+          const hiGain = ctx.createGain();
+          hiGain.gain.value = 0.1;
+          const grain = ctx.createGain();
+          grain.gain.value = 0.9;
+          const flutterA = ctx.createOscillator();
+          flutterA.frequency.value = 5;
+          const flutterB = ctx.createOscillator();
+          flutterB.frequency.value = 7;
+          const flutterDepth = ctx.createGain();
+          flutterDepth.gain.value = 0.05;
+          flutterA.connect(flutterDepth);
+          flutterB.connect(flutterDepth);
+          flutterDepth.connect(grain.gain);
+          const out = ctx.createGain();
+          out.gain.value = 0.0001;
+          src.connect(lo); src.connect(hi); hi.connect(hiGain);
+          lo.connect(grain); hiGain.connect(grain); grain.connect(out); out.connect(dest);
+          src.start(t); flutterA.start(t); flutterB.start(t);
+          return {
+            set(level) {
+              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.08 * l, at, 0.05);
             },
             stop() {
               const at = ctx.currentTime;

@@ -58,14 +58,31 @@ extern const Persona AI_PERSONALITIES[7];
 // always was. Lower skill drives less of the racing line, wobbles across its
 // lane, and now and then runs wide into the barrier.
 double aiSkillForTier(int tier);
+// A cup's bot field is a spread of strengths. At one strength the bots finish
+// within a couple of seconds of each other and a player slightly slower than
+// them is last. So only the front seat drives as the cup's skill says; each
+// seat behind it makes its kerb mistakes more often, evenly up to
+// aiMistakesForTier times as often at the last seat (1 for anything that is not
+// a cup). Earlier corner braking for the back seats was tried first and is no
+// lever: it costs a bot little and parks it in the player's way.
+double aiMistakesForTier(int tier);
+inline double aiSeatMistakes(double cupRate, int seat, int seats) {
+  return seats > 1 ? 1 + (cupRate - 1) * seat / (seats - 1) : 1.0;
+}
 
 class AiController {
  public:
   AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed,
-               double skill = 1.0);
+               double skill = 1.0, double mistakes = 1.0);
   Input drive(Car& car, Centerline& centerline, Game& game);
+  // The gallery's strip showcase: drive at this lateral offset instead of the
+  // racing line, off the asphalt included, until released. No race sets it.
+  void holdLane(double lat) { held_ = true; heldLat_ = lat; }
+  void releaseLane() { held_ = false; }
 
  private:
+  bool held_ = false;
+  double heldLat_ = 0;
   bool wantsToUse(const std::string& item, Car& car, Game& game, double corner);
   void drawMistakeGap();
 
@@ -88,6 +105,7 @@ class AiController {
   // past the slide's threshold right now.
   Mulberry32 slideRng_;
   bool hardSteer_ = false, slideCorner_ = false;
+  double mistakes_;   // how many times as often as its skill's it runs wide
 };
 
 }  // namespace ttp

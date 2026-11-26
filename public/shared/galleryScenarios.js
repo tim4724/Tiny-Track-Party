@@ -168,6 +168,20 @@ export const GALLERY_SCENARIOS = [
   { id: 'banana-aim', key: 'racing', title: 'Banana aim', animated: true,
     params: { track: 'tidepool', players: 2, seed: 1, showcase: 'banana' },
     hold: { simMs: 89000, trailMs: 3000 } },
+  // THE ROAD STRIP, cup by cup, to compare side by side: one player whose car
+  // leaves the asphalt for the strip every few seconds (the `strip` showcase),
+  // so each card shows that cup's ground, its step, its tyre marks and its
+  // dust in one loop. Live only: no race reaches these moments by itself.
+  { id: 'strip-beach', key: 'racing', title: 'Road strip: Beach (sand)', animated: true, liveOnly: true,
+    params: { track: 'strip', biome: 'beach', players: 1, alone: 1, seed: 1, showcase: 'strip', striptune: 1 } },
+  { id: 'strip-snow', key: 'racing', title: 'Road strip: Snow (powder)', animated: true, liveOnly: true,
+    params: { track: 'strip', biome: 'snow', players: 1, alone: 1, seed: 1, showcase: 'strip', striptune: 1 } },
+  { id: 'strip-backyard', key: 'racing', title: 'Road strip: Backyard (gravel)', animated: true, liveOnly: true,
+    params: { track: 'strip', biome: 'grass', players: 1, alone: 1, seed: 1, showcase: 'strip', striptune: 1 } },
+  { id: 'strip-canyon', key: 'racing', title: 'Road strip: Canyon (dirt)', animated: true, liveOnly: true,
+    params: { track: 'strip', biome: 'canyon', players: 1, alone: 1, seed: 1, showcase: 'strip', striptune: 1 } },
+  { id: 'strip-playroom', key: 'racing', title: 'Road strip: Playroom (felt)', animated: true, liveOnly: true,
+    params: { track: 'strip', biome: 'playroom', players: 1, alone: 1, seed: 1, showcase: 'strip', striptune: 1 } },
   // The scripted-beat cards (pause, a dropped seat, a finisher) hold too, and the
   // beat runs AFTER the hold: a wall-clock delay put a slow TV's beat at the start
   // line with GO still up. The moments sit just under the web preview's own spin

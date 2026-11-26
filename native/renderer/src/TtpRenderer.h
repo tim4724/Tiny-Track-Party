@@ -1471,6 +1471,7 @@ private:
         float squash = 0, squashV = 0;             // landing spring: body offset along up (<= 0)
         float airPitch = 0;                        // the body's eased pitch against the deck
         float droop = 0;                           // how far the wheels hang, eased (AIR_DROOP)
+        float stripLift[4] = {}, stripLiftV[4] = {}; // the body's sprung height over each wheel on a strip
         float accelNorm = 0;                       // forward-bite 0..1 — launch-scratch skids read it
         filament::math::float3 lastPos{};          // wheel-roll travel measurement
         bool hasLastPos = false;
@@ -1816,6 +1817,8 @@ private:
     std::vector<SkidRect> mSkidMipRects;
     int mSkidMipLevel = 0;
     float mSkidLatHalf = 0;                       // half the lat span the texture covers
+    uint32_t mSandRut = 0xccb894;                 // the track's rut tint (bindSkidLayer)
+    float mSandRutInk = 2.2f;                     //   and how fast the ink deepens it
     // Texel edges in world units per axis. The stamp feather is sized from
     // the texel footprint along the mark's own width direction, so straights
     // (resolved by the fine lat axis) stay crisp while diagonal segments —
@@ -3005,9 +3008,24 @@ public:
     // Sets one knob (a negative value restores the authored one) and answers its
     // authored value. mSandDust starts as the authored table.
     float debugSandDust(int knob, float value);
+    // The strip's own overrides ride the same call, past the dust's knobs, in
+    // theme.road's units (a colour as its 0xRRGGBB number). A knob never set
+    // is the theme's. Setting one makes the next scene build a full one; a NaN
+    // sets nothing, and either way the answer is what the resident scene was
+    // built with.
+    enum { kStripStep = kDustKnobs, kStripRutInk, kStripDust, kStripSlope, kStripSink,
+        kStripColor, kStripRut, kStripEdge, kStripShade, kStripKnobsEnd };
 private:
+    float mStripDebug[kStripKnobsEnd - kDustKnobs] = {};
+    bool mStripSet[kStripKnobsEnd - kDustKnobs] = {};
+    float mStripBuilt[kStripKnobsEnd - kDustKnobs] = {};
     float mSandDust[kDustKnobs] = {
         60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
+    // The track's own dust on top of the knobs (theme.road.dust: its rate, life,
+    // start, end, rise and whiteness as multiples), so snow throws powder and
+    // sand a cloud off one table. buildSandDraws sets it.
+    float mSandDustMul[kDustKnobs] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    float dustKnob(int k) const { return mSandDust[k] * mSandDustMul[k]; }
     bool mHideCars = false;
     // Feature-ablation state (debugFeatureMask). mFeatureTagged latches the one
     // pass that moves every renderable off the default layer bit onto its

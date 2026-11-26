@@ -86,7 +86,15 @@ int trailPick(const std::vector<CarView>& cars);
 // The banana is the live Banana aim card's, and it is HELD rather than fired:
 // trailPick's car takes it with ITEM down, which trails it and brings up the
 // aim view, and lets go SHOWCASE_BANANA_HOLD_S later, which drops it.
-enum class Showcase { None, Rocket, Monster, Banana };
+enum class Showcase { None, Rocket, Monster, Banana, Strip, StripOn, StripOff };
+
+// The strip showcase's loop: a player's car runs the racing line for
+// SHOWCASE_STRIP_ROAD_S, then holds a lane on the strip beside the road for
+// the rest of SHOWCASE_STRIP_CYCLE_S, wherever the road carries one. StripOn
+// ("strip-on") holds the strip all the way round and StripOff ("strip-off")
+// the road, for comparing strips side by side.
+inline constexpr double SHOWCASE_STRIP_CYCLE_S = 6.0;
+inline constexpr double SHOWCASE_STRIP_ROAD_S = 3.0;
 
 inline constexpr double SHOWCASE_FIRST_FIRE_S = 0.8;
 inline constexpr double SHOWCASE_ROCKET_GAP_S = 1.3;
@@ -97,6 +105,7 @@ inline constexpr double SHOWCASE_BANANA_GAP_S = 2.0;
 struct ShowcaseState {
   double fireCd = SHOWCASE_FIRST_FIRE_S;
   double releaseCd = -1;  // the held banana's hold still to run; < 0 = none held
+  double stripT = 0;      // the strip showcase's clock
 };
 
 // "rocket" | "monster" | "banana" -> the kind; anything else is None.

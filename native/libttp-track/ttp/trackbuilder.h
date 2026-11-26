@@ -60,6 +60,8 @@ struct FurnDef {   // oil / pad / box / pole descriptor
 
 struct BananaDef { double u, lat; };
 
+struct SpanDef { double from, to; };   // a stretch of the lap, in u
+
 // A SET PIECE: one landmark model (scripts/gen-set-prototypes.mjs) the
 // RENDERER places on this track. Not builder input — it rides here for the
 // reason `name` and `cup` do below: the catalogue is where it is authored.
@@ -128,10 +130,11 @@ struct TrackDef {
   const SegDef* segs; int nSegs;
   const WptDef* wpts; int nWpts;
   double width;    // trackWidth = (desc.width) || ROAD_WIDTH
-  double sand;     // sand strip per side, between the asphalt and the kerb; waypoint tracks only
-  // A stretch of the lap (u, from..to) that carries NO sand: a causeway over
-  // water, where the kerbs stand at the asphalt's edge. None when to <= from.
-  double sandOffFrom, sandOffTo;
+  double sand;     // sand strip per side, between the asphalt and the kerb, on road that lies on the ground
+  // Stretches of the lap that carry NO sand, where the kerbs stand at the
+  // asphalt's edge: a causeway over water, a gate across the road, a piece
+  // the wider road would run into.
+  const SpanDef* sandOff; int nSandOff;
   double startU;   // desc.startU ?? 0
   const FurnDef* oils; int nOils;
   const FurnDef* pads; int nPads;
@@ -167,6 +170,9 @@ struct CupDef {
   // contact: a colour chosen for a 3D horizon is not legible as a pale wash
   // (public/shared/trackPicker.js records which two cups broke and how).
   uint32_t color;
+  // A car's speed ceiling on the cup's road strip, as a share of what it would
+  // be on the asphalt (GameTrack::sandSpeed).
+  double stripSpeed;
 };
 
 // ---- built-track OUTPUT (the augmented race-track object) --------------------
