@@ -58,10 +58,9 @@ fs.cpSync(path.join(ROOT, 'public'), OUT, {
   filter: (src) => path.basename(src) !== '.DS_Store'
 });
 
-// The dev server serves partyplug's top-level .js files and nothing else of it.
 fs.mkdirSync(path.join(OUT, 'partyplug'));
-for (const name of fs.readdirSync(path.join(ROOT, 'partyplug'))) {
-  if (name.endsWith('.js')) fs.copyFileSync(path.join(ROOT, 'partyplug', name), path.join(OUT, 'partyplug', name));
+for (const name of site.PARTYPLUG_FILES) {
+  fs.copyFileSync(path.join(ROOT, 'partyplug', name), path.join(OUT, 'partyplug', name));
 }
 
 const engineRoot = path.join(OUT, 'display', 'engine');

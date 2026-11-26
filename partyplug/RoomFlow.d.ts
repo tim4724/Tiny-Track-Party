@@ -1,11 +1,5 @@
-// Type declarations for RoomFlow (partyplug). Hand-written.
-//
-// THERE IS NO RoomFlow.js IN THIS FORK — the state machine is C++
-// (native/libttp-party, adapter public/display/NativeRoomFlow.js), so this file
-// is no longer a module's types but the kit INTERFACE that port implements, and
-// the address the docs point at for signatures. Upstream (HexStacker-Party)
-// still has the JS module these were written against, where the class is
-// exported via `module.exports = RoomFlow`.
+// Type declarations for RoomFlow (partyplug). Hand-written; keep in sync with
+// RoomFlow.js. The module exports the class via `module.exports = RoomFlow`.
 
 export = RoomFlow;
 
@@ -79,8 +73,6 @@ declare class RoomFlow {
   allParticipantsDisconnected(): boolean;
   /** True when any roster member is not in the active participant order (a late joiner). */
   hasLateJoiners(): boolean;
-  /** The late joiners themselves, in `list()` order — the list form of `hasLateJoiners()`, for rendering "waiting for the next round" rows off the same set the grace policy uses. */
-  lateJoiners(): RoomFlow.PlayerRecord[];
   /** Deadline-driven late-joiner grace: arms on the first qualifying call and returns true when graceMs elapses.
    *  It then RE-ARMS — firing clears the deadline, so a caller that keeps polling while the condition still holds
    *  gets another true every graceMs. Callers that must act once are responsible for standing themselves down. */

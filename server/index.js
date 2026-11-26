@@ -24,7 +24,7 @@ const REVIEW_DIR = path.join(__dirname, '..', 'scratch', 'review');
 const REVIEW_NOTE_MAX = 48 * 1024 * 1024;
 // partyplug (the transport kit) lives OUTSIDE public/ as a clearly-separate
 // vendored dependency, served via the remap below (site/ carries its own
-// copy). Restricted to .js so package artifacts / binaries can't be walked.
+// copy). Only the files the apps load (site.PARTYPLUG_FILES).
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
 
 // The working tree's HEAD, for the version label ('' without git).
@@ -257,7 +257,7 @@ const server = (TLS ? require('https').createServer.bind(null, TLS) : http.creat
   let baseDir = PUBLIC_DIR;
   let lookupPath = urlPath;
   if (!SERVE_SITE && urlPath.startsWith('/partyplug/')) {
-    if (!/^\/[\w.-]+\.js$/.test(urlPath.slice('/partyplug'.length))) { res.writeHead(404); res.end('Not Found'); return; }
+    if (!site.PARTYPLUG_FILES.includes(urlPath.slice('/partyplug/'.length))) { res.writeHead(404); res.end('Not Found'); return; }
     baseDir = PARTYPLUG_DIR;
     lookupPath = urlPath.slice('/partyplug'.length);
   }

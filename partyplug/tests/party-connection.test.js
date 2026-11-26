@@ -103,8 +103,9 @@ describe('PartyConnection', () => {
     // to a non-object is still not a relay frame: `null` used to throw a
     // TypeError straight out of onmessage (killing the handler), and `7` / `"x"`
     // / `[1,2]` reached onProtocol with an undefined type — a scalar treated as
-    // protocol traffic. Mirrors the native ABI's ttp_framing_classify, which
-    // routes all of these to "none".
+    // protocol traffic. The native ports already dropped all of these
+    // implicitly (RelayClient.kt's `.jsonObject` inside runCatching,
+    // RelayClient.swift's `as? [String: Any]` guard), so this closes the gap.
     const pc = new PartyConnection('wss://test.example.com');
     const protocols = [], messages = [], states = [];
     pc.onProtocol = (type, msg) => protocols.push([type, msg]);

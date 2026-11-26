@@ -79,8 +79,11 @@ class PartyConnection {
       // catch above only covers malformed JSON, so before this guard `null` threw
       // a TypeError straight out of onmessage, and `7` / `"x"` / `[1,2]` fell
       // through to onProtocol with an undefined type — a scalar treated as
-      // protocol traffic. Drop them, which is also what the native ABI's
-      // ttp_framing_classify already did (route "none").
+      // protocol traffic. Drop them — which is what the native ports already did
+      // implicitly, leaving the web the only transport that could route a scalar:
+      // Kotlin's `parseToJsonElement(text).jsonObject` throws inside runCatching
+      // (RelayClient.kt), and Swift's `as? [String: Any]` fails its guard
+      // (RelayClient.swift).
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
 
       if (msg.type === 'message') {

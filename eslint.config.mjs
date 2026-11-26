@@ -60,6 +60,12 @@ export default [
       globals: browserGlobals,
     },
   },
+  // partyplug/ is upstream's folder verbatim (docs/partyplug.md); its AirConsole
+  // adapter reads that SDK's global.
+  {
+    files: ['partyplug/AirConsoleAdapter.js'],
+    languageOptions: { globals: { AirConsole: 'readonly' } },
+  },
 
   // ── Node CommonJS: server + unit tests ────────────────────────────────────
   {

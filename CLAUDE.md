@@ -111,10 +111,11 @@ were deleted once each layer was conformance-proven; git history has them.
 - the transport **I/O** (`partyplug/PartyConnection.js`, `PartyFastlane.js`)
 
 `partyplug/` is a reusable party-game transport kit shared across games, served
-under `/partyplug/`. It is a **copy-fork**, so every local edit to a kit file
-must be declared in `partyplug/UPSTREAM.md` — `tests/partyplug-fork.test.js`
-fails until it is. The 3D models are under `public/assets/toycar/` (`toycar`
-names the asset pack, after the Kenney Toy Car Kit whose style and palette
+under `/partyplug/`. It is a **verbatim copy** of the reference game's, so it is
+never edited here: change the kit upstream, then copy it back whole
+(`docs/partyplug.md`). `tests/partyplug-copy.test.js` fails on any local edit.
+
+The 3D models are under `public/assets/toycar/` (`toycar` names the asset pack, after the Kenney Toy Car Kit whose style and palette
 layout they follow, not the game) and every one is BUILT by a script, none
 downloaded: `SOURCES.json` beside them names it. The cars are
 `scripts/toy_cars.py`, exported by `gen-concept-cars.py --roster` (its header

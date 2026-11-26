@@ -42,6 +42,9 @@ const JSON_ROUTES = {
   '/api/trailer-shots': () => ({ shots: TRAILER_SHOTS })
 };
 
+// The kit files the apps load, and all either host serves of it (docs/partyplug.md).
+const PARTYPLUG_FILES = ['PartyConnection.js', 'PartyFastlane.js'];
+
 // A bare `/<segment>` (no dot, one segment) is a join code and serves the phone
 // controller. Route prefixes and the usual crawler/legal words are not codes,
 // so they 404 instead of opening a controller for a room that cannot exist.
@@ -57,4 +60,4 @@ function isRoomCode(urlPath) {
   return !!m && !RESERVED_SEGMENTS.includes(m[1].toLowerCase());
 }
 
-module.exports = { renderHtml, JSON_ROUTES, RESERVED_SEGMENTS, ROOM_CODE, isRoomCode };
+module.exports = { renderHtml, JSON_ROUTES, PARTYPLUG_FILES, RESERVED_SEGMENTS, ROOM_CODE, isRoomCode };

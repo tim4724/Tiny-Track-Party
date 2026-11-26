@@ -47,7 +47,8 @@
   var RTC_KEY = '__rtc';
 
   // Netcode parameters.
-  // TICK_MS:     resend cadence while ring has unacked events.
+  // TICK_MS:     resend cadence while ring has unacked events (exported as
+  //              PartyFastlane.TICK_MS).
   // TTL_MS:      how long a re-sendable event stays in the ring (3× TICK_MS).
   // IDLE_MS:     heartbeat cadence when ring is empty.
   // WATCHDOG_MS: silence threshold before declaring the peer dead. 6× IDLE_MS
@@ -569,8 +570,8 @@
     if (this.onPeerClosed) this.onPeerClosed(peerIdx);
   };
 
-  // Expose the resend cadence: subclasses that run their own tick (the native
-  // display link) must not re-type the number.
+  // Expose the resend cadence, so a caller that drives its own resend tick
+  // reads it instead of re-typing the number.
   PartyFastlane.TICK_MS = TICK_MS;
 
   if (typeof window !== 'undefined') window.PartyFastlane = PartyFastlane;

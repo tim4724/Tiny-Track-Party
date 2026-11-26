@@ -8,7 +8,7 @@ declare class PartyFastlane {
   constructor(options?: PartyFastlane.Options);
 
   /** Resend cadence (ms) while the ring holds unacked events. */
-  static TICK_MS: number;
+  static readonly TICK_MS: number;
 
   selfIndex: number | null;
 
@@ -42,10 +42,11 @@ declare namespace PartyFastlane {
     onPeerClosed?: (peerIdx: number) => void;
     onConnectionState?: (peerIdx: number, state: string) => void;
     onRtt?: (peerIdx: number, rttHalfMs: number) => void;
-    /** The peer CONFIRMED applying this payload (es = its event seq). */
+    /** The peer confirmed applying a payload. Fires once per ack, for the newest entry it covers (es = the
+     *  sender-side event seq assigned at enqueue); silent when that entry already expired from the ring. */
     onAcked?: (peerIdx: number, ev: any, es: number) => void;
     emitIdleHeartbeat?: boolean;
-    /** Cap on the resend ring (1 = latest-only). Default: unbounded. */
+    /** Cap on events kept for resend (1 = latest-only). Default: uncapped, so only TTL_MS bounds the ring. */
     maxRing?: number;
   }
 }
