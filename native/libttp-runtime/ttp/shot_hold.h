@@ -111,8 +111,11 @@ struct ShowcaseState {
   double stripT = 0;      // the strip showcase's clock
 };
 
-// "rocket" | "monster" | "banana" -> the kind; anything else is None.
+// "rocket" | "monster" | "banana" | "strip" | "strip-on" | "strip-off" -> the
+// kind; anything else is None. A strip kind may end in "+monster"
+// (showcaseMonster): its field drives the strip as monster trucks.
 Showcase parseShowcase(const char* kind);
+bool showcaseMonster(const char* kind);
 
 // Called once per sim step of `dtS`. Returns the index in `cars` of the car to
 // give the item to and fire it from now, or -1. Not for the banana.

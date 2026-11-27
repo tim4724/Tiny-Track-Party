@@ -2,13 +2,17 @@
 // biome on the strip oval (shared/devTracks.js `strip`), a few cars in its one
 // view, each holding a lane of its own (the strip showcase, ttp_runtime.cc), and
 // the strip tuner's controls under it (display/stripTuner.js). The page's hash
-// carries the cars, where they drive, the dust's spread, the camera, the hidden
-// cups and every changed value, so a reload keeps the session.
+// carries the cars, where they drive (as monster trucks or not), the dust's
+// spread, the camera, the hidden cups and every changed value, so a reload
+// keeps the session.
 import { BIOMES, stripControls, stripQuery } from '/display/stripTuner.js';
 
 const saved = new URLSearchParams(location.hash.slice(1));
 let cars = saved.get('cars') || '3';
 let mode = saved.get('mode') || 'strip-on';
+let monster = saved.get('monster') === '1';   // the field drives as monster trucks
+// The showcase kind every display runs (ttp_item_showcase).
+const kind = () => mode + (monster ? '+monster' : '');
 let cam = saved.get('cam') || 'chase';
 // How far a turn or a slide throws the dust outward (the renderer's kDustDrift
 // knob, the same in every biome); empty keeps the authored value.
@@ -23,13 +27,14 @@ const frames = [];   // [biome, iframe]
 const save = () => {
   const h = new URLSearchParams({ cars, mode, cam, hide: [...hidden].join(',') });
   if (spread) h.set('spread', spread);
+  if (monster) h.set('monster', '1');
   for (const [biome, q] of values) if (q) h.set(biome, q);
   history.replaceState(null, '', '#' + h);
 };
 
 // One player (the camera's car) and the rest CPU fill, on the race scenario.
 const src = (biome) => '/?' + new URLSearchParams({ test: '1', scenario: 'racing', track: 'strip', biome,
-  players: '1', bots: String(cars - 1), seed: '1', showcase: mode, laps: '999', hud: '0' })
+  players: '1', bots: String(cars - 1), seed: '1', showcase: kind(), laps: '999', hud: '0' })
   + (values.get(biome) ? '&' + values.get(biome) : '');
 
 // The camera: the first car's chase cell, or the lobby's, which draws no cells
@@ -77,7 +82,7 @@ for (const [biome, label] of BIOMES) {
       if (!win.__preview) return;
       clearInterval(wait);
       win.__preview.play();
-      win.__showcase(mode);
+      win.__showcase(kind());
       aim(win);
       throwOut(win);
       win.document.getElementById('corner-btns').style.display = 'none';
@@ -95,7 +100,7 @@ for (const [biome, label] of BIOMES) {
   toggle.addEventListener('click', () => {
     if (!hidden.delete(biome)) hidden.add(biome);
     lay();
-    frame.contentWindow.__showcase?.(mode);   // the mode may have changed while it was hidden
+    frame.contentWindow.__showcase?.(kind());   // the mode may have changed while it was hidden
     save();
   });
   show.append(toggle);
@@ -115,7 +120,15 @@ function choice(attr, get, pick) {
 // Where the cars drive: the strip showcase's three modes, switched live.
 choice('mode', () => mode, (m) => {
   mode = m;
-  for (const [, frame] of frames) frame.contentWindow.__showcase?.(mode);
+  for (const [, frame] of frames) frame.contentWindow.__showcase?.(kind());
+});
+const monsterBtn = document.getElementById('monster');
+monsterBtn.classList.toggle('on', monster);
+monsterBtn.addEventListener('click', () => {
+  monster = !monster;
+  monsterBtn.classList.toggle('on', monster);
+  for (const [, frame] of frames) frame.contentWindow.__showcase?.(kind());
+  save();
 });
 spreadInput.addEventListener('input', () => {
   spread = spreadInput.value;

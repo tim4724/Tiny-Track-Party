@@ -2063,6 +2063,7 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
     constexpr float TURN_FULL = 2.0f;                 // rad/s of heading change = a full turn
     constexpr float BITE_FULL = 0.4f;                 // 1/s of normalized speed lost = full bite
     constexpr float SLIDE_FULL = 0.5f;                // rad of body slip = a full slide
+    constexpr float MONSTER_PUFF_MAX = 2.0f;          // a truck's tyre grows its puffs by at most this
     // How a turn and a slide throw the dust outward (shares of kDustDrift),
     // the inner tyre's share of the outer's, and the sideways jitter (u/s).
     constexpr float THROW_TURN = 1.5f, THROW_SLIDE = 2.0f, INNER_THROW = 0.6f, JITTER = 0.03f;
@@ -2106,7 +2107,13 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
         const float3 pos = { c.pos.x, c.pos.y, c.pos.z };
         const CarWheels* cw = i < mCarWheels.size() && mCarWheels[i].hasWheelOff
                 ? &mCarWheels[i] : nullptr;
-        const float r = cw ? cw->wheelRadius : 0.125f;
+        // While the monster is up its fat tyres are the ones on the ground (the
+        // car's own are scaled to nothing inside it): the dust comes off THEIR
+        // contact points, and in puffs their size (the skids' rule, renderSkids).
+        const MonsterWheels* mw = cw && c.monster > 0.5f && i < mMonsterWheels.size()
+                && !mMonsterWheels[i].bl.isNull() ? &mMonsterWheels[i] : nullptr;
+        const float r = cw ? wheelRadiusFor(*cw, mw != nullptr) : 0.125f;
+        const float tyreScale = mw ? std::min(MONSTER_PUFF_MAX, r / cw->wheelRadius) : 1.0f;
         // How hard it turns (the heading's change, toward the turn's centre) and
         // how hard the sand bites (the speed it is taking off).
         float3& prevFwd = mSandPrevFwd[i];
@@ -2144,7 +2151,11 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
             float& due = mSandDue[i * 2 + wheel];
             float& on = mSandOn[i * 2 + wheel];
             // The body's whirl (drift slip, spin-out) yaws the wheels with it.
-            const float3 off = cw ? cw->wheelOff[2 + wheel] : float3{ 0.0f };
+            // A rig wheel's rest translation, scaled, sits in the posed frame
+            // wheelOff does once turned the same half turn about up.
+            const float3 rig = mw ? (wheel ? mw->brT : mw->blT) * cw->rigScale : float3{ 0.0f };
+            const float3 off = mw ? float3{ -rig.x, rig.y, -rig.z }
+                    : cw ? cw->wheelOff[2 + wheel] : float3{ 0.0f };
             const float3 tyre = cw
                     ? right * (off.x * std::cos(c.spin) + off.z * std::sin(c.spin))
                             + fwd * (-off.x * std::sin(c.spin) + off.z * std::cos(c.spin))
@@ -2188,8 +2199,9 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
                         + up * (dustKnob(kDustRise) * rnd(0.57f, 1.43f));
                 p.age = 0;
                 p.life = std::max(0.05f, dustKnob(kDustLife) * rnd(0.8f, 1.2f));
-                p.r0 = dustKnob(kDustStart) * rnd(0.83f, 1.17f) * scale;
-                p.r1 = dustKnob(kDustEnd) * rnd(0.82f, 1.18f) * scale * (outer ? 1.0f + 0.3f * turn : 1.0f);
+                p.r0 = dustKnob(kDustStart) * rnd(0.83f, 1.17f) * scale * tyreScale;
+                p.r1 = dustKnob(kDustEnd) * rnd(0.82f, 1.18f) * scale * tyreScale
+                        * (outer ? 1.0f + 0.3f * turn : 1.0f);
                 p.peak = std::min(1.0f, dustKnob(kDustOpacity) * rnd(0.9f, 1.1f))
                         * (0.85f + 0.35f * bite) * (onSand ? 1.0f : 0.6f);
                 p.rgb = rgb;

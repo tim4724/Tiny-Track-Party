@@ -47,9 +47,17 @@ int trailPick(const std::vector<CarView>& cars) {
   return pick;
 }
 
+static const std::string MONSTER_SUFFIX = "+monster";
+
+bool showcaseMonster(const char* kind) {
+  const std::string k(kind ? kind : "");
+  return k.size() > MONSTER_SUFFIX.size() && k.compare(k.size() - MONSTER_SUFFIX.size(), MONSTER_SUFFIX.size(), MONSTER_SUFFIX) == 0;
+}
+
 Showcase parseShowcase(const char* kind) {
   if (!kind) return Showcase::None;
-  const std::string k(kind);
+  std::string k(kind);
+  if (showcaseMonster(kind)) k.resize(k.size() - MONSTER_SUFFIX.size());
   if (k == "rocket") return Showcase::Rocket;
   if (k == "monster") return Showcase::Monster;
   if (k == "banana") return Showcase::Banana;

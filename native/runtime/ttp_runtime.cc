@@ -322,6 +322,7 @@ struct RuntimeSession {
   ttp::rt::shot_hold::Showcase showcase = ttp::rt::shot_hold::Showcase::None;
   ttp::rt::shot_hold::ShowcaseState showcaseState;
   Id showcaseHolder;  // the car the banana showcase let take one, for its release
+  bool showcaseMonster = false;  // a strip showcase's field as monster trucks
 
   std::unique_ptr<Game> game;            // bare-mode owner
   std::unique_ptr<RaceSession> session;  // countdown-mode owner
@@ -1174,6 +1175,11 @@ static void stepSession(RuntimeSession* rs, double dtMs) {
           : car.asphaltMid + share * rs->eng->maxLat();
       const double past = car.totalS - k * sh::SHOWCASE_STRIP_GAP_M - pace;
       field[k].first->holdLane(lat, std::max(0.0, std::min(1.0, (past - SLACK) / (FULL_BRAKE - SLACK))));
+      // "+monster": each car transforms again as soon as its truck wears off
+      if (rs->showcaseMonster && !(car.monsterT > 0)) {
+        rs->eng->giveItem(car.id, "monster", false, 0);
+        rs->eng->useItem(car.id);
+      }
     }
     return;
   }
@@ -1427,6 +1433,7 @@ int ttp_item_showcase(int h, const char* kind) {
   RuntimeSession* rs = get(h);
   if (!rs) return 0;
   rs->showcase = ttp::rt::shot_hold::parseShowcase(kind);
+  rs->showcaseMonster = ttp::rt::shot_hold::showcaseMonster(kind);
   rs->showcaseState = {};
   // a strip showcase's lanes go with it; one that stays holds them again next step
   for (auto& b : rs->bots) if (b.ai) b.ai->releaseLane();

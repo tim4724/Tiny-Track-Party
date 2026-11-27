@@ -164,8 +164,9 @@ TTP_ABI int ttp_shot_held(int h);
 // The item showcase (ttp/shot_hold.h): after each step, the engine gives the
 // item to the car the rule picks and fires it, or for "banana" holds it and
 // lets go; "strip" | "strip-on" | "strip-off" instead steer the AI-driven
-// field onto the road strip and off it. `kind` is one of those six; null or
-// anything else turns it off. 1 = set, 0 = unknown handle.
+// field onto the road strip and off it, as monster trucks with a "+monster"
+// suffix. `kind` is one of those six; null or anything else turns it off.
+// 1 = set, 0 = unknown handle.
 TTP_ABI int ttp_item_showcase(int h, const char* kind);
 
 // ---- global tunable (affects every session, like Game.js _steerExpo) --------
