@@ -108,7 +108,7 @@ jobs:
     # desktop build it needs for matc. A hit finishes in minutes.
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Read the Filament pin
         id: pin
@@ -152,7 +152,7 @@ jobs:
       # nothing to do with Filament.
       - name: Restore the Filament tvOS SDK
         id: filament-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
@@ -216,7 +216,7 @@ jobs:
       # rebuilds what this just saved.
       - name: Save the Filament tvOS SDK
         if: steps.filament-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos

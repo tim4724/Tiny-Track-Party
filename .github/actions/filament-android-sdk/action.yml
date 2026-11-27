@@ -72,7 +72,7 @@ runs:
     # happens later.
     - name: Restore the Filament Android SDK
       id: filament-cache
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: |
           ${{ runner.temp }}/filament/out/android-release
@@ -124,7 +124,7 @@ runs:
     # restore misses and rebuilds what this just saved.
     - name: Save the Filament Android SDK
       if: steps.filament-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: |
           ${{ runner.temp }}/filament/out/android-release

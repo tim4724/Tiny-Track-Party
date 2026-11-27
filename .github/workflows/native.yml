@@ -62,7 +62,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/ccache
         id: ccache
         with:
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/ccache
         id: ccache
         with:
@@ -143,7 +143,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/ccache
         id: ccache
         with:
@@ -190,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/ccache
         id: ccache
         with:
@@ -233,11 +233,11 @@ jobs:
       group: filament-android-sdk-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Read the Filament pin
         id: pin
         run: sed -n 's/^FILAMENT_COMMIT=/commit=/p' native/filament.pin >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: sdk
         with:
           path: filament-sdk
@@ -313,6 +313,6 @@ jobs:
       group: filament-android-release-sdk
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: The Filament Android SDK
         uses: ./.github/actions/filament-android-sdk
