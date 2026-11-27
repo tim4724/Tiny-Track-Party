@@ -266,7 +266,9 @@ sceneBooted.then(() => {
   const cm = (v) => parseFloat(v) / 100, hex = (v) => parseInt(v, 16);
   [['stripstep', cm], ['striprut', parseFloat], ['stripdust', parseFloat], ['stripslope', cm],
     ['stripsink', cm], ['stripcolor', hex], ['striprutcolor', hex], ['stripedge', hex],
-    ['stripshade', parseFloat]].forEach(([key, read], i) => {
+    ['stripshade', parseFloat], ['stripdustrate', parseFloat], ['stripdustlife', parseFloat],
+    ['stripduststart', parseFloat], ['stripdustend', parseFloat], ['stripdustrise', parseFloat],
+    ['stripdustwhite', (v) => parseFloat(v) / 50], ['stripdustalpha', parseFloat]].forEach(([key, read], i) => {
     const n = read(_trackParams.get(key) || '');
     if (Number.isFinite(n)) scene.display.debugSandDust(13 + i, n);
   });

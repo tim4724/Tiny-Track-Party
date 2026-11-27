@@ -870,6 +870,30 @@ int runBalance(uint32_t seed, int runs) {
                   fixed(laps ? (double)st.spins / laps : 0, 2, 0).c_str());
     }
   }
+
+  // The same, track by track: what a track asks of a driver, no bot in it.
+  std::printf("\nthe same, track by track\n");
+  std::printf("%-9s%-12s%8s%8s%8s%8s%8s\n", "driver", "track", "lap s", "curb s", "sand s", "slide s", "spins");
+  for (int d = 0; d < N_DRIVERS; d++) {
+    for (size_t tr = 0; tr < tracks.size(); tr++) {
+      DriveStats st;
+      double lapSum = 0;
+      int laps = 0, runsN = 0;
+      for (size_t car = 0; car < nCars; car++)
+        for (int k = 0; k < SOLO_SEEDS; k++) {
+          const SoloOut& o = soloAt(tr, (size_t)d, car, (size_t)k);
+          st.add(o.st);
+          lapSum += o.lap;
+          laps += protocol::TOTAL_LAPS;
+          runsN++;
+        }
+      auto perLap = [&](long frames) { return fixed(laps ? frames / 60.0 / laps : 0, 2, 8); };
+      std::printf("%-9s%-12s%8s%s%s%s%8s\n", DRIVERS[d].name, tracks[tr].c_str(),
+                  fixed(runsN ? lapSum / runsN : 0, 1, 0).c_str(), perLap(st.wall).c_str(),
+                  perLap(st.sand).c_str(), perLap(st.slide).c_str(),
+                  fixed(laps ? (double)st.spins / laps : 0, 2, 0).c_str());
+    }
+  }
   return 0;
 }
 

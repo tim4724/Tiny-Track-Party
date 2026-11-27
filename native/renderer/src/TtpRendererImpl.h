@@ -338,12 +338,15 @@ struct TtpRenderer::TrackBin {
     bool sandDust = true;        // theme.road.sandDust
     float sandRutInk = 2.2f;     // theme.road.rutInk
     float sandStep = 0;          // theme.road.sandStep (stepOf)
-    float dustMul[6] = { 1, 1, 1, 1, 1, 1 };   // theme.road.dust
+    float dustMul[7] = { 1, 1, 1, 1, 1, 1, 1 };   // theme.road.dust
     float sandSlope = 0;         // theme.road.sandSlope: the strip's outer edge over its inner
     // What makes a sloped strip READ as one: its shade runs from darker at the
     // road to lighter at the kerb, this much of its colour per world unit of
-    // slope (a few degrees of tilt change no light a viewer can see).
-    float sandShade = 8.0f;
+    // slope (a few degrees of tilt change no light a viewer can see). Off but
+    // for the tuner's knob: on snow, the one sloped strip, it greyed the
+    // strip's road edge into the slush band beside it, and the band's flat
+    // step read as the foot of a ramp.
+    float sandShade = 0;
     uint32_t sandEdge = 0;      // theme.road.sandEdge: the band at the road's edge (0 = the edge line)
     float sandSink = 0;         // theme.road.sandSink: how far a tyre sinks into it (deckPoint)
     float kerbW = 0.22f, kerbH = 0.20f;

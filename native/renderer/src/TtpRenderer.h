@@ -3013,8 +3013,10 @@ public:
     // is the theme's. Setting one makes the next scene build a full one; a NaN
     // sets nothing, and either way the answer is what the resident scene was
     // built with.
+    // The last seven are theme.road.dust, in its order.
     enum { kStripStep = kDustKnobs, kStripRutInk, kStripDust, kStripSlope, kStripSink,
-        kStripColor, kStripRut, kStripEdge, kStripShade, kStripKnobsEnd };
+        kStripColor, kStripRut, kStripEdge, kStripShade, kStripDustMul,
+        kStripKnobsEnd = kStripDustMul + 7 };
 private:
     float mStripDebug[kStripKnobsEnd - kDustKnobs] = {};
     bool mStripSet[kStripKnobsEnd - kDustKnobs] = {};
@@ -3022,7 +3024,7 @@ private:
     float mSandDust[kDustKnobs] = {
         60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
     // The track's own dust on top of the knobs (theme.road.dust: its rate, life,
-    // start, end, rise and whiteness as multiples), so snow throws powder and
+    // start, end, rise, whiteness and opacity as multiples), so snow throws powder and
     // sand a cloud off one table. buildSandDraws sets it.
     float mSandDustMul[kDustKnobs] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
     float dustKnob(int k) const { return mSandDust[k] * mSandDustMul[k]; }

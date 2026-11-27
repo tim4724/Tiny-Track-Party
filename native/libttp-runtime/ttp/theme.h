@@ -97,9 +97,11 @@ struct RoadPalette {
   float rutInk = 2.2f;           // how fast a tyre track deepens: crisp in snow, faint in felt
   const char* stripCue = "sand"; // the cue a tyre on it plays (a TTP_CUE_* name)
   float sandSlope = 0;         // how far its outer edge stands over its inner (snow piled to the bank); drawn only
-  // Its dust against the sand's: rate, life, start size, end size, rise and
-  // whiteness, as multiples (snow throws a fine low powder).
-  float dust[6] = { 1, 1, 1, 1, 1, 1 };
+  // Its dust against the sand's: rate, life, start size, end size, rise,
+  // whiteness and opacity, as multiples (snow throws a fine low powder). A
+  // whiteness of 2 is off-white, 0 the strip's own colour, under 0 darker, to
+  // black at -2.
+  float dust[7] = { 1, 1, 1, 1, 1, 1, 1 };
   uint32_t sandEdge = 0;       // the damp or packed band between asphalt and strip; 0 keeps the edge line
   float sandSink = 0;          // world units a tyre sinks into it (loose snow); drawn only
   float sandStep = 0;        // world units the strip stands over (+) or under (-) the asphalt; drawn only

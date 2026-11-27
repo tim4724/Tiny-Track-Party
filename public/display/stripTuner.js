@@ -19,6 +19,15 @@ const KNOBS = [
   ['striprutcolor', 'Tyre mark colour', 'color'],
   ['stripedge', 'Edge band colour', 'color'],
   ['stripshade', 'Slope shade strength', 'num', 0, 12, 0.5],
+  // the cup's dust as multiples of the beach sand's cloud (theme.road.dust)
+  ['stripdustrate', 'Dust amount (x)', 'num', 0, 3, 0.1],
+  ['stripdustlife', 'Dust duration (x)', 'num', 0, 3, 0.1],
+  ['stripduststart', 'Dust puff size at start (x)', 'num', 0, 3, 0.1],
+  ['stripdustend', 'Dust puff size at end (x)', 'num', 0, 3, 0.1],
+  ['stripdustrise', 'Dust rise (x)', 'num', 0, 3, 0.1],
+  // shown as the mix itself: theme.road.dust[5] is twice this over 100
+  ['stripdustwhite', 'Dust tint (%): -100 black, 0 strip colour, 100 white', 'pct', -100, 100, 5],
+  ['stripdustalpha', 'Dust opacity (x)', 'num', 0, 2, 0.1],
 ];
 // [biome, label, the cup that wears it]
 export const BIOMES = [['beach', 'Beach', 'beach'], ['snow', 'Snow', 'snow'], ['grass', 'Backyard', 'backyard'],
@@ -84,7 +93,7 @@ export function stripControls(win, getScene, onChange = () => {}) {
       refresh.push((v) => { input.value = '#' + hex(v); readout.textContent = input.value; });
       row.append(top, input);
     } else {
-      const k = kind === 'cm' ? 100 : 1;
+      const k = kind === 'cm' ? 100 : kind === 'pct' ? 50 : 1;
       input.type = 'range';
       input.min = min; input.max = max; input.step = step;
       input.addEventListener('input', () => {

@@ -1987,6 +1987,7 @@ void TtpRenderer::buildSandDraws(const TrackBin& tb) {
     mSandDustMul[kDustRate] = tb.dustMul[0]; mSandDustMul[kDustLife] = tb.dustMul[1];
     mSandDustMul[kDustStart] = tb.dustMul[2]; mSandDustMul[kDustEnd] = tb.dustMul[3];
     mSandDustMul[kDustRise] = tb.dustMul[4]; mSandDustMul[kDustWhite] = tb.dustMul[5];
+    mSandDustMul[kDustOpacity] = tb.dustMul[6];
     for (uint32_t k = 0; k < mCellRing; k++) {
         mSandVbRing.push_back(VertexBuffer::Builder()
                 .vertexCount(kSandPuffs * kSandPuffVerts)
@@ -2065,7 +2066,10 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
     const float drag = std::exp(-dustKnob(kDustDrag) * dt);
     // Paler than the sand, toward a warm off-white (brighter sand glows yellow):
     // dust in the air is a haze, and sand-coloured dust over sand is invisible.
-    const float3 dustCol = mSandEnc + (float3{ 0.94f, 0.91f, 0.86f } - mSandEnc) * dustKnob(kDustWhite);
+    // A negative whiteness darkens it instead, to black at -1.
+    const float white = std::min(1.0f, std::max(-1.0f, dustKnob(kDustWhite)));
+    const float3 dustCol = white < 0 ? mSandEnc * (1.0f + white)
+            : mSandEnc + (float3{ 0.94f, 0.91f, 0.86f } - mSandEnc) * white;
     size_t live = 0;
     for (SandPuff& p : mSandPuffs) {
         p.age += dt;

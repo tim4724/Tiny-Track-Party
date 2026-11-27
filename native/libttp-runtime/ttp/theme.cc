@@ -130,8 +130,8 @@ Theme grassTheme() {
   // grass read green on green. The road is a flat slab with a sudden drop to
   // it (the user's too), its white edge line kept on top.
   t.road.sand = 0x6f7379; t.road.rut = 0xc4c2be; t.road.rutInk = 1.6f; t.road.stripCue = "sand_gravel";
-  t.road.sandStep = -0.015f;
-  { const float grit[6] = { 0.5f, 0.6f, 0.8f, 0.6f, 0.7f, 1.0f };   // gravel throws little, and briefly
+  t.road.sandStep = -0.03f;
+  { const float grit[6] = { 0.5f, 0.6f, 0.8f, 0.6f, 0.7f, -0.8f };  // gravel throws little, and briefly, darker than itself
     for (int k = 0; k < 6; k++) t.road.dust[k] = grit[k]; }
   t.hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
   // The Backyard is a PLACE, not the default: garden clutter trackside, drifting
@@ -196,6 +196,7 @@ Theme beachTheme() {
   // warmer, as if years of salt sun baked it.
   t.road.asphalt = 0x6c6a74;
   t.road.rutInk = 1.2f;                              // dry sand barely holds a track; its cloud is the tell
+  t.road.dust[5] = 0.8f;                             // ...a shade sandier than the haze it began as (the user's pick)
   deriveRoad(t.road, false, false, false);
   t.structure = 0x9a7b55;  // overpass supports stay timber piles — pier flavour
   t.pier = { PIER_TIMBER, 0, 0, 0x7a5f40, 0, 0 };   // a post under a cap beam
@@ -587,8 +588,8 @@ Theme canyonTheme() {
   t.road.edgeLines = false;
   t.road.shoulder = 0x7d6f5f;
   t.road.kerbA = 0xc06a42; t.road.kerbB = 0xe3cfa4;  // rust / sand
-  t.road.sand = 0xd9a878; t.road.rut = 0xb89e8c; t.road.sandStep = -0.04f; t.road.sandEdge = 0xa9805f; t.road.stripCue = "sand_dirt";     // loose red dirt, a rally shoulder
-  t.road.rutInk = 3.0f; t.road.sandSink = 0.01f;     // soft enough to rut deep
+  t.road.sand = 0xd9a878; t.road.rut = 0xb89e8c; t.road.sandStep = -0.05f; t.road.sandEdge = 0xa9805f; t.road.stripCue = "sand_dirt";     // loose red dirt, a rally shoulder
+  t.road.rutInk = 3.0f; t.road.sandSink = 0.02f;     // soft enough to rut deep
   { const float plume[6] = { 1.3f, 1.4f, 1.1f, 1.4f, 1.2f, 0.8f };   // ...and to hang the biggest cloud
     for (int k = 0; k < 6; k++) t.road.dust[k] = plume[k]; }
   deriveRoad(t.road, /*dashSet=*/true, false, /*shoulderSet=*/true);
@@ -691,10 +692,12 @@ Theme snowTheme() {
   t.road.kerbA = 0xeff4f9; t.road.kerbB = 0xdde7f0;  // whisper-contrast bank pair
   // The powder the plough left: as white as fresh snow, piled up towards the
   // bank (the slope is what lights it apart from the bank), its ruts a cold
-  // blue shadow, dirty slush where it meets the asphalt, and a fine low powder
-  // off the tyres in place of the sand's cloud.
+  // blue shadow, and a fine low powder off the tyres in place of the sand's
+  // cloud. No band at its road edge, the ice-tinted edge line stays: a slush
+  // grey one matched the step's lit face beside it, and the two read as one
+  // ramp up to the snow instead of a step.
   t.road.sand = 0xf0f5fa; t.road.rut = 0xa8bfe8; t.road.rutInk = 3.2f; t.road.stripCue = "sand_snow";
-  t.road.sandStep = 0.05f; t.road.sandSlope = 0.10f; t.road.sandSink = 0.03f; t.road.sandEdge = 0x9aa1a8;
+  t.road.sandStep = 0.03f; t.road.sandSlope = 0.03f; t.road.sandSink = 0.03f;
   { const float powder[6] = { 1.4f, 0.6f, 0.7f, 0.8f, 0.5f, 1.9f };
     for (int k = 0; k < 6; k++) t.road.dust[k] = powder[k]; }
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb
@@ -784,9 +787,9 @@ Theme playroomTheme() {
   t.road.edgeLines = false;    // moulded plastic has no painted lines
   t.road.patched = false;      // nor repairs — a patch on orange plastic is a stain
   t.road.kerbA = 0x3e6ed8; t.road.kerbB = 0x4677e0;  // solid blue snap-on rails
-  t.road.sand = 0x5fae5a; t.road.rut = 0xbfd1bf; t.road.rutInk = 1.0f; t.road.sandStep = 0.03f; t.road.stripCue = "sand_felt";     // a toy race mat's green felt
+  t.road.sand = 0x5fae5a; t.road.rut = 0xbfd1bf; t.road.rutInk = 2.0f; t.road.stripCue = "sand_felt";     // a toy race mat's green felt
   t.road.sandDust = false;                           // felt throws nothing up
-  t.road.sandSink = 0.01f;                           // ...but its pile gives under a tyre
+  t.road.sandSlope = 0.10f;                          // level with the road, rising to the rail (the user's pick)
   t.road.kerbW = 0.26f; t.road.kerbH = 0.26f;        // beefier rail profile
   t.road.skirt = 0xc25e14;     // darker plastic underside/sides
   deriveRoad(t.road, /*dashSet=*/true, /*skirtSet=*/true, false);

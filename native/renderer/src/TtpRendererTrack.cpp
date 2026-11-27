@@ -2875,9 +2875,11 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     if (const float* v = knob(kStripRut)) tb.sandRut = (uint32_t) *v;
     if (const float* v = knob(kStripEdge)) tb.sandEdge = (uint32_t) *v;
     if (const float* v = knob(kStripShade)) tb.sandShade = *v;
+    for (int k = 0; k < 7; k++) if (const float* v = knob(kStripDustMul + k)) tb.dustMul[k] = *v;
     const float built[] = { tb.sandStep, tb.sandRutInk, tb.sandDust ? 1.0f : 0.0f, tb.sandSlope, tb.sandSink,
         (float) tb.pal[7], (float) tb.sandRut, (float) tb.sandEdge, tb.sandShade };
     std::copy(std::begin(built), std::end(built), mStripBuilt);
+    std::copy(tb.dustMul, tb.dustMul + 7, mStripBuilt + (kStripDustMul - kDustKnobs));
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     // THE WORLD KEEPS ITS DISTANCE FROM THE KERB. A set piece and a free
