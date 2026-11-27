@@ -45,7 +45,9 @@ val keystoreProps = sequenceOf(
 
 android {
     namespace = "games.paperballoon.tinytrack"
+    // Compose 1.13 (BOM 2026.11) refuses to build against plain 37; it needs 37.1+.
     compileSdk = 37
+    compileSdkMinor = 2
 
     defaultConfig {
         applicationId = "games.paperballoon.tinytrack"
