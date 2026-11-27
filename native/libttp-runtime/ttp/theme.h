@@ -97,8 +97,9 @@ struct RoadPalette {
   float rutInk = 2.2f;           // how fast a tyre track deepens: crisp in snow, faint in felt
   const char* stripCue = "sand"; // the cue a tyre on it plays (a TTP_CUE_* name)
   float sandSlope = 0;         // how far its outer edge stands over its inner (snow piled to the bank); drawn only
-  // Its dust against the sand's: rate, life, start size, end size, rise,
-  // whiteness and opacity, as multiples (snow throws a fine low powder). A
+  // Its dust against the renderer's authored cloud (TtpRenderer.h
+  // kSandDustAuthored): rate, life, start size, end size, rise, whiteness and
+  // opacity, as multiples. A
   // whiteness of 2 is off-white, 0 the strip's own colour, under 0 darker, to
   // black at -2.
   float dust[7] = { 1, 1, 1, 1, 1, 1, 1 };

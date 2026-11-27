@@ -1137,20 +1137,35 @@ static void stepSession(RuntimeSession* rs, double dtMs) {
   }
   if (rs->showcase == ttp::rt::shot_hold::Showcase::Strip || rs->showcase == ttp::rt::shot_hold::Showcase::StripOn
       || rs->showcase == ttp::rt::shot_hold::Showcase::StripOff) {
-    // Each autopiloted player takes the strip on its right for part of the
-    // loop, mid-strip, wherever the road carries enough of one; the next
-    // driveBots steers for it.
+    // The AI-driven field in formation (shot_hold.h), counted from the back of
+    // the grid, where a preview's player seat starts: car k drives
+    // SHOWCASE_STRIP_GAP_M * k ahead of the back car's place, the back car
+    // mid-lane and the rest alternately nearer the asphalt and nearer the
+    // kerb. On the strip on the right wherever the road carries enough of one,
+    // else on the asphalt's right half. The field runs at the pace of the car
+    // furthest behind its place: every other car brakes back onto its own.
+    // The next driveBots steers and brakes for it.
     namespace sh = ttp::rt::shot_hold;
     rs->showcaseState.stripT += dtMs / 1000;
     const bool out = rs->showcase == sh::Showcase::StripOn
         || (rs->showcase == sh::Showcase::Strip
             && std::fmod(rs->showcaseState.stripT, sh::SHOWCASE_STRIP_CYCLE_S) > sh::SHOWCASE_STRIP_ROAD_S);
-    for (auto& b : rs->bots) {
-      if (!b.player || !b.ai) continue;
-      const Car* car = nullptr;
-      for (const auto& cp : rs->eng->cars()) if (cp->id == b.id) car = cp.get();
-      if (car && out && car->sandR > 1.0) b.ai->holdLane(car->asphaltMid + rs->track.roadWidth / 2 + 0.5 * car->sandR);
-      else b.ai->releaseLane();
+    constexpr double SLACK = 0.3, FULL_BRAKE = 2.0;   // metres past its place: no brake, full brake
+    std::vector<std::pair<AiController*, const Car*>> field;
+    for (auto b = rs->bots.rbegin(); b != rs->bots.rend(); ++b)
+      for (const auto& cp : rs->eng->cars())
+        if (b->ai && cp->id == b->id) field.push_back({b->ai.get(), cp.get()});
+    double pace = INFINITY;
+    for (size_t k = 0; k < field.size(); k++)
+      pace = std::min(pace, field[k].second->totalS - k * sh::SHOWCASE_STRIP_GAP_M);
+    for (size_t k = 0; k < field.size(); k++) {
+      const Car& car = *field[k].second;
+      const double share = k == 0 ? 0.5 : k % 2 ? 0.25 : 0.75;
+      const double lat = out && car.sandR > 1.0
+          ? car.asphaltMid + rs->track.roadWidth / 2 + share * car.sandR
+          : car.asphaltMid + share * rs->eng->maxLat();
+      const double past = car.totalS - k * sh::SHOWCASE_STRIP_GAP_M - pace;
+      field[k].first->holdLane(lat, std::max(0.0, std::min(1.0, (past - SLACK) / (FULL_BRAKE - SLACK))));
     }
     return;
   }
@@ -1405,6 +1420,8 @@ int ttp_item_showcase(int h, const char* kind) {
   if (!rs) return 0;
   rs->showcase = ttp::rt::shot_hold::parseShowcase(kind);
   rs->showcaseState = {};
+  // a strip showcase's lanes go with it; one that stays holds them again next step
+  for (auto& b : rs->bots) if (b.ai) b.ai->releaseLane();
   return 1;
 }
 

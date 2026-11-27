@@ -2984,13 +2984,16 @@ public:
     // The sand dust's look (renderSandSpray), one knob each, in the order of
     // ttp_display_debug_sand_dust. The authored values are these; the display's
     // debug panel moves them live. Each puff varies around its knob's value.
+    // A low cloud: round puffs standing on the deck that barely rise. They
+    // ride along with the car (trail), so the chase camera keeps the cloud at
+    // the tyres; a low cloud left behind sinks out of the frame's bottom.
     enum SandDustKnob {
         kDustRate,      // puffs a second, per rear tyre on the sand, at speed
         kDustLife,      // seconds a puff lasts
         kDustStart,     // its size when it appears
         kDustEnd,       // ...and fully grown
         kDustOpacity,   // its peak alpha
-        kDustFlat,      // height over width
+        kDustFlat,      // its top's height over its width
         kDustTrail,     // the share of the car's speed it starts with
         kDustDrift,     // how fast it drifts outward
         kDustRise,      // ...and upward
@@ -3001,7 +3004,7 @@ public:
         kDustKnobs
     };
     static constexpr float kSandDustAuthored[kDustKnobs] = {
-        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
+        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.85f, 0.8f, 0.3f, 0.04f, 3.0f, 0.5f, 0.7f, 0.8f };
     static float sandDustAuthored(int knob) {
         return knob >= 0 && knob < kDustKnobs ? kSandDustAuthored[knob] : 0.0f;
     }
@@ -3027,7 +3030,7 @@ private:
     // of times after a wheel drops onto a strip or climbs off it.
     float mStripSpring[2] = { 420.0f, 16.0f };
     float mSandDust[kDustKnobs] = {
-        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
+        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.85f, 0.8f, 0.3f, 0.04f, 3.0f, 0.5f, 0.7f, 0.8f };
     // The track's own dust on top of the knobs (theme.road.dust: its rate, life,
     // start, end, rise, whiteness and opacity as multiples), so snow throws powder and
     // sand a cloud off one table. buildSandDraws sets it.

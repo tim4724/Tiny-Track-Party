@@ -102,7 +102,7 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
       ['dustopacity', 'Opacity', 'peak alpha', 0.025, 0.05, 1, (n) => Math.round(n * 100) + '%'],
       ['dustflat', 'Flatness', 'height over width', 0.05, 0.15, 1.5, (n) => n.toFixed(2)],
       ['dusttrail', 'Keeps up', 'share of the car\'s speed a puff starts with', 0.025, 0, 1, (n) => Math.round(n * 100) + '%'],
-      ['dustdrift', 'Spread', 'outward drift', 0.05, 0, 2.5, (n) => n.toFixed(2)],
+      ['dustdrift', 'Spread', 'thrown outward in a turn or slide', 0.05, 0, 2.5, (n) => n.toFixed(2)],
       ['dustrise', 'Rise', 'upward drift', 0.02, 0, 1.5, (n) => n.toFixed(2)],
       ['dustdrag', 'Air drag', 'how fast a puff stops', 0.1, 0, 12, (n) => n.toFixed(1) + '/s'],
       ['dustwhite', 'Whiteness', 'sand colour (0) to off-white (1)', 0.05, 0, 1, (n) => n.toFixed(2)],

@@ -462,6 +462,11 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   hardSteer_ = hard;
   if (slideCorner_ && hard && (car.drifting || canStartSlide(car))) out.b = 1;
   else if (slideCorner_ && car.drifting) out.b = 0;
+  // The strip showcase's pace. A slide spends no speed on the brake, so a
+  // car held back ends its slide and starts none: off the brake on a steer
+  // that would start one, else at least the pace's brake.
+  if (held_ && heldBrake_ > 0)
+    out.b = car.drifting || std::fabs(s) >= DRIFT_START ? 0 : js_max(out.b, heldBrake_);
   return out;
 }
 

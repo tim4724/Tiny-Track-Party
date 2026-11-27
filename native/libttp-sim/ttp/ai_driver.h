@@ -79,13 +79,14 @@ class AiController {
                double skill = 1.0, double mistakes = 1.0);
   Input drive(Car& car, Centerline& centerline, Game& game);
   // The gallery's strip showcase: drive at this lateral offset instead of the
-  // racing line, off the asphalt included, until released. No race sets it.
-  void holdLane(double lat) { held_ = true; heldLat_ = lat; }
+  // racing line, off the asphalt included, and while `brake` > 0 brake at least
+  // that and slide not at all, until released. No race sets it.
+  void holdLane(double lat, double brake) { held_ = true; heldLat_ = lat; heldBrake_ = brake; }
   void releaseLane() { held_ = false; }
 
  private:
   bool held_ = false;
-  double heldLat_ = 0;
+  double heldLat_ = 0, heldBrake_ = 0;
   bool wantsToUse(const std::string& item, Car& car, Game& game, double corner);
   void drawMistakeGap();
 

@@ -419,10 +419,16 @@ export function runDisplayScenario(opts, ctx) {
   // drives are one draw.
   // `?alone=1` — the player seats with no CPU fill: a card about the road
   // itself (the strip cards), where a field would only be in the way.
-  const alone = new URLSearchParams(location.search).get('alone') === '1';
+  // `?bots=<n>` keeps the first n of the fill, the live launch's debug cap
+  // (main.js): a few cars in one view (/gallery-dust.html).
+  const fieldParams = new URLSearchParams(location.search);
+  const botCap = fieldParams.get('alone') === '1' ? 0
+    : fieldParams.has('bots') ? Math.max(0, parseInt(fieldParams.get('bots'), 10) || 0) : Infinity;
   const raceField = () => {
     const f = benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
-    return alone ? { field: f.field.filter((e) => !e.ai), bots: f.bots.filter((b) => b.player) } : f;
+    const kept = new Set(f.field.filter((e) => e.ai).slice(0, botCap).map((e) => e.peerIndex));
+    return { field: f.field.filter((e) => !e.ai || kept.has(e.peerIndex)),
+             bots: f.bots.filter((b) => b.player || kept.has(b.peerIndex)) };
   };
 
   // The lobby demo's shape (buildDemoField): the roster and the CPU fill in

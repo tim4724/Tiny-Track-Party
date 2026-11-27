@@ -131,8 +131,10 @@ Theme grassTheme() {
   // it (the user's too), its white edge line kept on top.
   t.road.sand = 0x6f7379; t.road.rut = 0xc4c2be; t.road.rutInk = 1.6f; t.road.stripCue = "sand_gravel";
   t.road.sandStep = -0.03f;
-  { const float grit[6] = { 0.5f, 0.6f, 0.8f, 0.6f, 0.7f, -0.8f };  // gravel throws little, and briefly, darker than itself
-    for (int k = 0; k < 6; k++) t.road.dust[k] = grit[k]; }
+  // Gravel throws grit: brief, compact and darker than itself (the user's
+  // shade), dense enough to read over the gravel's own grey.
+  { const float grit[7] = { 1.0f, 0.8f, 1.2f, 1.3f, 0.7f, -0.8f, 1.6f };
+    for (int k = 0; k < 7; k++) t.road.dust[k] = grit[k]; }
   t.hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
   // The Backyard is a PLACE, not the default: garden clutter trackside, drifting
   // pollen in the sun, and a hot-air balloon over the meadow. The cup's four
@@ -196,7 +198,11 @@ Theme beachTheme() {
   // warmer, as if years of salt sun baked it.
   t.road.asphalt = 0x6c6a74;
   t.road.rutInk = 1.2f;                              // dry sand barely holds a track; its cloud is the tell
-  t.road.dust[5] = 0.8f;                             // ...a shade sandier than the haze it began as (the user's pick)
+  // ...a big, dense sand cloud: pale dust over pale sand reads by its size,
+  // its opacity and its shading, never its colour. A shade sandier than the
+  // haze it began as (the user's pick).
+  { const float cloud[7] = { 1.2f, 1.2f, 1.2f, 1.4f, 1.0f, 0.8f, 1.4f };
+    for (int k = 0; k < 7; k++) t.road.dust[k] = cloud[k]; }
   deriveRoad(t.road, false, false, false);
   t.structure = 0x9a7b55;  // overpass supports stay timber piles — pier flavour
   t.pier = { PIER_TIMBER, 0, 0, 0x7a5f40, 0, 0 };   // a post under a cap beam
@@ -694,14 +700,13 @@ Theme snowTheme() {
   t.road.kerbA = 0xeff4f9; t.road.kerbB = 0xdde7f0;  // whisper-contrast bank pair
   // The powder the plough left: as white as fresh snow, piled up towards the
   // bank (the slope is what lights it apart from the bank), its ruts a cold
-  // blue shadow, and a fine low powder off the tyres in place of the sand's
-  // cloud. No band at its road edge, the ice-tinted edge line stays: a slush
+  // blue shadow, and nothing thrown up off the tyres (the user's pick over a
+  // fine low powder). No band at its road edge, the ice-tinted edge line stays: a slush
   // grey one matched the step's lit face beside it, and the two read as one
   // ramp up to the snow instead of a step.
   t.road.sand = 0xf0f5fa; t.road.rut = 0xa8bfe8; t.road.rutInk = 3.2f; t.road.stripCue = "sand_snow";
   t.road.sandStep = 0.03f; t.road.sandSlope = 0.03f; t.road.sandSink = 0.015f;
-  { const float powder[6] = { 1.4f, 0.6f, 0.7f, 0.8f, 0.5f, 1.9f };
-    for (int k = 0; k < 6; k++) t.road.dust[k] = powder[k]; }
+  t.road.sandDust = false;
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb
   // The slab's sides and belly a pale concrete, not the asphalt: under a
   // crossing the belly filled the top of the picture in near-black slate.

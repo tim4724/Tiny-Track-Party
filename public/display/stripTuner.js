@@ -19,7 +19,7 @@ const KNOBS = [
   ['striprutcolor', 'Tyre mark colour', 'color'],
   ['stripedge', 'Edge band colour', 'color'],
   ['stripshade', 'Slope shade strength', 'num', 0, 12, 0.5],
-  // the cup's dust as multiples of the beach sand's cloud (theme.road.dust)
+  // the cup's dust as multiples of the renderer's authored cloud (theme.road.dust)
   ['stripdustrate', 'Dust amount (x)', 'num', 0, 3, 0.1],
   ['stripdustlife', 'Dust duration (x)', 'num', 0, 3, 0.1],
   ['stripduststart', 'Dust puff size at start (x)', 'num', 0, 3, 0.1],

@@ -2040,7 +2040,8 @@ void TtpRenderer::buildSandDraws(const TrackBin& tb) {
 // glitch on the kit's tyres (a real one is a tint in the wheels' own shader).
 //
 // The dust answers what the tyre is DOING, because it is the sand's feedback: the
-// outer rear tyre in a turn raises more and spreads it wider, the bite of running
+// outer rear tyre in a turn raises more, a turn or a slide throws it to the
+// outside (a straight throws none sideways), the bite of running
 // onto the sand (the speed it takes off) raises a burst, and a tyre just off the
 // sand trails a little. A puff is lit by the deck under the car, grows wide and
 // low, drifts behind and thins out. It faces the camera following its car; the
@@ -2051,11 +2052,20 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
     // The look's knobs are mSandDust[kDust*] (TtpRenderer.h has them).
     constexpr float SHED = 12.0f;                     // puffs a second off a tyre just off the sand
     constexpr float BODY = 0.65f, RIM = 0.93f;        // a puff's ring radii, as its radius's share
+    constexpr float BELLY = 0.45f;                    // the belly's height, as the top's share
+    constexpr float SUNK = 0.15f;                     // ...and how much of it is under the deck
+    constexpr float BELLY_FADE = 0.75f;               // how far its bottom thins
+    constexpr float LIT = 0.35f, SHADOW = 0.35f;      // the top toward white, the belly toward black
+    constexpr float BASE = -0.2f;                     // the centre, near the deck: a little in shadow
     constexpr float DUST_NEAR = 10.0f;                // world units: full dust within this of a camera
     constexpr float DUST_FAR_SHARE = 0.25f;           // the least of it, however far
     const TtpViewInput* views = ttp_frame_views(&input);
     constexpr float TURN_FULL = 2.0f;                 // rad/s of heading change = a full turn
     constexpr float BITE_FULL = 0.4f;                 // 1/s of normalized speed lost = full bite
+    constexpr float SLIDE_FULL = 0.5f;                // rad of body slip = a full slide
+    // How a turn and a slide throw the dust outward (shares of kDustDrift),
+    // the inner tyre's share of the outer's, and the sideways jitter (u/s).
+    constexpr float THROW_TURN = 1.5f, THROW_SLIDE = 2.0f, INNER_THROW = 0.6f, JITTER = 0.03f;
     constexpr float ON = 5.0f, OFF = 1.4f;            // 1/s: how fast `mSandOn` follows
     const float dt = input.dt;
     const auto rnd = [&](float lo, float hi) {
@@ -2106,6 +2116,10 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
         const float bite = dt > 0
                 ? std::max(0.0f, std::min(1.0f, (mSandPrevSpd[i] - c.spd) / dt / BITE_FULL)) : 0.0f;
         mSandPrevSpd[i] = c.spd;
+        // The outside of the turn (the heading swings toward its centre), and
+        // how far the body slides (a drift's slip or a spin-out's whirl).
+        const float outward = dot(dFwd, right) > 0 ? -1.0f : 1.0f;
+        const float slide = std::min(1.0f, std::fabs(c.spin) / SLIDE_FULL);
         if (!grounded) continue;
         // The deck's light under the car (the car shadow's per-ring term: ambient
         // plus sun, display-encoded), so the dust sits in its light.
@@ -2139,28 +2153,38 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
             // any, so a car straddling the edge shows it on its outer side alone.
             const float tl = dot(pos + tyre - f.pos, f.lat);
             const bool onSand = f.sandOn(tl) > 0 && f.pastAsphalt(tl);
+            // The pose rides the ruled deck; the tyre stands on the strip's step
+            // (a few cm under it on most cups), and so does its dust.
+            const float3 foot = pos + tyre + f.up * mTrack->stripLift(f, tl);
             const float before = on;
             on += ((onSand ? 1.0f : 0.0f) - on) * (1.0f - std::exp(-(onSand ? ON : OFF) * dt));
             const bool shed = !onSand && before > 0.15f;
             if ((!onSand && !shed) || c.spd < 0.1f) { due = 0; continue; }
             // Outer in the turn: the tyre on the far side from the turn's centre.
             const bool outer = dot(tyre, dFwd) < 0;
-            const float side = dot(tyre, right) > 0 ? 1.0f : -1.0f;
             const float mul = onSand
                     ? std::max(0.3f, std::min(2.0f, 0.8f + dustKnob(kDustBite) * bite
                             + (outer ? 1.0f : -0.43f) * dustKnob(kDustTurn) * turn))
                     : SHED / RATE * before;
             due += RATE * std::min(1.0f, c.spd / 0.5f) * mul * lod * dt;
-            const float fan = onSand ? 1.0f + (outer ? 0.8f : -0.3f) * turn : 0.4f;
+            // Thrown sideways only as the car turns or slides, and by BOTH rear
+            // tyres to the outside of the turn: they push the car toward the
+            // turn's centre and so the loose ground the other way, the outer
+            // (loaded) one hardest. On a straight the plume only widens as
+            // its puffs grow, with a little jitter so the two tyres' trails
+            // don't read as two rails.
+            const float throwOut = dustKnob(kDustDrift)
+                    * std::min(2.0f, THROW_TURN * turn + THROW_SLIDE * slide)
+                    * (outer ? 1.0f : INNER_THROW) * (onSand ? 1.0f : 0.4f);
             const float scale = onSand ? 1.0f : 0.6f;
             while (due >= 1.0f && mSandPuffs.size() < kSandPuffs) {
                 due -= 1.0f;
                 SandPuff p;
-                p.pos = pos + tyre - fwd * (r * 0.6f + speed * dt * rnd(0, 1))
-                        + right * (side * rnd(-0.02f, 0.08f));
+                p.pos = foot - fwd * (r * 0.6f + speed * dt * rnd(0, 1))
+                        + right * rnd(-0.03f, 0.03f);
                 const float trail = dustKnob(kDustTrail);
                 p.vel = fwd * (speed * std::max(0.0f, trail + rnd(-0.075f, 0.075f)))
-                        + right * (side * dustKnob(kDustDrift) * rnd(0.5f, 1.5f) * fan)
+                        + right * (outward * throwOut * rnd(0.5f, 1.5f) + rnd(-JITTER, JITTER))
                         + up * (dustKnob(kDustRise) * rnd(0.57f, 1.43f));
                 p.age = 0;
                 p.life = std::max(0.05f, dustKnob(kDustLife) * rnd(0.8f, 1.2f));
@@ -2193,10 +2217,10 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
             // Grows fast and eases out; fades in at once and thins away.
             const float R = p.r0 + (p.r1 - p.r0) * (1.0f - (1.0f - t) * (1.0f - t));
             const float alpha = p.peak * std::min(1.0f, t / 0.08f) * std::pow(1.0f - t, 1.5f);
-            // Wider than tall, its soft bottom just clear of the deck so the ground
-            // never cuts a hard line through it.
-            const float rx = R, ry = R * dustKnob(kDustFlat);
-            const float3 centre = p.pos + float3{ 0, ry * 1.05f + 0.005f, 0 };
+            // A dome on the deck: wide, a rounded top, a short belly that just
+            // dips under it. Lifted clear of the deck whole, it hung in the air.
+            const float rx = R, ry = R * dustKnob(kDustFlat), rb = ry * BELLY;
+            const float3 centre = p.pos + float3{ 0, rb * (1.0f - SUNK) + 0.004f, 0 };
             const float3 toCam = cam - centre;
             float3 ax = cross(float3{ 0, 1, 0 }, toCam);
             ax = dot(ax, ax) > 1e-8f ? normalize(ax) : float3{ 1, 0, 0 };
@@ -2209,17 +2233,20 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
                 return 0.8f + 0.4f * (float) (h >> 16) / 65536.0f;
             };
             Vertex* o = v + d * kSandPuffVerts;
-            // Lit from above: the top of a puff a little lighter than its belly.
+            // Lit from above: the top paler, the belly darker. The form is what
+            // reads where the dust and the ground share a colour (pale sand,
+            // grey gravel).
             const uint32_t lit = p.rgb;
             const auto shade = [&](float k, float a) {
-                const float f = std::min(1.0f, 1.0f + 0.12f * k);
-                const uint32_t r = (uint32_t) std::min(255.0f, (float) (lit & 0xff) * f);
-                const uint32_t g = (uint32_t) std::min(255.0f, (float) ((lit >> 8) & 0xff) * f);
-                const uint32_t b = (uint32_t) std::min(255.0f, (float) ((lit >> 16) & 0xff) * f);
-                return r | (g << 8) | (b << 16)
+                const float dark = 1.0f + std::min(0.0f, k) * SHADOW, pale = std::max(0.0f, k) * LIT;
+                const auto ch = [&](uint32_t c) {
+                    const float x = (float) c * dark;
+                    return (uint32_t) std::min(255.0f, x + (255.0f - x) * pale);
+                };
+                return ch(lit & 0xff) | (ch((lit >> 8) & 0xff) << 8) | (ch((lit >> 16) & 0xff) << 16)
                         | ((uint32_t) std::lround(std::min(1.0f, std::max(0.0f, a)) * 255.0f) << 24);
             };
-            *o++ = { centre.x, centre.y, centre.z, shade(0.3f, alpha) };
+            *o++ = { centre.x, centre.y, centre.z, shade(BASE, alpha) };
             Vertex* rimOut = o + kSandPuffSegs;
             for (uint32_t k = 0; k < kSandPuffSegs; k++) {
                 const float a = (float) k / kSandPuffSegs * 6.2831853f + (float) (p.seed & 7);
@@ -2227,11 +2254,14 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
                 // A body that holds its density most of the way out, then a soft
                 // edge: a lump of dust, not a glow. The edge's last few percent,
                 // nearly transparent, is cut off (RIM) with the alpha the ramp has
-                // there: the same picture, for fewer blended pixels.
-                const float3 m = centre + ax * (ca * rx * BODY * j) + ay * (sa * ry * BODY * j);
-                const float3 e = centre + ax * (ca * rx * RIM * j) + ay * (sa * ry * RIM * j);
-                *o++ = { m.x, m.y, m.z, shade(sa, alpha * 0.92f) };
-                *rimOut++ = { e.x, e.y, e.z, shade(sa, alpha * 0.92f * (1.0f - RIM) / (1.0f - BODY)) };
+                // there: the same picture, for fewer blended pixels. The belly
+                // thins as it goes under, so the deck meets it soft.
+                const float tall = sa > 0 ? ry : rb;
+                const float body = alpha * 0.92f * (1.0f + std::min(0.0f, sa) * BELLY_FADE);
+                const float3 m = centre + ax * (ca * rx * BODY * j) + ay * (sa * tall * BODY * j);
+                const float3 e = centre + ax * (ca * rx * RIM * j) + ay * (sa * tall * RIM * j);
+                *o++ = { m.x, m.y, m.z, shade(sa, body) };
+                *rimOut++ = { e.x, e.y, e.z, shade(sa, body * (1.0f - RIM) / (1.0f - BODY)) };
             }
         }
         mSandVbRing[mSandRingAt]->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(v, vb,
