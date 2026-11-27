@@ -2,13 +2,14 @@
 //
 //   node shells/tvos/scripts/testflight-public.mjs <bundle id> <version> <build>
 //
-// Called by release.yml's tvos job after altool's upload, with the tag and the
-// run number the archive was stamped with. Needs ASC_KEY_ID and ASC_ISSUER_ID,
-// and the key's .p8 where that job (and altool) keep it.
+// Called by release.yml's testflight job once the tvos job has uploaded the
+// build, with the tag and the run number the archive was stamped with. Needs
+// ASC_KEY_ID and ASC_ISSUER_ID, and the key's .p8 at
+// ~/.appstoreconnect/private_keys/AuthKey_<id>.p8, where that job writes it.
 //
 // WHY THIS EXISTS. An upload alone reaches internal testers only. External
 // testers get a build once it is in an external group AND has passed beta app
-// review, and neither step has an altool or xcodebuild verb. Both are App Store
+// review, and neither step has an xcodebuild or altool verb. Both are App Store
 // Connect API calls, signed with the same App Manager key the upload uses.
 //
 // IT WAITS for processing, because a build cannot join a group or be submitted
