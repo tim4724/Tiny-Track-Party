@@ -36,7 +36,7 @@ runs:
 
     - name: Save the compiler cache
       if: github.ref == 'refs/heads/main' && inputs.hit != 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ runner.temp }}/ccache
         key: ${{ inputs.key }}

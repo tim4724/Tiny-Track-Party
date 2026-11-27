@@ -33,7 +33,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Both the upstream repo and the commit we are synced to are READ OUT of
       # docs/partyplug.md rather than repeated here — a stamp this job disagreed with
