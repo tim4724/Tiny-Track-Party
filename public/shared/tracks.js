@@ -828,36 +828,36 @@ export const TRACKS = {
     set: [
       // on a beach rise: on the plain the dead trees' feet and the fallen
       // ones stood under the kerb's line
-      { model: 'set-strand-snags', u: 0.15, lat: -9.5, yaw: 180, y: 0.7 },
-      { model: 'set-driftwood-trunk', u: 0.298, lat: -8.6, yaw: 180 },
-      { model: 'set-strand-line', u: 0.339, lat: -10.2, yaw: 176 },
-      { model: 'set-strand-groynes', u: 0.389, lat: -9.5, yaw: 180 },
-      { model: 'set-bonfire', u: 0.468, lat: -10.2, yaw: 160, y: 0.7 },
-      { model: 'set-driftwood-forts', u: 0.438, lat: -11.0, y: 0.86 },
+      { model: 'set-strand-snags', u: 0.14991, lat: -9.5, yaw: -180, y: 0.7 },
+      { model: 'set-driftwood-trunk', u: 0.29796, lat: -8.6, yaw: 179.72 },
+      { model: 'set-strand-line', u: 0.33949, lat: -10.213, yaw: 175.82 },
+      { model: 'set-strand-groynes', u: 0.39005, lat: -9.5, yaw: 180 },
+      { model: 'set-bonfire', u: 0.46901, lat: -10.2, yaw: 160, y: 0.7 },
+      { model: 'set-driftwood-forts', u: 0.43902, lat: -11, y: 0.86 },
       // the fishers' upturned-boat stores where the pass leaves the beach
-      { model: 'set-boat-huts', u: 0.575, lat: 10.5 },
+      { model: 'set-boat-huts', u: 0.57594, lat: 10.5 },
       // storm fence and marram along the dune pass, a length each side
-      { model: 'set-dune-fence-a', u: 0.655, lat: 9.4 },
-      { model: 'set-dune-fence-b', u: 0.695, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-fence-a', u: 0.65589, lat: 9.4 },
+      { model: 'set-dune-fence-b', u: 0.69587, lat: -9.6, yaw: 180 },
       // marram in drifts up the seaward dunes' faces, the pass's length
-      { model: 'set-dune-marram', u: 0.60, lat: -14.5, yaw: 180 },
-      { model: 'set-dune-marram', u: 0.70, lat: -15, yaw: 0 },
+      { model: 'set-dune-marram', u: 0.60092, lat: -14.5, yaw: 180 },
+      { model: 'set-dune-marram', u: 0.70086, lat: -15, yaw: 0 },
       // the lighthouse's dune at the pass's end, the road through it in a
       // tunnel and the light station on its seaward shoulder, all one piece
       // that carries the road in its own frame (set_prototypes.py
       // DRIFT_ROAD: re-sample it if this u or the road moves)
-      { model: 'set-lighthouse-dune', u: 0.7816, lat: 0 },
+      { model: 'set-lighthouse-dune', u: 0.78242, lat: 0 },
       // the storm's wrack piled on the point where the road turns back
-      { model: 'set-point-wrack', u: 0.852, lat: -10.5, yaw: 180 },
+      { model: 'set-point-wrack', u: 0.8525, lat: -10.498, yaw: -179.66 },
       // ...and a channel buoy the storm threw up beside it, where the road
       // out of the tunnel points; the strand line again along the sea side
       // of the run back to the net huts, which lay bare
-      { model: 'set-storm-buoy', u: 0.87, lat: -10.5, yaw: 180 },
-      { model: 'set-strand-line', u: 0.912, lat: -9.6, yaw: 184 },
+      { model: 'set-storm-buoy', u: 0.87024, lat: -10.501, yaw: -179.93 },
+      { model: 'set-strand-line', u: 0.91205, lat: -9.6, yaw: -176 },
       // storm fence and marram at the dunes' foot on the outside of the bend
       // off the east side (the marram behind the fence is the full tier's)
-      { model: 'set-dune-fence-b', u: 0.215, lat: 9.6 },
-      { model: 'set-dune-marram', u: 0.225, lat: 14.5, lite: false },
+      { model: 'set-dune-fence-b', u: 0.21487, lat: 9.6 },
+      { model: 'set-dune-marram', u: 0.22487, lat: 14.5, lite: false },
       // the smokehouse where the start straight bends away, which it points at
       { model: 'set-smokehouse', u: 0.075, lat: -10.5, yaw: 180 },
       // they level nothing (their gear drapes), so the bank can rise behind
@@ -868,57 +868,57 @@ export const TRACKS = {
       // unroofed on the dune inside the first bend, and a wood the sand
       // and the salt killed beside the east run
       { model: 'set-fish-racks', u: 0.012, lat: 11.5 },
-      { model: 'set-chapel-ruin', u: 0.15, lat: 19 },
-      { model: 'set-ghost-wood', u: 0.31, lat: 15 },
+      { model: 'set-chapel-ruin', u: 0.14991, lat: 19 },
+      { model: 'set-ghost-wood', u: 0.30415, lat: 15.065, yaw: -7.23 },
       // the storm-signal station inside the first bend, the sea
       // defence where the tide comes nearest the east run, and the ship's
       // boxes the storm threw up the strand on the run back to the net huts
       // (there the sand stands at the road's height; before the pass the
       // road climbs off it)
-      { model: 'set-storm-mast', u: 0.10, lat: 10.5 },
-      { model: 'set-storm-armour', u: 0.364, lat: -10.5, yaw: 180 },
+      { model: 'set-storm-mast', u: 0.09993, lat: 10.5, yaw: -0.01 },
+      { model: 'set-storm-armour', u: 0.36348, lat: -10.531, yaw: -177.27 },
       { model: 'set-storm-containers', u: 0.951, lat: -10.5, yaw: 180 },
       // ...and more of them, where the east run comes down to
       // the strand and, still coming ashore, in the surf past the groynes
-      { model: 'set-storm-containers-b', u: 0.245, lat: -10.5, yaw: 180 },
-      { model: 'set-storm-containers-c', u: 0.41, lat: -13.2, yaw: 172.38 },
+      { model: 'set-storm-containers-b', u: 0.24485, lat: -10.5, yaw: 180 },
+      { model: 'set-storm-containers-c', u: 0.41104, lat: -13.201, yaw: 172.38 },
       // ...and, on the dune beside the climb to the pass, the
       // fore half of a coaster the storm broke
-      { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 },
+      { model: 'set-storm-wreck', u: 0.50299, lat: -12.5, yaw: -180 },
       // An old wooden hull the dunes buried and
       // the storm blew bare lies along the pass, and the road runs between
       // her ribs: astride it, where the pass is level and straight and the
       // light station stands in the frame she makes
-      { model: 'set-hull-arch', u: 0.612, lat: 0 },
+      { model: 'set-hull-arch', u: 0.61292, lat: 0 },
       // what is still afloat: the wreck buoy over the coaster's after half
       // off the east strand, and more of the ship's boxes drifting in where
       // the last ones come ashore, just past the surf where the east run
       // points before it turns (further out and along the strand they never
       // came into a racer's picture), half as big again so they read there
-      { model: 'set-wreck-buoy', u: 0.335, lat: -31, yaw: 180 },
-      { model: 'set-storm-adrift', u: 0.422, lat: -20.5, yaw: 180, scale: 1.4 },
+      { model: 'set-wreck-buoy', u: 0.33544, lat: -31.057, yaw: 179.94 },
+      { model: 'set-storm-adrift', u: 0.42303, lat: -20.5, yaw: 180, scale: 1.4 },
       // the wrack along the tide line, between what already lies there
-      { model: 'set-tide-wrack', u: 0.268, lat: -16.5, yaw: 180 },
-      { model: 'set-tide-wrack', u: 0.322, lat: -14.5, yaw: 184 },
-      { model: 'set-tide-wrack', u: 0.352, lat: -15, yaw: 176, lite: false },
-      { model: 'set-tide-wrack', u: 0.405, lat: -14.5, yaw: 180 },
-      { model: 'set-tide-wrack', u: 0.428, lat: -15, yaw: 186, lite: false },
-      { model: 'set-tide-wrack', u: 0.452, lat: -14.5, yaw: 180 },
+      { model: 'set-tide-wrack', u: 0.26785, lat: -16.5, yaw: 179.99 },
+      { model: 'set-tide-wrack', u: 0.32249, lat: -14.513, yaw: -176.55 },
+      { model: 'set-tide-wrack', u: 0.35239, lat: -15.025, yaw: 176.84, lite: false },
+      { model: 'set-tide-wrack', u: 0.40604, lat: -14.501, yaw: -180 },
+      { model: 'set-tide-wrack', u: 0.42903, lat: -15, yaw: -174, lite: false },
+      { model: 'set-tide-wrack', u: 0.45301, lat: -14.5, yaw: -180 },
       // marram along the dunes' feet, which ran down bare to the verge: the
       // start straight's infield and the first bend's, the bank along the
       // east run, both sides of the pass, and the lighthouse dune's foot
       // where the lap comes back past it
       { model: 'set-dune-foot', u: 0.975, lat: 12.6 },
       { model: 'set-dune-foot', u: 0.045, lat: 12.6 },
-      { model: 'set-dune-foot', u: 0.135, lat: 12, lite: false },
-      { model: 'set-dune-foot', u: 0.30, lat: 7.4 },
-      { model: 'set-dune-foot', u: 0.355, lat: 7.4, lite: false },
-      { model: 'set-dune-foot', u: 0.41, lat: 7.4 },
-      { model: 'set-dune-foot', u: 0.572, lat: -9.6, yaw: 180 },
-      { model: 'set-dune-foot', u: 0.648, lat: -9.4, yaw: 180, lite: false },
-      { model: 'set-dune-foot', u: 0.748, lat: -9.6, yaw: 180 },
-      { model: 'set-dune-foot', u: 0.60, lat: 12.8, lite: false },
-      { model: 'set-dune-foot', u: 0.715, lat: 14 },
+      { model: 'set-dune-foot', u: 0.13492, lat: 12, lite: false },
+      { model: 'set-dune-foot', u: 0.29915, lat: 7.443, yaw: -1.53 },
+      { model: 'set-dune-foot', u: 0.35723, lat: 7.825, yaw: 2.64, lite: false },
+      { model: 'set-dune-foot', u: 0.41102, lat: 7.4, yaw: -0.03 },
+      { model: 'set-dune-foot', u: 0.57294, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-foot', u: 0.6489, lat: -9.4, yaw: 180, lite: false },
+      { model: 'set-dune-foot', u: 0.74884, lat: -9.6, yaw: 180 },
+      { model: 'set-dune-foot', u: 0.60093, lat: 12.8, lite: false },
+      { model: 'set-dune-foot', u: 0.71586, lat: 14 },
       { model: 'set-dune-foot', u: 0.915, lat: 9.2 },
       { model: 'set-dune-foot', u: 0.945, lat: 13.2 }
     ],
@@ -928,48 +928,48 @@ export const TRACKS = {
       // adding: ridge heights ADD, and where two crests overlap they stack
       // into a peak. Ends a radius and a half apart, half-crested, keep one
       // height along the line.)
-      { kind: 'ridge', u: 0.53, lat: 23, len: 6, r: 15, h: 2.8, top: 0.6 },
-      { kind: 'ridge', u: 0.62, lat: 28, len: 6, r: 16.5, h: 4.6, top: 0.5 },
-      { kind: 'ridge', u: 0.71, lat: 27, len: 6, r: 16, h: 3.6, top: 0.5 },
-      { kind: 'ridge', u: 0.79, lat: 22, len: 6, r: 14, h: 3.2, top: 0.5 },
-      { kind: 'ridge', u: 0.57, lat: -24, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0x93c47c },
-      { kind: 'ridge', u: 0.66, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0x93c47c },
-      { kind: 'ridge', u: 0.75, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.53097, lat: 23.001, len: 6, r: 15, h: 2.8, top: 0.6 },
+      { kind: 'ridge', u: 0.62091, lat: 28, len: 6, r: 16.5, h: 4.6, top: 0.5 },
+      { kind: 'ridge', u: 0.71086, lat: 27, len: 6, r: 16, h: 3.6, top: 0.5 },
+      { kind: 'ridge', u: 0.79081, lat: 22, len: 6, r: 14, h: 3.2, top: 0.5 },
+      { kind: 'ridge', u: 0.57094, lat: -24.001, yaw: -20, len: 16, r: 19, h: 5.2, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.66089, lat: -26, yaw: 12, len: 20, r: 20, h: 6.4, top: 0.2, near: 3, tint: 0x93c47c },
+      { kind: 'ridge', u: 0.75083, lat: -23, yaw: -25, len: 14, r: 18, h: 4.8, top: 0.2, near: 3, tint: 0x93c47c },
       // one more dune inside the east side, clear of the pass's own. Once
       // a great dune in the middle of the loop lay under three
       // more, which summed into one sharp pyramid seventeen units high over
       // the start straight; the pass's dunes are the loop's high ground now.
-      { kind: 'ridge', u: 0.15, lat: 19, len: 4, r: 15, h: 3.4, top: 0.5 },
+      { kind: 'ridge', u: 0.14991, lat: 19, len: 4, r: 15, h: 3.4, top: 0.5 },
       // a low grassy dune inland of the strand line, the sea side left
       // open: ONE broad form (three small ones run together here added up
       // into a pale peak over the run down to the strand, and a form under
       // a dozen units of radius is a pyramid on the ground's 9 u grid)
-      { kind: 'ridge', u: 0.37, lat: 15, len: 14, r: 13, h: 2.4, top: 0.6, near: 0.5, tint: 0xa8d090 },
+      { kind: 'ridge', u: 0.37186, lat: 15.042, yaw: 1.02, len: 14, r: 13, h: 2.4, top: 0.6, near: 0.5, tint: 0xa8d090 },
       // the grassy bank the net huts back into
       { kind: 'ridge', u: 0.975, lat: -18.5, len: 26, r: 6.5, h: 3, top: 0.3, near: 6.5, tint: 0xa8d090 },
       // marram at the dunes' feet along the pass, a green wash by the kerb
       // where the inland faces were bare sand
-      { kind: 'paint', u: 0.61, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
-      { kind: 'paint', u: 0.73, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
+      { kind: 'paint', u: 0.61092, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
+      { kind: 'paint', u: 0.73085, lat: 12, len: 36, r: 4, w: 5, tint: 0xa8d090 },
       // the fort's and the fire's rise on the strand, at the road's height
       // (a beach rise), running on as a dune beside the climb to the pass,
       // as high as the road until the pass's own dunes take over: ONE rise,
       // since two side by side add where they overlap
-      { kind: 'ridge', u: 0.4765, lat: -15, len: 34.3, r: 12, h: 0.85, h1: 2.75, top: 0.55, near: 0.4, w: 2 },
+      { kind: 'ridge', u: 0.4775, lat: -15, len: 34.3, r: 12, h: 0.85, h1: 2.75, top: 0.55, near: 0.4, w: 2 },
       // nothing seeded on the dunes' faces
-      { kind: 'clear', u: 0.56, lat: 14, len: 40, r: 9.5 },
-      { kind: 'clear', u: 0.67, lat: 14, len: 40, r: 9.5 },
-      { kind: 'clear', u: 0.78, lat: 14, len: 30, r: 9.5 },
-      { kind: 'clear', u: 0.56, lat: -14, len: 40, r: 9.5 },
-      { kind: 'clear', u: 0.67, lat: -14, len: 40, r: 9.5 },
-      { kind: 'clear', u: 0.78, lat: -14, len: 30, r: 9.5 },
+      { kind: 'clear', u: 0.56095, lat: 14, len: 40, r: 9.5 },
+      { kind: 'clear', u: 0.67088, lat: 14, len: 40, r: 9.5 },
+      { kind: 'clear', u: 0.78082, lat: 14, len: 30, r: 9.5 },
+      { kind: 'clear', u: 0.56095, lat: -14, len: 40, r: 9.5 },
+      { kind: 'clear', u: 0.67088, lat: -14, len: 40, r: 9.5 },
+      { kind: 'clear', u: 0.78082, lat: -14, len: 30, r: 9.5 },
       { kind: 'clear', u: 0.99, lat: 14, len: 50, r: 9.5 },
-      { kind: 'clear', u: 0.18, lat: 14, len: 30, r: 9 },
-      { kind: 'clear', u: 0.34, lat: 11, len: 26, r: 6 },
-      { kind: 'clear', u: 0.41, lat: 11, len: 26, r: 6 },
-      { kind: 'ridge', u: 0.15, lat: -16, len: 14, r: 12, h: 0.72, top: 0.55, near: 0.4, w: 3 },
+      { kind: 'clear', u: 0.17989, lat: 14, len: 30, r: 9 },
+      { kind: 'clear', u: 0.35498, lat: 11.249, yaw: 24.39, len: 26, r: 6 },
+      { kind: 'clear', u: 0.41103, lat: 11.001, yaw: -0.01, len: 26, r: 6 },
+      { kind: 'ridge', u: 0.14991, lat: -16, len: 14, r: 12, h: 0.72, top: 0.55, near: 0.4, w: 3 },
       // the chapel's yard, grass among the stones
-      { kind: 'paint', u: 0.15, lat: 19, len: 4, r: 7, w: 4, tint: 0xa8d090 },
+      { kind: 'paint', u: 0.14991, lat: 19, len: 4, r: 7, w: 4, tint: 0xa8d090 },
       // the storm sea comes up the beach to the strand line it left
       { kind: 'shore', u: 0.37, lat: -16.2, len: 110, r: 40 }
     ]

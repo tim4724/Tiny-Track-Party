@@ -36,7 +36,7 @@ const SEEDS = {
   // Beach Cup (Easy)
   tidepool:   { seed: 88,  profile: 'easy', anchor: 47, jumps: [{ wp: 15, amp: 0.65 }, { wp: 45, amp: 0.4 }] },
   cove:       { seed: 250, profile: 'easy', anchor: 0, jumps: [{ wp: 9, amp: 1.0 }, { wp: 42, amp: 0.6 }] },
-  driftwood:  { seed: 138, profile: 'easy', anchor: 5, jumps: [{ wp: 5, amp: 0.55 }, { wp: 19, amp: 0.35 }], level: [44, 45, 46] },
+  driftwood:  { seed: 138, profile: 'easy', anchor: 5, jumps: [{ wp: 5, amp: 0.55 }, { wp: 19, amp: 0.45 }], level: [44, 45, 46] },
   riptide:    { seed: 330, profile: 'easy', anchor: 2, jumps: [{ wp: 6, amp: 1.1 }, { wp: 36, amp: 0.35 }], trestle: [21, 22, 23, 24, 25] },
   // Snow Cup (Medium) — the gentle end of the mid grammar: low brake fraction, no
   // hairpins, roomy min radii, but still crossings, hills and jumps so nothing reads flat.
