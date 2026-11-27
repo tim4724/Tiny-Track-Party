@@ -1188,9 +1188,8 @@ to Play's Android TV open test (`tv:beta`). It is a separate workflow rather tha
 `androidtv.yml` with a keystore because a store build needs the REAL engine, so
 it carries the whole native chain a runner lacks — the pinned Filament fork built
 for both ABIs, the NDK that fork pins, and the host `matc` for the SPIR-V
-material set. That is cached on `filament.pin`, and a manual
-dispatch (which builds but never publishes) is how the cache gets warmed after a
-pin bump.
+material set. That is cached on `filament.pin` and kept warm on `main` by
+`native.yml`'s `release-android-sdk` job.
 
 `versionCode` is pinned at 1 in the build file and overridden per upload with
 `-PttpVersionCode`, because Play refuses a code it has already seen while a

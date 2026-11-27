@@ -685,8 +685,8 @@ re-open them as work.
   too, and it is where its platform's only ObjC++/JNI/glue file first compiles.
 - **Both TV shells publish from `release.yml`, and NEITHER is device-tested by a
   runner.** Its jobs are independent, take the same pin-keyed Filament cache the
-  per-shell workflow warms on `main`, and publish only on a tag — a dispatch
-  builds and hands back an artifact. What a runner cannot do either way is see a
+  per-shell workflow warms on `main`, and run only on a release tag. What a
+  runner cannot do either way is see a
   frame: a hosted macOS runner's paravirtual GPU crashes Filament in the tvOS
   simulator, so the store pictures are the screens gallery's `store` cards,
   captured on a dev machine and committed, and the first machine to render a

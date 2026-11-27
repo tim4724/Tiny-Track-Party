@@ -3,10 +3,9 @@ name: Release
 # What a release needs, in one workflow:
 #
 #   - the signed store build (leanback REQUIRED), kept as a workflow artifact
-#     and, on a release tag, published to Play's tv:beta, the Android TV open
-#     test.
-#   - the Apple TV build, archived, uploaded to App Store Connect and, on a
-#     release tag, sent to the public TestFlight link.
+#     and published to Play's tv:beta, the Android TV open test.
+#   - the Apple TV build, archived, uploaded to App Store Connect and sent to
+#     the public TestFlight link.
 #
 # NOT the store screenshots: those are the `store` cards of the screens gallery,
 # captured on a dev machine and committed (public/shared/galleryScenarios.js),
@@ -21,20 +20,25 @@ name: Release
 # CACHED ON THE PIN — .github/actions/filament-android-sdk for Android, the
 # Filament steps of the tvos job for Apple TV.
 #
-# Triggers: a bare-semver release tag (the repo's tag convention) or manual
-# dispatch. Never pull_request, so the signing secrets are only reachable by
+# Trigger: a bare-semver release tag (the repo's tag convention), and nothing
+# else — no manual run either, so a change to this pipeline is tested by cutting
+# a patch tag. Never pull_request, so the signing secrets are only reachable by
 # people who can push.
+#
+# RECOVERY. Each store upload is the last step of its job, so a failed upload
+# has used up no version code or build number, and "Re-run failed jobs" is the
+# retry — the testflight job's too, which only talks to App Store Connect. A
+# fix needs a new patch tag: a re-run runs the tagged commit's workflow file.
 #
 # THE CACHES ARE WARMED ON MAIN, by the workflows a filament.pin bump already
 # runs: native.yml's release-android-sdk job builds and saves the Android SDK
 # under the key this restores, and tvos.yml does the same for the tvOS one.
 # Caches written on the default branch are what tag runs restore, and both
 # workflows run on a schedule, which keeps the caches read inside the week
-# GitHub keeps an unread one. A dispatch is still the end-to-end test: it
-# builds and uploads the bundle but never publishes.
+# GitHub keeps an unread one.
 #
-# Secrets (Settings > Environments > release, which admits only main and
-# release tags, so no other branch can read them):
+# Secrets (Settings > Environments > release, which admits only release tags,
+# so no branch can read them):
 #   ANDROID_KEYSTORE_B64       base64 of the upload keystore .jks
 #   ANDROID_KEYSTORE_PASSWORD  keystore store password
 #   ANDROID_KEY_ALIAS          key alias (tinytrack-tv)
@@ -49,7 +53,6 @@ on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
-  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -99,12 +102,8 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -eu
           for v in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "$(eval "echo \"\$$v\"")" ]; then
-              echo "::error::secret $v is not set"
-              exit 1
-            fi
+            [ -n "${!v}" ] || { echo "::error::Secret $v is not set"; exit 1; }
           done
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
           cat > shells/androidtv/keystore.properties <<EOF
@@ -124,19 +123,14 @@ jobs:
       # it, and Play refuses a code it has seen on ANY track. Keeping the odd
       # half keeps every new code above all of those; a plainer formula would
       # restart below them. +100 still reserves the band below for bundles
-      # built and uploaded by hand, of which there are four. Tag builds take
-      # their versionName from the tag, a dispatch keeps build.gradle.kts's
-      # commit-stamped default. All of it is a command-line override: the
-      # static values in the build file stay put.
+      # built and uploaded by hand, of which there are four. The tag is the
+      # versionName. Both are command-line overrides: the static values in the
+      # build file stay put.
       - name: Build the release bundle (.aab)
         working-directory: shells/androidtv
         run: |
-          set -eu
-          ARGS=(--console=plain --stacktrace "-PttpVersionCode=$((GITHUB_RUN_NUMBER * 2 + 101))")
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            ARGS+=("-PttpVersionName=$GITHUB_REF_NAME")
-          fi
-          ./gradlew bundleRelease "${ARGS[@]}"
+          ./gradlew bundleRelease --console=plain --stacktrace \
+            "-PttpVersionCode=$((GITHUB_RUN_NUMBER * 2 + 101))" "-PttpVersionName=$GITHUB_REF_NAME"
 
       # THE FALLBACK'S GUARD RAIL. app/build.gradle.kts signs with the debug key
       # when keystore.properties is absent or unreadable, which is what keeps the
@@ -151,19 +145,18 @@ jobs:
       # in — the other subcommands translate theirs.
       - name: Verify the release signature
         env:
+          AAB: ${{ env.TV_AAB }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          set -eu
           want=$(keytool -exportcert -keystore "$RUNNER_TEMP/upload-keystore.jks" \
               -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -rfc |
             keytool -printcert | grep -m1 'SHA256:' | tr -d ' ')
+          got=$(keytool -printcert -jarfile "$AAB" | grep -m1 'SHA256:' | tr -d ' ')
           echo "keystore $want"
-          [ -f "$TV_AAB" ] || { echo "::error::$TV_AAB was not built"; exit 1; }
-          got=$(keytool -printcert -jarfile "$TV_AAB" | grep -m1 'SHA256:' | tr -d ' ')
-          echo "$(basename "$TV_AAB") $got"
+          echo "bundle   $got"
           if [ -z "$got" ] || [ "$want" != "$got" ]; then
-            echo "::error::$TV_AAB is not signed with the upload key"
+            echo "::error::$AAB is not signed with the upload key"
             exit 1
           fi
 
@@ -187,14 +180,6 @@ jobs:
           path: native/build/android-symbols/
           if-no-files-found: error
 
-      # TAGS ONLY, unlike the artifact above. A dispatch is a build — the
-      # end-to-end test and the cache warmer — and a build is not a release, so
-      # it must not be able to put anything in front of a tester. Dispatch means
-      # "build it and hand me the artifact"; pushing the tag is the only thing
-      # that publishes. The gate is the EVENT, because a dispatch can be pointed
-      # at a tag and ref_type says 'tag' there too. `on: push` admits release
-      # tags alone.
-      #
       # "tv:" is the Android TV form factor prefix, and the form factor is the
       # one part of this that has NO API: androidpublisher v3 has no form-factor
       # resource, and TrackConfig.formFactor enumerates DEFAULT, WEAR and
@@ -211,22 +196,39 @@ jobs:
       # and the draft gate has to come back. mapping.txt goes with it or every
       # crash report from an R8 build is unreadable.
       #
-      # NOT RE-RUNNABLE: GITHUB_RUN_NUMBER does not change on a re-run, so the
-      # code comes out identical and Play refuses it as already used. Recover
-      # by moving the tag, not by pressing re-run.
+      # A commit while other changes are in review cancels that review and
+      # resubmits everything together (Play's default; the action has no switch
+      # for it), so don't tag while a production release is in review.
       - name: Publish TV bundle to Play (tv:beta)
-        if: github.event_name == 'push'
+        id: play
+        continue-on-error: true
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: games.paperballoon.tinytrack
           releaseFiles: ${{ env.TV_AAB }}
           mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
-          track: tv:beta
+          tracks: tv:beta
           status: completed
 
-  # THE APPLE TV STORE BUILD: archive, export, validate, and — on a tag only —
-  # upload to App Store Connect and send to the public TestFlight link.
+      # While the app has an open rejection, Play refuses an edit that sends
+      # itself for review. The release still lands, held until someone presses
+      # "Send for review" in Play Console, where it joins whatever else is
+      # waiting there.
+      - name: Publish TV bundle to Play, held for review in the console
+        if: steps.play.outcome == 'failure'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: games.paperballoon.tinytrack
+          releaseFiles: ${{ env.TV_AAB }}
+          mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
+          tracks: tv:beta
+          status: completed
+          changesNotSentForReview: true
+
+  # THE APPLE TV STORE BUILD: archive and upload to App Store Connect. The
+  # testflight job after it sends the build to the public TestFlight link.
   #
   # WHY THIS IS NOT tvos.yml WITH A CERTIFICATE. That leg builds the SIMULATOR
   # slice unsigned, because it runs on pull requests where secrets must not be
@@ -241,11 +243,11 @@ jobs:
   # NO TRACKS, unlike Play. Apple has no track concept: an accepted upload
   # processes and is then available to internal TestFlight testers, and the
   # public link's testers get it once it is in that link's group and has passed
-  # beta app review — the last step below. So there is nothing here that
+  # beta app review — the testflight job below. So there is nothing here that
   # corresponds to the tv:beta track above, and no status to choose.
   #
-  # Secrets (Settings > Environments > release, which admits only main and
-  # release tags, so no other branch can read them):
+  # Secrets (Settings > Environments > release, which admits only release tags,
+  # so no branch can read them):
   #   APPLE_DIST_CERT_P12_B64   base64 of an Apple Distribution certificate +
   #                             private key, exported from Keychain as .p12
   #   APPLE_DIST_CERT_PASSWORD  the password that .p12 was exported with
@@ -273,7 +275,7 @@ jobs:
   # during one. The names above are a contract with shells/tvos/project.yml,
   # which selects them by PROVISIONING_PROFILE_SPECIFIER.
   tvos:
-    runs-on: macos-latest
+    runs-on: xcode-27
     environment: release
     # A cache miss means building Filament for two tvOS SDKs plus the partial
     # desktop build it needs for matc. The cap is the job limit, not an
@@ -281,18 +283,32 @@ jobs:
     timeout-minutes: 360
     env:
       ARCHIVE: ${{ github.workspace }}/build/TinyTrackParty.xcarchive
-      EXPORT_DIR: ${{ github.workspace }}/build/export
-      IPA: ${{ github.workspace }}/build/export/TinyTrackParty.ipa
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Read the Filament pin
+      # The Xcode local builds use, and the one tvos.yml builds and warms the
+      # Filament cache with.
+      - name: Select latest stable Xcode 27
+        run: |
+          # Real bundles only (the image's Xcode_27.2.app is a symlink to a beta), no
+          # betas, newest by the bundle's own version (the RC folder name sorts badly).
+          XCODE="$(find /Applications -maxdepth 1 -type d -name 'Xcode_27*.app' ! -name '*beta*' \
+            | while read -r x; do echo "$(defaults read "$x/Contents/Info" CFBundleShortVersionString) $x"; done \
+            | sort -V | tail -1 | cut -d' ' -f2-)"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+
+      # The Xcode major is part of the cache key, as in tvos.yml.
+      - name: Read the Filament pin and the Xcode major
         id: pin
         run: |
           set -eu
           . native/filament.pin
-          echo "commit=$FILAMENT_COMMIT" >> "$GITHUB_OUTPUT"
-          echo "remote=$FILAMENT_REMOTE" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit=$FILAMENT_COMMIT"
+            echo "remote=$FILAMENT_REMOTE"
+            echo "xcode=$(xcodebuild -version | sed -n 's/^Xcode \([0-9]*\).*/\1/p')"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -335,7 +351,7 @@ jobs:
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
             ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
-          key: filament-tvos-${{ steps.pin.outputs.commit }}
+          key: filament-tvos-xcode${{ steps.pin.outputs.xcode }}-${{ steps.pin.outputs.commit }}
 
       - name: Build the Filament tvOS SDK (pin bump only)
         if: steps.filament-cache.outputs.cache-hit != 'true'
@@ -361,20 +377,17 @@ jobs:
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
             ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
-          key: filament-tvos-${{ steps.pin.outputs.commit }}
+          key: filament-tvos-xcode${{ steps.pin.outputs.xcode }}-${{ steps.pin.outputs.commit }}
 
-      # A THROWAWAY KEYCHAIN, deleted in the always() step at the bottom. The
-      # import needs -T for each tool allowed to use the key AND the partition
-      # list set afterwards, or codesign blocks on a UI prompt that no runner can
-      # answer and the job hangs until its timeout.
-      #
-      # The .p8 goes to ~/.appstoreconnect/private_keys/AuthKey_<id>.p8 because
-      # that is one of the four locations altool searches by name; there is no
-      # flag that takes a path.
+      # A THROWAWAY KEYCHAIN, discarded with the runner. The import needs -T for
+      # each tool allowed to use the key AND the partition list set afterwards,
+      # or codesign blocks on a UI prompt that no runner can answer and the job
+      # hangs until its timeout.
       #
       # The preflight loop is the Android job's, for the same reason: an empty
       # secret otherwise fails deep inside xcodebuild with a signing error that
-      # reads like a project defect.
+      # reads like a project defect. It checks the upload's key too, so a missing
+      # one fails here and not after the archive.
       - name: Materialize the signing identity from secrets
         env:
           APPLE_DIST_CERT_P12_B64: ${{ secrets.APPLE_DIST_CERT_P12_B64 }}
@@ -390,10 +403,7 @@ jobs:
           for v in APPLE_DIST_CERT_P12_B64 APPLE_DIST_CERT_PASSWORD APPLE_TEAM_ID \
                    ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_B64 \
                    APPLE_PROFILE_APP_B64 APPLE_PROFILE_TOPSHELF_B64; do
-            if [ -z "$(eval "echo \"\$$v\"")" ]; then
-              echo "::error::secret $v is not set"
-              exit 1
-            fi
+            [ -n "${!v}" ] || { echo "::error::Secret $v is not set"; exit 1; }
           done
 
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -432,18 +442,7 @@ jobs:
             rm -f "$f"
           done
 
-          KEYDIR="$HOME/.appstoreconnect/private_keys"
-          mkdir -p "$KEYDIR"
-          echo "$ASC_KEY_P8_B64" | base64 --decode > "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
-          chmod 600 "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
-
-          # No ASC_KEY_PATH: nothing takes the key by path any more. altool
-          # locates it by id under the directory above, and the archive and
-          # export no longer authenticate at all.
-          {
-            echo "KEYCHAIN=$KEYCHAIN"
-            echo "DEVELOPMENT_TEAM=$APPLE_TEAM_ID"
-          } >> "$GITHUB_ENV"
+          echo "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
 
       # Engine (device slice), Metal materials, staged bundle, xcodegen. NOT
       # build.sh — that one owns its own xcodebuild with a `build` verb, and this
@@ -466,14 +465,11 @@ jobs:
       # appex's alike, because App Store Connect rejects an extension that
       # disagrees with its host.
       #
-      # THIS IS NOT RE-RUNNABLE, the same trap the Play upload has:
-      # GITHUB_RUN_NUMBER does not change on a re-run, so a second attempt
-      # presents a build number the store has already seen. Recover by moving the
-      # tag, not by pressing re-run.
+      # GITHUB_RUN_NUMBER does not change on a re-run, so a re-run presents the
+      # same build number: fine after a failed upload, which used none up.
       #
-      # A tag build takes its MARKETING_VERSION from the tag; a dispatch keeps
-      # project.yml's default. Both are command-line overrides — the values in
-      # the spec stay put.
+      # The tag is the MARKETING_VERSION. Both are command-line overrides — the
+      # values in the spec stay put.
       - name: Archive
         run: |
           set -eu
@@ -483,31 +479,44 @@ jobs:
           # deliberately does not use, and would need an Admin key again.
           # The scheme archives Release, which is the only config project.yml
           # puts manual signing on.
-          ARGS=(-project shells/tvos/TinyTrackParty.xcodeproj -scheme TinyTrackParty
-                -destination 'generic/platform=tvOS' -archivePath "$ARCHIVE"
-                "DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
-                "CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER")
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            ARGS+=("MARKETING_VERSION=$GITHUB_REF_NAME")
-          fi
-          xcodebuild "${ARGS[@]}" archive
+          xcodebuild -project shells/tvos/TinyTrackParty.xcodeproj -scheme TinyTrackParty \
+            -destination 'generic/platform=tvOS' -archivePath "$ARCHIVE" \
+            "DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM" \
+            "CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER" "MARKETING_VERSION=$GITHUB_REF_NAME" \
+            archive
+
+      # Keep the debug symbols with the build, needed to symbolicate crash
+      # reports for exactly this binary once the .ipa itself lives in TestFlight.
+      # Before the upload, which stays the job's last step.
+      - name: Upload the dSYMs artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tinytrack-tvos-dsyms
+          path: ${{ env.ARCHIVE }}/dSYMs
+          if-no-files-found: error
 
       # method: app-store-connect is the Xcode 15.3+ name for what used to be
-      # `app-store`. destination stays `export` — the .ipa is uploaded by the
-      # explicit altool step below rather than by xcodebuild, so that a
-      # validation failure and an upload failure are two different red steps.
+      # `app-store`. destination=upload: exporting the archive sends it to App
+      # Store Connect, which validates it on the way in. The key flags are for
+      # that upload alone — signing stays manual, so an App Manager key is still
+      # enough.
       #
       # Generated rather than checked in: the only thing in it that varies is the
       # team id, and a committed copy would be a second source for it.
-      - name: Export the .ipa
+      - name: Upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
         run: |
           set -eu
+          echo "$ASC_KEY_P8_B64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>export</string>
+            <key>destination</key><string>upload</string>
             <key>teamID</key><string>$DEVELOPMENT_TEAM</string>
             <key>signingStyle</key><string>manual</string>
             <key>signingCertificate</key><string>Apple Distribution</string>
@@ -524,54 +533,34 @@ jobs:
           PLIST
           xcodebuild -exportArchive -archivePath "$ARCHIVE" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$EXPORT_DIR"
-          ls -l "$EXPORT_DIR"
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-      # BEFORE the upload, and on every run including a dispatch. Store-side
-      # rejections (ITMS-*) are the ones that cost a tag, and validation reports
-      # them while the artifact is still only an artifact.
-      - name: Validate with App Store Connect
-        run: |
-          set -eu
-          xcrun altool --validate-app -f "$IPA" -t tvos \
-            --apiKey "${{ secrets.ASC_KEY_ID }}" --apiIssuer "${{ secrets.ASC_ISSUER_ID }}"
-
-      # Before publishing, so an upload rejection still leaves the build
-      # downloadable from the run.
-      - name: Upload the .ipa artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+  # Waits for Apple's processing, then adds the build to the "Public" group and
+  # submits it for beta app review; the script's header says why that is not an
+  # xcodebuild verb. The review itself takes hours and is not waited on. Its own
+  # job on a cheap runner, since it mostly waits, and so "Re-run failed jobs"
+  # retries it alone with the build number the upload used.
+  testflight:
+    needs: tvos
+    runs-on: ubuntu-latest
+    environment: release
+    # The script gives up on processing after an hour.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Node builtins only: no npm ci.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          name: tinytrack-tvos-ipa
-          path: ${{ env.IPA }}
-          if-no-files-found: error
-
-      # TAGS ONLY, for the reason the Play steps give: a dispatch is a build —
-      # the end-to-end test and the cache warmer — and a build is not a release.
-      - name: Upload to App Store Connect
-        if: github.event_name == 'push'
-        run: |
-          set -eu
-          xcrun altool --upload-app -f "$IPA" -t tvos \
-            --apiKey "${{ secrets.ASC_KEY_ID }}" --apiIssuer "${{ secrets.ASC_ISSUER_ID }}"
-
-      # Waits for Apple's processing, then adds the build to the "Public" group
-      # and submits it for beta app review; the script's header says why that
-      # is not an altool verb. The review itself takes hours and is not waited
-      # on. A failure here comes AFTER the upload, so do not move the tag: run
-      # the script by hand with the same three arguments.
+          node-version-file: .nvmrc
       - name: Send the build to the public TestFlight link
-        if: github.event_name == 'push'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
         run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_KEY_P8_B64" | base64 --decode > ~/.appstoreconnect/private_keys/"AuthKey_$ASC_KEY_ID.p8"
           node shells/tvos/scripts/testflight-public.mjs games.paperballoon.tinytrack \
             "$GITHUB_REF_NAME" "$GITHUB_RUN_NUMBER"
-
-      # always(), because a failed run that leaves a certificate and an API key
-      # on the runner is the one outcome worth preventing unconditionally.
-      - name: Remove the signing identity
-        if: always()
-        run: |
-          rm -f "$HOME/.appstoreconnect/private_keys"/AuthKey_*.p8
-          [ -n "${KEYCHAIN:-}" ] && security delete-keychain "$KEYCHAIN" || true

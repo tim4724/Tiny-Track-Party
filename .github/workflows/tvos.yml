@@ -103,20 +103,35 @@ permissions:
 
 jobs:
   app:
-    runs-on: macos-latest
+    runs-on: xcode-27
     # A cache miss means building Filament for two tvOS SDKs plus the partial
     # desktop build it needs for matc. A hit finishes in minutes.
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Read the Filament pin
+      # The Xcode release.yml ships with, which is what makes the Filament
+      # cache this job warms the one a release can restore.
+      - name: Select latest stable Xcode 27
+        run: |
+          # Real bundles only (the image's Xcode_27.2.app is a symlink to a beta), no
+          # betas, newest by the bundle's own version (the RC folder name sorts badly).
+          XCODE="$(find /Applications -maxdepth 1 -type d -name 'Xcode_27*.app' ! -name '*beta*' \
+            | while read -r x; do echo "$(defaults read "$x/Contents/Info" CFBundleShortVersionString) $x"; done \
+            | sort -V | tail -1 | cut -d' ' -f2-)"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+
+      - name: Read the Filament pin and the Xcode major
         id: pin
         run: |
           set -eu
           . native/filament.pin
-          echo "commit=$FILAMENT_COMMIT" >> "$GITHUB_OUTPUT"
-          echo "remote=$FILAMENT_REMOTE" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit=$FILAMENT_COMMIT"
+            echo "remote=$FILAMENT_REMOTE"
+            echo "xcode=$(xcodebuild -version | sed -n 's/^Xcode \([0-9]*\).*/\1/p')"
+          } >> "$GITHUB_OUTPUT"
 
       # xcodegen is not in the runner image. ninja is, but naming it costs
       # nothing and build-runtime-tvos.sh fixes -G Ninja for the life of the
@@ -130,10 +145,12 @@ jobs:
             brew list --formula "$f" >/dev/null 2>&1 || brew install "$f"
           done
 
-      # KEYED ON THE PIN AND NOTHING ELSE, and no restore-keys: a near-miss
+      # KEYED ON THE PIN AND THE XCODE MAJOR, and no restore-keys: a near-miss
       # would restore a DIFFERENT Filament's headers and libs, and a
       # MATERIAL_VERSION mismatch surfaces as a material that fails to parse on
-      # the television, not as a build error.
+      # the television, not as a build error. The Xcode major keeps a release
+      # from linking libraries an older toolchain built; a new one costs a
+      # single cold build here, on main.
       #
       # THE INSTALL TREES ONLY, never out/cmake-tvos-*. Two reasons, and both
       # matter: ~72 MB instead of gigabytes, and no CMakeCache.txt for
@@ -158,7 +175,7 @@ jobs:
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
             ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
-          key: filament-tvos-${{ steps.pin.outputs.commit }}
+          key: filament-tvos-xcode${{ steps.pin.outputs.xcode }}-${{ steps.pin.outputs.commit }}
 
       # OUTSIDE THE WORKSPACE, like release.yml's: a 1.6 GB tree inside the repo
       # makes every `git status --porcelain` dirty, and build.sh stamps that
@@ -222,7 +239,7 @@ jobs:
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
             ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
-          key: filament-tvos-${{ steps.pin.outputs.commit }}
+          key: filament-tvos-xcode${{ steps.pin.outputs.xcode }}-${{ steps.pin.outputs.commit }}
 
       # THE SHIPPING SLICE, and it is not the one the app build below produces.
       # Apple TV device and simulator are both arm64, so they are separate

@@ -70,13 +70,10 @@ settings:
     # CURRENT_PROJECT_VERSION and the release tag as MARKETING_VERSION, the same
     # shape as Android's -PttpVersionCode / -PttpVersionName.
     #
-    # WHICH BUILD ACTUALLY SEES THESE differs between the two, and the asymmetry
-    # is deliberate: release.yml overrides CURRENT_PROJECT_VERSION on EVERY run,
-    # tag and dispatch alike, because App Store Connect refuses a build number it
-    # has already seen — while MARKETING_VERSION is overridden only by a tag, so
-    # a dispatch ships the value below. A build outside that workflow keeps both:
-    # a local xcodebuild, or tvos.yml's simulator leg, which sets neither.
-    # Nothing here needs editing to cut a release.
+    # Only release.yml, which runs on a release tag, overrides them. A build
+    # outside that workflow keeps both values below: a local xcodebuild, or
+    # tvos.yml's simulator leg, which sets neither. Nothing here needs editing
+    # to cut a release.
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
   # MANUAL SIGNING, AND ONLY FOR RELEASE. Two separate reasons, and both matter:
