@@ -811,7 +811,7 @@ void ttp_audio_frame(double nowMs) {
     a.spin = c.spin;
     a.monster = c.monsterT > 0;
     a.onWall = c.onWall;
-    a.onSand = c.onSand;
+    a.strip = eng->stripShare(c);
     a.drift = c.driftMix;
     a.air = c.h;
     a.airRate = c.vh;

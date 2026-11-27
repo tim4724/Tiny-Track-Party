@@ -328,6 +328,10 @@ class Game {
   // rectangle the sim collides with.
   struct HalfExtents { double len, wid; };
   HalfExtents halfExtents(const Car& c) const;
+  // The share of the car's four wheels over a road strip (0, 1/4 .. 1): a
+  // wheel is on it past the asphalt's edge on its side. For the strip's
+  // sound; the sim's own `onSand` (the slow-down) asks where the centre is.
+  double stripShare(const Car& c) const;
 
  private:
   Car* find(const Id& id) const;

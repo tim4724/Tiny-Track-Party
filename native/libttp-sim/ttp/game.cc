@@ -517,6 +517,24 @@ Game::HalfExtents Game::halfExtents(const Car& c) const {
   return {c.halfLen, c.halfWid};
 }
 
+// The wheels as shares of the half-extents: the track and the wheelbase.
+static const double WHEEL_TRACK = 0.85, WHEEL_BASE = 0.7;
+double Game::stripShare(const Car& c) const {
+  if (!centerline_ || c.h >= AIR_MIN) return 0;
+  const Frame f = centerline_->sampleAt(c.totalS);
+  if (!(f.sandL > 0) && !(f.sandR > 0)) return 0;
+  const HalfExtents e = halfExtents(c);
+  const double yaw = bodyYaw(c), across = e.wid * WHEEL_TRACK * dmath::cos(yaw),
+               along = e.len * WHEEL_BASE * dmath::sin(yaw);
+  int on = 0;
+  for (const double a : { -across, across })
+    for (const double b : { -along, along }) {
+      const double lat = c.lat + a + b;
+      if (std::fabs(lat - f.asphaltMid()) > f.asphaltHalf() && f.sandOn(lat) > 0) on++;
+    }
+  return on / 4.0;
+}
+
 // The yaw the body is DRAWN at, and so the one it collides at: the heading plus
 // the drift's slip. The slip is cosmetic to the travel but not to the shape —
 // at full slide it swings the tail about 13 cm past the heading's rectangle,
