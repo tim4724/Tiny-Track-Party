@@ -120,13 +120,14 @@ export function initFeedback({ buzz, onToggle }) {
 }
 
 // Called with every results board. The question shows on the board that ends
-// the cup, once the TV has told the room how it went, and only to a phone that
-// had a car in it (`meId`'s row). `cup` is what the form needs to know about
-// it: { cupId, cupName, car }.
+// the cup as soon as it lands, and only to a phone that had a car in it
+// (`meId`'s row). It deliberately ignores `settled`: that gate keeps the cup
+// STANDING off the phone, which the question never mentions. `cup` is what the
+// form needs to know about it: { cupId, cupName, car }.
 export function syncFeedbackAsk(board, roomState, meId, cup) {
   const s = board.series;
   const landed = !!(board.over && roomState === ROOM_STATE.RESULTS);
-  const final = landed && (!s || (s.final && board.settled));
+  const final = landed && (!s || s.final);
   const ask = final && (board.order || []).some((o) => o.playerId === meId && !o.joining);
   if (ask) ctx = cup;
   el('results').classList.toggle('results--ask', ask);
@@ -184,8 +185,16 @@ export function openPane(name) {
 
 const hasAnswer = () => !!answers.fun;
 
+// What was just played, in words that read: "Random" is a series name, not
+// something you can say "the" in front of.
+function formTitle() {
+  if (!ctx || !ctx.cupName) return 'How was that race?';
+  if (ctx.cupId === 'random') return 'How were those races?';
+  return `How was the ${ctx.cupName}?`;
+}
+
 function render() {
-  el('fb-title').textContent = ctx && ctx.cupName ? `How was the ${ctx.cupName}?` : 'How was that?';
+  el('fb-title').textContent = formTitle();
   for (const group of el('fb-form').querySelectorAll('[data-set]')) {
     const value = answers[group.dataset.set];
     for (const opt of group.children) opt.setAttribute('aria-checked', String(String(value) === opt.dataset.value));

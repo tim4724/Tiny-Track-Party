@@ -53,12 +53,13 @@ const fits = (engine) => { for (const vp of SHORT) {
 } };
 fits('chromium');
 
-test('no question before the cup is settled, or between its races', async ({ page }) => {
-  for (const scenario of ['cup-podium', 'intermission']) {
-    await page.goto(`/controller/index.html?scenario=${scenario}&color=0`);
-    await expect(page.locator('#result-me')).toBeVisible();
-    await expect(page.locator('#result-ask')).toBeHidden();
-  }
+test('the last board asks before the TV\'s reveal settles; a board between races never asks', async ({ page }) => {
+  await page.goto('/controller/index.html?scenario=cup-podium&color=0');
+  await expect(page.locator('#results-title')).toHaveText('Race 4 of 4');
+  await expect(page.locator('#result-ask')).toBeVisible();
+  await page.goto('/controller/index.html?scenario=intermission&color=0');
+  await expect(page.locator('#result-me')).toBeVisible();
+  await expect(page.locator('#result-ask')).toBeHidden();
 });
 
 test('a finished cup asks once, and Send posts ratings plus this phone\'s race stats', async ({ page, browser }) => {
