@@ -594,6 +594,7 @@ struct AudioBus {
   std::vector<Id> subjects;        // interned voice subjects (index + 1)
   int session = 0;
   double nowMs = 0;
+  std::string biome;               // ttp_audio_biome's override, "" for none
 };
 
 AudioBus& bus() {
@@ -765,7 +766,14 @@ void ttp_audio_bind(int session) {
   const char* track = rs ? rs->trackId.c_str() : "";
   const ttp::rt::Theme theme = ttp::rt::resolve_theme(ttp::rt::biome_for_track(track), track);
   b.dec.weather(rs ? theme.ambient.kind : (uint32_t) ttp::rt::AMB_NONE, b.cmds);
-  b.dec.strip(rs ? theme.road.stripCue : "sand");
+  // …and the strip the picture wears, which the override does change.
+  const char* stripCue = b.biome.empty() ? theme.road.stripCue
+      : ttp::rt::resolve_theme(b.biome.c_str(), track).road.stripCue;
+  b.dec.strip(rs ? stripCue : "sand");
+}
+
+void ttp_audio_biome(const char* name) {
+  bus().biome = (name && ttp::rt::has_biome(name)) ? name : "";
 }
 
 void ttp_audio_frame(double nowMs) {

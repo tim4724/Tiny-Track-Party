@@ -108,6 +108,11 @@ void n_ttp_audio_bind(JNIEnv* env, jclass, jint a0) {
     ttp_audio_bind((int) a0);
 }
 
+void n_ttp_audio_biome(JNIEnv* env, jclass, jbyteArray a0) {
+    CStr s0(env, a0);
+    ttp_audio_biome(s0.get());
+}
+
 jbyteArray n_ttp_audio_cue_id(JNIEnv* env, jclass, jint a0) {
     (void) env;
     return toBytes(env, ttp_audio_cue_id((int) a0));
@@ -1477,6 +1482,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_add_bot", "(I[BDDI[B)V", (void*) n_ttp_add_bot },
     { "ttp_add_human", "(I[B[B)V", (void*) n_ttp_add_human },
     { "ttp_audio_bind", "(I)V", (void*) n_ttp_audio_bind },
+    { "ttp_audio_biome", "([B)V", (void*) n_ttp_audio_biome },
     { "ttp_audio_cue_id", "(I)[B", (void*) n_ttp_audio_cue_id },
     { "ttp_audio_drain", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_audio_drain },
     { "ttp_audio_frame", "(D)V", (void*) n_ttp_audio_frame },

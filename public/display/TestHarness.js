@@ -737,6 +737,7 @@ export function runDisplayScenario(opts, ctx) {
         // into the meshes), so this awaits the new scene and rebinds the field.
         async biome(name) {
           scene.biomeOverride = name || null;
+          window.__audioDecide?.biome(name);
           await scene.setTrack(track);
           scene.bindSession(engine.h);
           return scene.biome();

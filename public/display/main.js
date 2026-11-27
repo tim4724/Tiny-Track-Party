@@ -473,6 +473,7 @@ function rotatePreview(dt) {
 // silently (the decisions still run — they are what the corpus pins).
 const audio = new RaceAudio();
 const audioDecide = new _nativeAudio.NativeAudioDecider();
+if (scene.biomeOverride) audioDecide.biome(scene.biomeOverride);   // ?biome=: the strip heard as drawn
 // Perform a decision stream. Every audio call in this file goes through here.
 const sfx = (cmds) => audio.apply(cmds);
 
