@@ -99,7 +99,7 @@ jobs:
         with:
           distribution: temurin
           # 17 is what app/build.gradle.kts targets for both source and jvmTarget.
-          java-version: 17
+          java-version: 25
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       # RELEASE, not debug: it is the variant with R8, the proguard rules and the
       # signing config, so it is the one where a keep rule going missing shows up.
