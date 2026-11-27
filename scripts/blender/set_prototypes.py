@@ -29032,14 +29032,14 @@ def own_item_box_faces():
     top a flat panel with a four-pointed star cut into it, well inside the
     panel (round 28 fix: the Kenney box; a round on the top edges alone read
     as a loaf, a star out to the round showed slivers at the silhouette). One
-    swatch's ramp by height (the renderer tints the body through it,
-    kBoxTint), each panel a few rows lighter than its rounded frame, so it
-    reads inset; the stars white. Shade it with fixprop_rounded()."""
+    swatch's ramp by height over panels and rounds alike (the renderer tints
+    the body through it, kBoxTint): a panel lighter than its frame read as a
+    second purple. The stars white. Shade it with fixprop_rounded()."""
     s, rr = OWN_BOX, FIXPROP_BOX_ROUND
     h = s / 2
     f = h - rr                                            # the flat panel's half side
     R, k = 0.24 * s, 0.115 * s / math.sqrt(2)             # the star's points and its waist, the Kenney star's
-    row = lambda y, lift=0: max(1, 3 + 25 * (1 - y / s) - lift)
+    row = lambda y: max(1, 3 + 25 * (1 - y / s))
     E = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
     def pt(core, d):                                      # the core point plus the round out along d
         return tuple(round(core[i] + rr * d[i] + (h if i == 1 else 0.0), 6) for i in range(3))
@@ -29051,9 +29051,9 @@ def own_item_box_faces():
     for n, u, v in (((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
                     ((0, 0, 1), (0, 1, 0), (-1, 0, 0)), ((0, 0, -1), (0, 1, 0), (1, 0, 0)),
                     ((0, 1, 0), (0, 0, 1), (1, 0, 0)), ((0, -1, 0), (0, 0, 1), (-1, 0, 0))):
-        def Q(a, b, lift=4):
+        def Q(a, b):
             q = pt(comb((f, n), (a, u), (b, v)), n)
-            return q + (row(q[1], lift),)
+            return q + (row(q[1]),)
         if n[1] < 0:
             out.append(('purple', own_facing([Q(-f, -f), Q(f, -f), Q(f, f), Q(-f, f)], n), 'panel'))
             continue
