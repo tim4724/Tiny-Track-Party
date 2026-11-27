@@ -588,8 +588,8 @@ Theme canyonTheme() {
   t.road.edgeLines = false;
   t.road.shoulder = 0x7d6f5f;
   t.road.kerbA = 0xc06a42; t.road.kerbB = 0xe3cfa4;  // rust / sand
-  t.road.sand = 0xd9a878; t.road.rut = 0xb89e8c; t.road.sandStep = -0.05f; t.road.sandEdge = 0xa9805f; t.road.stripCue = "sand_dirt";     // loose red dirt, a rally shoulder
-  t.road.rutInk = 3.0f; t.road.sandSink = 0.02f;     // soft enough to rut deep
+  t.road.sand = 0xd9a878; t.road.rut = 0xb89e8c; t.road.sandStep = -0.03f; t.road.sandEdge = 0xa9805f; t.road.stripCue = "sand_dirt";     // loose red dirt, a rally shoulder
+  t.road.rutInk = 3.0f; t.road.sandSink = 0.01f;     // soft enough to rut deep
   { const float plume[6] = { 1.3f, 1.4f, 1.1f, 1.4f, 1.2f, 0.8f };   // ...and to hang the biggest cloud
     for (int k = 0; k < 6; k++) t.road.dust[k] = plume[k]; }
   deriveRoad(t.road, /*dashSet=*/true, false, /*shoulderSet=*/true);
@@ -697,7 +697,7 @@ Theme snowTheme() {
   // grey one matched the step's lit face beside it, and the two read as one
   // ramp up to the snow instead of a step.
   t.road.sand = 0xf0f5fa; t.road.rut = 0xa8bfe8; t.road.rutInk = 3.2f; t.road.stripCue = "sand_snow";
-  t.road.sandStep = 0.03f; t.road.sandSlope = 0.03f; t.road.sandSink = 0.03f;
+  t.road.sandStep = 0.03f; t.road.sandSlope = 0.03f; t.road.sandSink = 0.015f;
   { const float powder[6] = { 1.4f, 0.6f, 0.7f, 0.8f, 0.5f, 1.9f };
     for (int k = 0; k < 6; k++) t.road.dust[k] = powder[k]; }
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb

@@ -28,6 +28,9 @@ const KNOBS = [
   // shown as the mix itself: theme.road.dust[5] is twice this over 100
   ['stripdustwhite', 'Dust tint (%): -100 black, 0 strip colour, 100 white', 'pct', -100, 100, 5],
   ['stripdustalpha', 'Dust opacity (x)', 'num', 0, 2, 0.1],
+  // the body's spring over the step: the car's, not the cup's (one value for all)
+  ['stripspringk', 'Body spring stiffness (higher = faster bounce)', 'num', 100, 800, 20],
+  ['stripspringd', 'Body spring damping (lower = bouncier)', 'num', 2, 40, 1],
 ];
 // [biome, label, the cup that wears it]
 export const BIOMES = [['beach', 'Beach', 'beach'], ['snow', 'Snow', 'snow'], ['grass', 'Backyard', 'backyard'],

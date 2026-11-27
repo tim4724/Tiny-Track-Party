@@ -745,8 +745,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             CarWheels& rw = mCarWheels[i];
             float3 deck[4], real[4];
             bool ok = true;
-            // Body springs over the strip's step: stiff, a little underdamped.
-            constexpr float STRIP_K = 420.0f, STRIP_D = 22.0f;
+            // Body springs over the strip's step (mStripSpring).
+            const float STRIP_K = mStripSpring[0], STRIP_D = mStripSpring[1];
             const float sdt = std::min(std::max(input.dt, 1e-3f), 0.05f);
             for (int k = 0; k < 4; k++) {
                 // Where this wheel stands, carried out along the body's axes.
@@ -2244,6 +2244,11 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
 }
 
 float TtpRenderer::debugSandDust(int knob, float value) {
+    if (knob == kStripSpringK || knob == kStripSpringD) {
+        float& v = mStripSpring[knob - kStripSpringK];
+        if (value == value) v = value;
+        return v;
+    }
     if (knob >= kDustKnobs && knob < kStripKnobsEnd) {
         if (value == value) {
             mStripDebug[knob - kDustKnobs] = value;

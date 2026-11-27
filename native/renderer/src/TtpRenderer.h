@@ -3013,14 +3013,19 @@ public:
     // is the theme's. Setting one makes the next scene build a full one; a NaN
     // sets nothing, and either way the answer is what the resident scene was
     // built with.
-    // The last seven are theme.road.dust, in its order.
+    // Seven are theme.road.dust, in its order; the last two are the body's
+    // spring over a strip's step (mStripSpring), set live with no rebuild.
     enum { kStripStep = kDustKnobs, kStripRutInk, kStripDust, kStripSlope, kStripSink,
         kStripColor, kStripRut, kStripEdge, kStripShade, kStripDustMul,
-        kStripKnobsEnd = kStripDustMul + 7 };
+        kStripSpringK = kStripDustMul + 7, kStripSpringD, kStripKnobsEnd };
 private:
     float mStripDebug[kStripKnobsEnd - kDustKnobs] = {};
     bool mStripSet[kStripKnobsEnd - kDustKnobs] = {};
     float mStripBuilt[kStripKnobsEnd - kDustKnobs] = {};
+    // The body's spring over a strip's step, per wheel: stiffness and damping.
+    // Bouncy on purpose (about 0.4 of critical): the body rocks a couple
+    // of times after a wheel drops onto a strip or climbs off it.
+    float mStripSpring[2] = { 420.0f, 16.0f };
     float mSandDust[kDustKnobs] = {
         60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
     // The track's own dust on top of the knobs (theme.road.dust: its rate, life,
