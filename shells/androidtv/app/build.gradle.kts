@@ -249,10 +249,10 @@ val checkEngine = tasks.register("checkEngine") {
 tasks.named("preBuild") { dependsOn(checkEngine, stageAssets) }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.11.01")
     implementation(composeBom)
 
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     // THE SYSTEM SPLASH, held until the game is ready. Not decoration: on API 31+
     // the platform shows a splash for every cold start whether an app asks or
     // not, and this library is the only way to (a) say what it looks like on
@@ -272,7 +272,7 @@ dependencies {
     // FOCUS system, and that is in foundation.
 
     // The relay socket.
-    implementation("com.squareup.okhttp3:okhttp:5.5.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
 
     // The input fastlane's transport (Fastlane.kt). Android ships no system
     // WebRTC, so this is a prebuilt libwebrtc (org.webrtc.*) — the same
@@ -288,7 +288,7 @@ dependencies {
     // The netcode is NOT in this dependency — ttp::fastlane::Link is, behind
     // the ttp_link_* walks — so what it buys is the PeerConnection and the
     // DataChannel and nothing else.
-    implementation("io.github.webrtc-sdk:android:150.7871.01")
+    implementation("io.github.webrtc-sdk:android:150.7871.08")
 
     // The join QR. Policy is copied from public/shared/qr.js — EC level L, a
     // one-module quiet zone — not the library.
