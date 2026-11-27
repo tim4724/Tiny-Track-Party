@@ -20,15 +20,13 @@ using namespace ttp;
 
 namespace {
 
-// The kerb's far edge may come this close to a corner's centre, as a fraction of
-// the radius: past 1 it folds, and near 1 it already draws as a point. The
-// generator rounds to |k| * halfWidth <= 0.7 (track-gen.mjs ROAD_FOLD_MAX), which
-// on a 5 m road under the widest kerb lands near 0.85 here, so raising either
-// limit means re-reading the other. The builder narrows the strip on a
-// corner's inside to keep the drawn ribbon under its own FOLD_LIMIT
-// (trackbuilder.cc narrowFolds), which sits below this one.
-const double KERB_FOLD_MAX = 0.9;
-const double STEP = 0.1;
+// The limits and windows are the builder's (trackbuilder.h KERB_FOLD_*,
+// SURFACE_FOLD_*): near 1 the kerb already draws as a point. The generator
+// rounds to |k| * halfWidth <= 0.7 (track-gen.mjs ROAD_FOLD_MAX), which on a
+// 5 m road under the widest kerb lands near 0.85 here, so raising either limit
+// means re-reading the other. The builder narrows a corner's inside strip to
+// keep the drawn ribbon under it (trackbuilder.cc narrowFolds).
+const double STEP = 0.1;   // where it is measured
 
 }  // namespace
 
@@ -45,10 +43,10 @@ int main() {
     }
     const double kerb = rt::resolve_theme(rt::biome_for_track(id), id).road.kerbW;
     Centerline& cl = *bt.game.centerline;
-    double worst = 0, worstS = 0;
+    double worst = 0, worstS = 0, worstSurface = 0, worstSurfaceS = 0;
     for (double s = 0; s < bt.game.length; s += STEP) {
       // How far the kerb's far edge falls behind the ASPHALT's centre line
-      // (pos + lateral * asphaltMid) over one step, measured on the drawn
+      // (pos + lateral * asphaltMid) over KERB_FOLD_WINDOW, measured on the drawn
       // rulings: 1 - (its advance along the road) / (the centre's). On a road
       // with no strip, or the same strip both sides, that is |k| * (half +
       // kerb) about the centre line. A strip on a corner's outside alone moves
@@ -56,20 +54,28 @@ int main() {
       // centre line is no reference there; the asphalt's centre is. Curvature
       // IN THE ROAD PLANE only stretches an offset: a loop's pitch does not
       // fold its kerbs, and the advance is taken along the tangent.
-      const Frame a = cl.sampleAt(s - STEP / 2), b = cl.sampleAt(s + STEP / 2), f = cl.sampleAt(s);
       const auto at = [&](const Frame& g, double lat) { return g.pos.clone().addScaledVector(g.lateral, lat); };
-      const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(f.tangent);
-      double fold = 0;
-      for (const double side : { -1.0, 1.0 }) {
-        const double edge = at(b, side * (b.width / 2 + kerb)).sub(at(a, side * (a.width / 2 + kerb))).dot(f.tangent);
-        if (centre > 1e-9) fold = std::fmax(fold, 1 - edge / centre);
-      }
+      const auto foldOver = [&](double window, double past) {
+        const Frame a = cl.sampleAt(s - window / 2), b = cl.sampleAt(s + window / 2), f = cl.sampleAt(s);
+        const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(f.tangent);
+        double fold = 0;
+        for (const double side : { -1.0, 1.0 }) {
+          const double edge = at(b, side * (b.width / 2 + past)).sub(at(a, side * (a.width / 2 + past))).dot(f.tangent);
+          if (centre > 1e-9) fold = std::fmax(fold, 1 - edge / centre);
+        }
+        return fold;
+      };
+      const double fold = foldOver(KERB_FOLD_WINDOW, kerb);
       if (fold > worst) { worst = fold; worstS = s; }
+      // the driven surface, kerb's foot to kerb's foot, at the scale its
+      // cross-sections could cross
+      const double surface = foldOver(SURFACE_FOLD_WINDOW, 0);
+      if (surface > worstSurface) { worstSurface = surface; worstSurfaceS = s; }
     }
-    const bool ok = worst <= KERB_FOLD_MAX;
+    const bool ok = worst <= KERB_FOLD_MAX && worstSurface <= SURFACE_FOLD_MAX;
     if (!ok) failures++;
-    std::printf("%s %-11s kerb %.2f  worst kerb fold %.2f at s=%.1f\n", ok ? "ok  " : "FAIL", id, kerb, worst,
-                worstS);
+    std::printf("%s %-11s kerb %.2f  worst kerb fold %.2f at s=%.1f, surface %.2f at s=%.1f\n", ok ? "ok  " : "FAIL", id,
+                kerb, worst, worstS, worstSurface, worstSurfaceS);
   }
   std::printf("track fold check: %d tracks, %d failures\n", TTP_TRACK_COUNT, failures);
   return failures == 0 ? 0 : 1;

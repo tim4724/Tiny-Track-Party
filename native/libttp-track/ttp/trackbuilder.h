@@ -267,6 +267,21 @@ struct RaceTrack {
   std::vector<Kicker> kickers;
 };
 
+// The drawn kerb's fold: how far its far edge may fall behind the asphalt's
+// centre line, as a share of that line's advance, and the arclength that is
+// measured over. Over a bend's own length, not a ring's: the spline's
+// curvature wobbles from sample to sample and steps at every knot, which a
+// kerb near its limit draws as a crease a few centimetres deep, and read at
+// that scale a hairpin's inside lost the strip it had room for. The builder
+// narrows a strip to keep under it (sandWidths, narrowFolds) and `track_fold`
+// holds every track to it.
+inline constexpr double KERB_FOLD_MAX = 0.9, KERB_FOLD_WINDOW = 2.0;
+// The same for the road the cars drive, asphalt and strip out to the kerb's
+// foot, at the scale of those wobbles: where its cross-sections meet, a
+// point of it has two places on the road, and the sim's projection picks
+// either (`curb_hang`).
+inline constexpr double SURFACE_FOLD_MAX = 0.9, SURFACE_FOLD_WINDOW = 0.5;
+
 // buildTrack + identity + resolveFurniture, matching record-trace.mjs
 // buildRaceTrack(trackId, {laps, seed}).
 RaceTrack build_race_track(const TrackDef& def, int laps, uint32_t seed);

@@ -25,10 +25,9 @@ constexpr double BANK_RAMP = 0.35;
 // side's far edge, sand included, keeps |k| * (half-width + sand) under
 // SAND_FOLD_MAX, and the strip eases in and out over SAND_EASE world units
 // either side. The outside of a corner never folds, so it keeps the full strip.
-// Tighter than the generator's ROAD_FOLD_MAX for the asphalt: this curvature is
-// a coarser estimate than the `track_fold` ctest's, which at 0.7 read within a
-// hair of its limit on Riptide.
-constexpr double SAND_FOLD_MAX = 0.6;
+// A first estimate without the kerb: narrowFolds then measures the drawn
+// ribbon, kerb included, and takes off what still folds.
+constexpr double SAND_FOLD_MAX = 0.85;
 constexpr double SAND_EASE = 6.0;
 // The strip lies only on road that lies on the land: a deck whose up leans
 // further than this (a loop, a wall ride, a steep bank) carries none.
@@ -39,10 +38,10 @@ constexpr double SYM_REACH = 3 * SAND_EASE;   // to a loop: past the ease's reac
 // between their strips (both kerbs and a little land), and a strand is
 // another one STRAND_ARC of lap away, at most STRAND_LEVEL above or below.
 constexpr double STRAND_GAP = 1.5, STRAND_ARC = 20.0, STRAND_LEVEL = 1.0;
-// narrowFolds: the widest kerb any biome draws (the snow bank's), the fold it
-// holds the drawn ribbon under at a FOLD_STEP, below `track_fold`'s own limit,
-// and how many passes it may take.
-constexpr double KERB_MAX = 0.55, FOLD_LIMIT = 0.85, FOLD_STEP = 0.1;
+// narrowFolds: the widest kerb any biome draws (the snow bank's), the step it
+// walks the ribbon at, how far under a limit it narrows a strip back to (so
+// the next pass finds it clear), and how many passes it may take.
+constexpr double KERB_MAX = 0.55, FOLD_STEP = 0.1, FOLD_SPARE = 0.03;
 constexpr int FOLD_PASSES = 8;
 const double kInf = std::numeric_limits<double>::infinity();
 
@@ -113,15 +112,26 @@ SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>&
   const double ring = cum[n - 1] + worldPts[n - 1].distanceTo(worldPts[0]);
   const auto wrap = [n](int i) { return (i % n + n) % n; };
   std::vector<double> allowed[2] = { std::vector<double>(n), std::vector<double>(n) };
+  const auto ahead = [&](int i, int j) { double d = cum[j] - cum[i]; return d < 0 ? d + ring : d; };
   for (int i = 0; i < n; i++) {
+    // The bend over KERB_FOLD_WINDOW, the span `track_fold` reads: from one
+    // sample to the next the spline's curvature wobbles (it steps at every
+    // knot), and a hairpin read at that scale lost a strip it had room for.
     int a = wrap(i - 1), b = wrap(i + 1);
-    double ds = cum[b] - cum[a];
-    if (ds <= 0) ds += ring;
-    const Vec3 dt = tangents[b].clone().sub(tangents[a]);
-    double k = dt.length() / ds;
+    for (int g = 0; g < n / 4 && ahead(a, i) < KERB_FOLD_WINDOW / 2; g++) a = wrap(a - 1);
+    for (int g = 0; g < n / 4 && ahead(i, b) < KERB_FOLD_WINDOW / 2; g++) b = wrap(b + 1);
+    const double ds = ahead(a, i) + ahead(i, b);
+    // The bend IN THE PLAN, the only kind that folds a kerb: over a hop's
+    // crest the tangent turns too, and read whole, a jump on a gentle bend
+    // took the inside's strip off as if it were a hairpin.
+    const double ha = ttp_fd_hypot(tangents[a].x, tangents[a].z), hb = ttp_fd_hypot(tangents[b].x, tangents[b].z);
+    double turn = 0, k = 0;
+    if (ha > 1e-9 && hb > 1e-9) {
+      const double ax = tangents[a].x / ha, az = tangents[a].z / ha, bx = tangents[b].x / hb, bz = tangents[b].z / hb;
+      turn = ax * bz - az * bx;   // > 0: the corner turns toward +lateral, its inside
+      k = std::fabs(ttp_fd_atan2(turn, ax * bx + az * bz)) / ds;
+    }
     double room = k > 1e-9 ? SAND_FOLD_MAX / k - widths[i] / 2 : full;
-    // Which side the corner turns toward, in the plan: that side is its inside.
-    const double turn = dt.x * -tangents[i].z + dt.z * tangents[i].x;
     for (int side = 0; side < 2; side++) {
       const bool inside = side == 1 ? turn > 0 : turn < 0;
       double a = inside ? js_max(0.0, js_min(full, room)) : full;
@@ -136,7 +146,9 @@ SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>&
   // Two strands running side by side at one level share what lies between
   // them: each takes at most half of what is left once both asphalts and
   // STRAND_GAP (both kerbs and a little land) are taken, on the side facing
-  // the other. A strand passing over or under (a bridge) is another level.
+  // the other, or all of it beside a strand off the ground (a loop's mouth, a
+  // ramp), which carries no strip but still has its asphalt and kerb there. A
+  // strand passing over or under (a bridge) is another level.
   for (int i = 0; i < n; i++) {
     if (raised[i]) continue;
     const double hx = -tangents[i].z, hz = tangents[i].x, hl = ttp_fd_hypot(hx, hz);
@@ -144,12 +156,13 @@ SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>&
     for (int j = 0; j < n; j++) {
       double ds = std::fabs(cum[j] - cum[i]);
       if (js_min(ds, ring - ds) < STRAND_ARC) continue;
-      if (raised[j] || std::fabs(worldPts[j].y - worldPts[i].y) > STRAND_LEVEL) continue;
+      if (std::fabs(worldPts[j].y - worldPts[i].y) > STRAND_LEVEL) continue;
       const double dx = worldPts[j].x - worldPts[i].x, dz = worldPts[j].z - worldPts[i].z;
       const double reach = widths[i] / 2 + widths[j] / 2 + 2 * full + STRAND_GAP;
       if (dx * dx + dz * dz >= reach * reach) continue;
       const double d = ttp_fd_hypot(dx, dz);
-      const double share = js_max(0.0, (d - widths[i] / 2 - widths[j] / 2 - STRAND_GAP) / 2);
+      const double left = d - widths[i] / 2 - widths[j] / 2 - STRAND_GAP;
+      const double share = js_max(0.0, raised[j] ? left : left / 2);
       const int side = (dx * hx + dz * hz) > 0 ? 1 : 0;
       allowed[side][i] = js_min(allowed[side][i], share);
     }
@@ -216,10 +229,11 @@ SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>&
 
 // The ribbon as drawn, before it is final: where the kerb's far edge (the
 // widest kerb any biome draws, KERB_MAX) would fall behind the asphalt's centre
-// line by more than FOLD_LIMIT of its advance over a step, as `track_fold`
-// measures it on the spline, cap that side's strip there to half what it has,
-// or the other side's where it has none (its strip is what moved the centre
-// line). The SAND_FOLD_MAX estimate keeps most corners clear on the first
+// line by more than KERB_FOLD_MAX of its advance over KERB_FOLD_WINDOW, or the
+// driven surface's by more than SURFACE_FOLD_MAX over SURFACE_FOLD_WINDOW, as
+// `track_fold` measures them on the spline, cap that side's strip there to what
+// brings it back under, or halve the other side's where it has none (its strip
+// is what moved the centre line). The SAND_FOLD_MAX estimate keeps most corners clear on the first
 // pass; this catches what it reads low: a spline's peak between samples, and
 // the curvature the centre line's own shift adds. False when nothing folds.
 bool narrowFolds(const std::vector<Vec3>& pts, const std::vector<Vec3>& tangents, const std::vector<Vec3>& ups,
@@ -237,21 +251,37 @@ bool narrowFolds(const std::vector<Vec3>& pts, const std::vector<Vec3>& tangents
   const double length = s + pts[n - 1].distanceTo(pts[0]);
   Centerline cl(cs, length);
   const auto at = [](const Frame& g, double lat) { return g.pos.clone().addScaledVector(g.lateral, lat); };
+  // The kerb's far edge over a bend, and the driven surface's edge at any scale.
+  struct Rule { double window, past, limit; };
+  const Rule rules[] = { { KERB_FOLD_WINDOW, KERB_MAX, KERB_FOLD_MAX }, { SURFACE_FOLD_WINDOW, 0.0, SURFACE_FOLD_MAX } };
   bool any = false;
+  for (const Rule& rule : rules)
   for (double t = 0; t < length; t += FOLD_STEP) {
-    const Frame a = cl.sampleAt(t - FOLD_STEP / 2), b = cl.sampleAt(t + FOLD_STEP / 2), f = cl.sampleAt(t);
+    const Frame a = cl.sampleAt(t - rule.window / 2), b = cl.sampleAt(t + rule.window / 2), f = cl.sampleAt(t);
     const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(f.tangent);
     if (!(centre > 1e-9)) continue;
     for (int side = 0; side < 2; side++) {
       const double sg = side ? 1.0 : -1.0;
-      const double edge = at(b, sg * (b.width / 2 + KERB_MAX)).sub(at(a, sg * (a.width / 2 + KERB_MAX))).dot(f.tangent);
-      if (1 - edge / centre <= FOLD_LIMIT) continue;
+      const double edge = at(b, sg * (b.width / 2 + rule.past)).sub(at(a, sg * (a.width / 2 + rule.past))).dot(f.tangent);
+      const double fold = 1 - edge / centre;
+      if (fold <= rule.limit) continue;
       int lo = 0, hi = n - 1;   // the last sample at or before t
       while (lo < hi) { const int m = (lo + hi + 1) / 2; if (cs[m].s <= t) lo = m; else hi = m - 1; }
       for (int k = lo; k <= lo + 1; k++) {
         const int i = k % n;
-        const int which = sandAt.at[side][i] > 0.05 ? side : 1 - side;
-        cap[which][i] = js_min(cap[which][i], sandAt.at[which][i] / 2);
+        const double strip = sandAt.at[side][i];
+        if (strip > 0.05) {
+          // On an arc the fold is the far edge's reach from the asphalt's
+          // centre over the radius, so it shrinks in proportion to that reach:
+          // take off just what brings it a little under the limit. Halving
+          // here took a hairpin's inside to a sliver it had room to carry
+          // three times over.
+          const double reach = (widths[i] - sandAt.at[0][i] - sandAt.at[1][i]) / 2 + strip + rule.past;
+          const double aim = rule.limit - FOLD_SPARE;
+          cap[side][i] = js_min(cap[side][i], js_max(0.0, strip - reach * (fold - aim) / fold));
+        } else {
+          cap[1 - side][i] = js_min(cap[1 - side][i], sandAt.at[1 - side][i] / 2);
+        }
       }
       any = true;
     }
@@ -376,10 +406,13 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
       worldPts[i].addScaledVector(lateral, shift);
       shifted = true;
     }
-    if (!shifted) break;
-    for (int i = 0; i < n; i++)
-      tangents[i] = worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize();
-    ups = transportUps();
+    // Narrow even where nothing moved: strips the same both sides fold a
+    // tight bend's inside kerb just the same.
+    if (shifted) {
+      for (int i = 0; i < n; i++)
+        tangents[i] = worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize();
+      ups = transportUps();
+    }
     if (pass == FOLD_PASSES || !narrowFolds(worldPts, tangents, ups, widths, sandAt, cap)) break;
   }
 

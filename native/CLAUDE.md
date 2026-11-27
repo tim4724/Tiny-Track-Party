@@ -154,8 +154,11 @@ and every bot lane (`RacingLine::midAt`), the wear planner, the gantry. Anything
 measured ALONG the road the cars drive is taken on the asphalt's centre line,
 not the centre line, which stands on a corner's outside and runs longer there:
 the crest table (`Game`), the racing line's curvature. The strip narrows only
-where it must, by rule (`sandWidths`, `narrowFolds`), and `track_fold` measures
-the drawn kerb against the asphalt's centre. Any change to those rules moves
+where it must, by rule (`sandWidths`, `narrowFolds`): the drawn kerb may not
+fold over a bend, and the driven surface may not fold at the scale of the
+spline's sample-to-sample wobble, where the sim's projection would find two
+places for one point. `track_fold` holds every track to both, against the
+asphalt's centre. Any change to those rules moves
 the centre line and the lap's length, so every u-anchored set piece and
 landform slides with it: record the world and solve it back
 (`npm run repin:world`).
