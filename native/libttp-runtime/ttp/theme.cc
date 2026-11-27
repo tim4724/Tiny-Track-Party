@@ -586,9 +586,11 @@ Theme canyonTheme() {
   t.road.asphalt = 0x6e6560;
   t.road.dash = 0xd9b054;
   t.road.edgeLines = false;
-  t.road.shoulder = 0x7d6f5f;
   t.road.kerbA = 0xc06a42; t.road.kerbB = 0xe3cfa4;  // rust / sand
   t.road.sand = 0xd9a878; t.road.rut = 0xb89e8c; t.road.sandStep = -0.03f; t.road.sandEdge = 0xa9805f; t.road.stripCue = "sand_dirt";     // loose red dirt, a rally shoulder
+  // The shoulder is the strip's packed edge band, so the road's edge keeps
+  // one colour where the strip stops (a bridge, a tight inside).
+  t.road.shoulder = t.road.sandEdge;
   t.road.rutInk = 3.0f; t.road.sandSink = 0.01f;     // soft enough to rut deep
   { const float plume[6] = { 1.3f, 1.4f, 1.1f, 1.4f, 1.2f, 0.8f };   // ...and to hang the biggest cloud
     for (int k = 0; k < 6; k++) t.road.dust[k] = plume[k]; }
