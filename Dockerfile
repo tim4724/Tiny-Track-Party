@@ -3,7 +3,7 @@
 
 # Build stage: scripts/build-site.mjs, which bundles with esbuild.
 # The Node major is .nvmrc's; a Dockerfile cannot read it.
-FROM node:26-alpine AS builder
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -20,7 +20,7 @@ RUN node scripts/build-site.mjs && find site/assets -type f ! -name '*.br' -dele
 
 # Runtime: Apache with public/.htaccess (httpd.conf sets up what Hetzner
 # Webhosting provides around it).
-FROM httpd:2.4-alpine
+FROM httpd:2.4-alpine@sha256:32bd0639bcc4917ef1fd9363a1d9dd2dd9c498565118b062a10d51e43a5c3a24
 COPY httpd.conf /usr/local/apache2/conf/httpd.conf
 # Assets get their OWN layers, below the rest. Folded into one copy, a one-line
 # .js edit changed its digest and every preview deploy re-pulled the soundtrack.
