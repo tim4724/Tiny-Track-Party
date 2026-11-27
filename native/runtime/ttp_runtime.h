@@ -296,7 +296,10 @@ TTP_ABI const char* ttp_track_supports_json(const char* trackIdOrDescriptor);
 // A uniform sweep of interpolated frames along a built track — s = 0, step,
 // 2·step, … while s <= length — as
 //   [ { "s", "pos":{x,y,z}, "tangent":{x,y,z}, "up":{x,y,z},
-//       "lateral":{x,y,z}, "width" }, … ]
+//       "lateral":{x,y,z}, "width", "sandL", "sandR" }, … ]
+// (`width` runs kerb to kerb about `pos`; sandL/sandR are the strip on each
+// side inside it, so the asphalt's centre stands (sandL - sandR) / 2 along
+// `lateral`.)
 // through the builder's own Centerline, so a frame BETWEEN knots is the same
 // cubic the sim and the renderer read.
 //

@@ -19,10 +19,14 @@ class Game;
 struct Input;
 
 // Precomputed racing line for a centerline (built once, shared by the field).
+// It is solved about the ASPHALT's centre (midAt: Frame::asphaltMid), which
+// stands off the centre line where one side carries more strip than the other;
+// laneAt answers in centre-line lat like every other lane.
 class RacingLine {
  public:
   explicit RacingLine(Centerline& centerline);
-  double laneAt(double s) const { return at(e_, s); }
+  double laneAt(double s) const { return at(mid_, s) + at(e_, s); }
+  double midAt(double s) const { return at(mid_, s); }
   double curvAt(double s) const { return at(k_, s); }
   double roomAt(double s) const { return at(bound_, s); }
 
@@ -31,7 +35,7 @@ class RacingLine {
   double length_;
   int n_;
   double h_;
-  std::vector<double> e_, k_, bound_;
+  std::vector<double> e_, k_, bound_, mid_;
 };
 
 

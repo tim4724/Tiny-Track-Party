@@ -90,7 +90,8 @@ Frame& Centerline::sampleInto(double s, Frame& out) {
   out.lateral.copy(out.tangent).cross(out.up).normalize();
   // Tracks always carry widths (pB.width != null in JS), so no undefined branch.
   out.width = pB.width + (pC.width - pB.width) * f;
-  out.sand = pB.sand + (pC.sand - pB.sand) * f;
+  out.sandL = pB.sandL + (pC.sandL - pB.sandL) * f;
+  out.sandR = pB.sandR + (pC.sandR - pB.sandR) * f;
   return out;
 }
 

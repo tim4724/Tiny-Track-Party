@@ -94,7 +94,10 @@ struct Car {
   double accel = 0, vmax = 0, turn = 0, mass = 1, halfLen = 0.44, halfWid = 0.28;
   bool curbLimSet = false;
   double curbLim = 0;
-  double sandHere = 0;   // the sand strip's width where the car is, per side
+  double sandHere = 0;   // the sand strip's width where the car is, on its side
+  // ...the strip on each side there (L: -lateral), and the lat of the asphalt's
+  // centre (Frame::asphaltMid), which a bot's lanes are measured from
+  double sandL = 0, sandR = 0, asphaltMid = 0;
   bool onWall = false;
   bool onSand = false;
   // The slide (Game::update): the brake with a steer at speed.

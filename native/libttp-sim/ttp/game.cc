@@ -334,15 +334,29 @@ Game::Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
   // Crest curvature: how fast the tangent turns away from the deck's up,
   // differenced across CURV_PROBE either side. Positive over a hill; negative
   // in a dip and all the way round a loop, which is why loops never launch.
+  // Taken along the ASPHALT's centre (Frame::asphaltMid), per ITS arclength:
+  // where one side carries more strip the centre line stands off it, on a
+  // bend's outside, where it runs longer than the road the cars drive and so
+  // reads every crest flatter.
   {
     int n = (int)std::ceil(length_ / CREST_STEP);
     crestK_.resize(n);
+    const auto asphaltAt = [&](double s) {
+      const Frame g = centerline_->sampleAt(s);
+      return g.pos.clone().addScaledVector(g.lateral, g.asphaltMid());
+    };
+    const auto tangentAt = [&](const Frame& g, double s) {
+      if (g.sandL == g.sandR) return g.tangent;
+      return asphaltAt(s + CREST_STEP / 2).sub(asphaltAt(s - CREST_STEP / 2)).normalize();
+    };
     for (int i = 0; i < n; i++) {
       double s = i * CREST_STEP;
       Frame f = centerline_->sampleAt(s);
       Frame a = centerline_->sampleAt(s - CURV_PROBE);
       Frame b = centerline_->sampleAt(s + CURV_PROBE);
-      crestK_[i] = a.tangent.sub(b.tangent).dot(f.up) / (2 * CURV_PROBE);
+      const double span = (a.sandL == a.sandR && b.sandL == b.sandR && f.sandL == f.sandR)
+          ? 2 * CURV_PROBE : asphaltAt(s + CURV_PROBE).distanceTo(asphaltAt(s - CURV_PROBE));
+      crestK_[i] = tangentAt(a, s - CURV_PROBE).sub(tangentAt(b, s + CURV_PROBE)).dot(f.up) / span;
     }
   }
 
@@ -1285,7 +1299,9 @@ void Game::update(double dtMs) {
     c.totalS = js_max(prevTotal, hit.s);
     c.lat = hit.lat;
     c.curbLim = curbLimit(hit.frame.width); c.curbLimSet = true;
-    c.sandHere = hit.frame.sand;
+    c.sandL = hit.frame.sandL; c.sandR = hit.frame.sandR;
+    c.sandHere = hit.frame.sandOn(c.lat);
+    c.asphaltMid = hit.frame.asphaltMid();
     c.heading = dmath::atan2(
         hit.frame.tangent.clone().cross(fwd).dot(hit.frame.up),
         hit.frame.tangent.dot(fwd));

@@ -132,8 +132,9 @@ struct TrackDef {
   double width;    // trackWidth = (desc.width) || ROAD_WIDTH
   double sand;     // sand strip per side, between the asphalt and the kerb, on road that lies on the ground
   // Stretches of the lap that carry NO sand, where the kerbs stand at the
-  // asphalt's edge: a causeway over water, a gate across the road, a piece
-  // the wider road would run into.
+  // asphalt's edge: road off the land that the builder cannot tell from the
+  // geometry (a causeway on piles over water). The world makes room for the
+  // strip everywhere else.
   const SpanDef* sandOff; int nSandOff;
   double startU;   // desc.startU ?? 0
   const FurnDef* oils; int nOils;
@@ -185,7 +186,11 @@ struct OutSample {
   Vec3 pos, tangent, up, lateral;
   double s = 0.0;
   double width = 0.0;
-  double sand = 0.0;    // per side, inside `width`: narrower through a tight corner
+  // The strip on each side (L: -lateral, R: +lateral), inside `width`: the
+  // inside of a tight corner carries less. `pos` is the middle between the
+  // kerbs, so the asphalt's own centre stands asphaltMid() along `lateral`.
+  double sandL = 0.0, sandR = 0.0;
+  double asphaltMid() const { return (sandL - sandR) / 2; }
   bool pillars = false;
   bool hillable = false;
 };
@@ -265,6 +270,11 @@ struct RaceTrack {
 // buildTrack + identity + resolveFurniture, matching record-trace.mjs
 // buildRaceTrack(trackId, {laps, seed}).
 RaceTrack build_race_track(const TrackDef& def, int laps, uint32_t seed);
+
+// The lateral offset of the asphalt's centre from the centre line at arclength
+// s (OutSample::asphaltMid, interpolated): what an authored `lat` is measured
+// from.
+double asphalt_mid_at(const RaceTrack& rt, double s);
 
 // ---- support-post corridor probe (exposed for the geometry audit) -----------
 // The gate the builder itself uses to decide whether a bridge pillar or loop

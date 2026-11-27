@@ -44,7 +44,7 @@ async function loadNativeAbi() {
   };
 }
 
-let buildTrack, trackSweep, trackFrames, trackSupports, SCALE;
+let buildTrack, trackSweep, trackFrames, trackSupports;
 let TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS;
 let packSchematic, unpackSchematic, SCHEMATIC_EPS;
 test.before(async () => {
@@ -52,7 +52,7 @@ test.before(async () => {
     .slice(0, 4).map((p) => [`cpu-${p.name.toLowerCase()}`, p.caution, p.laneBias]);
   const nt = await import('../scripts/native-track.mjs');
   await nt.init();
-  ({ buildTrack, trackSweep, trackFrames, trackSupports, SCALE } = nt);
+  ({ buildTrack, trackSweep, trackFrames, trackSupports } = nt);
   ({ TRACKS, TRACK_LIST } = await import('../public/shared/tracks.js'));
   DEV_TRACKS = (await import('../public/shared/devTracks.js')).DEV_TRACKS;
   // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev
@@ -313,8 +313,8 @@ test('every shipped track starts on a clean grid, with clear sky over the gantry
       + ` width=${g.minWidth.toFixed(1)}-${g.maxWidth.toFixed(1)}`
       + ` headroom=${g.headroom === Infinity ? 'clear' : g.headroom.toFixed(2)}`;
     assert.ok(g.headroom > 3.1, `${say} — a deck passes over the finish line; the gantry is 2.8 tall and would clip it`);
-    // A sample runs kerb to kerb, so the grid is roadWidth plus the sand (authored per side).
-    assert.ok(gridPasses(g, built.roadWidth + 2 * SCALE * (t.sand ?? 0)), `${say} — grid is not straight/flat/level/full-width enough`);
+    // measureGrid reads the asphalt's width, inside the strips.
+    assert.ok(gridPasses(g, built.roadWidth), `${say} — grid is not straight/flat/level/full-width enough`);
   }
 });
 

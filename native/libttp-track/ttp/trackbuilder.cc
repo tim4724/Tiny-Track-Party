@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "ttp/centerline.h"
 #include "ttp/contract.h"
 #include "ttp/jsmath.h"
 #include "ttp/vec3.h"
@@ -20,14 +21,29 @@ constexpr double DS = 0.25;              // centreline sample step
 constexpr double PI = 3.141592653589793; // Math.PI (0x400921fb54442d18)
 constexpr double DEG = PI / 180.0;
 constexpr double BANK_RAMP = 0.35;
-// The sand strip narrows through a corner too tight to carry it: the road's far
-// edge, sand included, keeps |k| * half-width under SAND_FOLD_MAX, and the
-// strip eases in and out over SAND_EASE world units either side. Tighter than
-// the generator's ROAD_FOLD_MAX for the asphalt: this curvature is a coarser
-// estimate than the `track_fold` ctest's, which at 0.7 read within a hair of
-// its limit on Riptide.
+// The sand strip narrows on the INSIDE of a corner too tight to carry it: that
+// side's far edge, sand included, keeps |k| * (half-width + sand) under
+// SAND_FOLD_MAX, and the strip eases in and out over SAND_EASE world units
+// either side. The outside of a corner never folds, so it keeps the full strip.
+// Tighter than the generator's ROAD_FOLD_MAX for the asphalt: this curvature is
+// a coarser estimate than the `track_fold` ctest's, which at 0.7 read within a
+// hair of its limit on Riptide.
 constexpr double SAND_FOLD_MAX = 0.6;
 constexpr double SAND_EASE = 6.0;
+// The strip lies only on road that lies on the land: a deck whose up leans
+// further than this (a loop, a wall ride, a steep bank) carries none.
+constexpr double ON_GROUND_UP = 0.9;
+constexpr double GROUND_RUN_MIN = 4 * SAND_EASE;
+constexpr double SYM_REACH = 3 * SAND_EASE;   // to a loop: past the ease's reach (erosion + tent), and its pad's length
+// Two strands of one road side by side (sandWidths): STRAND_GAP is what stays
+// between their strips (both kerbs and a little land), and a strand is
+// another one STRAND_ARC of lap away, at most STRAND_LEVEL above or below.
+constexpr double STRAND_GAP = 1.5, STRAND_ARC = 20.0, STRAND_LEVEL = 1.0;
+// narrowFolds: the widest kerb any biome draws (the snow bank's), the fold it
+// holds the drawn ribbon under at a FOLD_STEP, below `track_fold`'s own limit,
+// and how many passes it may take.
+constexpr double KERB_MAX = 0.55, FOLD_LIMIT = 0.85, FOLD_STEP = 0.1;
+constexpr int FOLD_PASSES = 8;
 const double kInf = std::numeric_limits<double>::infinity();
 
 // SMOOTHERSTEP (Perlin, C2 ends) and smoothstep (C1 ends) — the exact JS forms.
@@ -72,50 +88,175 @@ double intrusionOf(const Post& post, const std::vector<OutSample>& samples) {
 
 // ---- Shared finalize: frames, pillars, hills, support posts, autoPoles, the
 // startU relabel. Fed by both the segment walk and the waypoint sampler.
-// The sand strip, per sample and per side, between the asphalt and the kerb:
-// `full` wherever the corner allows it, narrowed (SAND_FOLD_MAX) where it does
-// not, and none on raised road (a bridge, a deck on pillars), where the kerbs
-// stand at the asphalt's edge. The allowance is ERODED then averaged, both over
-// SAND_EASE: each averaged value is at most the allowance at its own sample, so
-// the ease never reaches into the corner or onto the bridge it eases toward.
+// The sand strip, per sample and per side (0 left, 1 right: -lateral and
+// +lateral), between the asphalt and the kerb: `full` wherever the road allows
+// it, narrowed (SAND_FOLD_MAX) on the inside of a corner too tight to carry it,
+// and none on raised road (a bridge, a deck on pillars), where the kerbs stand
+// at the asphalt's edge. The allowance is ERODED over SAND_EASE then averaged
+// over as much (below): each averaged value is at most the allowance at its own
+// sample, so the ease never reaches into the corner or onto the bridge it eases
+// toward.
 // All zero for a track without sand.
-std::vector<double> sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>& tangents,
-                               const std::vector<double>& widths, const std::vector<char>& raised,
-                               double full, const SpanDef* off, int nOff) {
+struct SandSides { std::vector<double> at[2]; };
+
+SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>& tangents,
+                     const std::vector<double>& widths, const std::vector<char>& raised,
+                     const std::vector<char>& loops, double full, const SpanDef* off, int nOff,
+                     const std::vector<double>* cap) {
   const int n = (int) worldPts.size();
-  std::vector<double> sandAt(n, 0.0);
-  if (!(full > 0)) return sandAt;
+  SandSides out;
+  out.at[0].assign(n, 0.0);
+  out.at[1].assign(n, 0.0);
+  if (!(full > 0)) return out;
   std::vector<double> cum(n, 0.0);
   for (int i = 1; i < n; i++) cum[i] = cum[i - 1] + worldPts[i].distanceTo(worldPts[i - 1]);
   const double ring = cum[n - 1] + worldPts[n - 1].distanceTo(worldPts[0]);
   const auto wrap = [n](int i) { return (i % n + n) % n; };
-  std::vector<double> allowed(n);
+  std::vector<double> allowed[2] = { std::vector<double>(n), std::vector<double>(n) };
   for (int i = 0; i < n; i++) {
     int a = wrap(i - 1), b = wrap(i + 1);
     double ds = cum[b] - cum[a];
     if (ds <= 0) ds += ring;
-    double k = tangents[b].clone().sub(tangents[a]).length() / ds;
+    const Vec3 dt = tangents[b].clone().sub(tangents[a]);
+    double k = dt.length() / ds;
     double room = k > 1e-9 ? SAND_FOLD_MAX / k - widths[i] / 2 : full;
-    allowed[i] = js_max(0.0, js_min(full, room));
-    // A stretch authored without sand allows none: the same erosion and
-    // average then ease the strip out before it and back in after it.
-    for (int o = 0; o < nOff; o++)
-      if (cum[i] >= off[o].from * ring && cum[i] <= off[o].to * ring) allowed[i] = 0.0;
-    if (raised[i]) allowed[i] = 0.0;
+    // Which side the corner turns toward, in the plan: that side is its inside.
+    const double turn = dt.x * -tangents[i].z + dt.z * tangents[i].x;
+    for (int side = 0; side < 2; side++) {
+      const bool inside = side == 1 ? turn > 0 : turn < 0;
+      double a = inside ? js_max(0.0, js_min(full, room)) : full;
+      // A stretch authored without sand allows none: the same erosion and
+      // average then ease the strip out before it and back in after it.
+      for (int o = 0; o < nOff; o++)
+        if (cum[i] >= off[o].from * ring && cum[i] <= off[o].to * ring) a = 0.0;
+      if (raised[i]) a = 0.0;
+      allowed[side][i] = js_min(a, cap[side][i]);
+    }
   }
-  const int R = (int)std::ceil(SAND_EASE / (ring / n));
-  std::vector<double> eroded(n);
+  // Two strands running side by side at one level share what lies between
+  // them: each takes at most half of what is left once both asphalts and
+  // STRAND_GAP (both kerbs and a little land) are taken, on the side facing
+  // the other. A strand passing over or under (a bridge) is another level.
   for (int i = 0; i < n; i++) {
-    double m = full;
-    for (int d = -R; d <= R; d++) m = js_min(m, allowed[wrap(i + d)]);
-    eroded[i] = m;
+    if (raised[i]) continue;
+    const double hx = -tangents[i].z, hz = tangents[i].x, hl = ttp_fd_hypot(hx, hz);
+    if (!(hl > 0)) continue;
+    for (int j = 0; j < n; j++) {
+      double ds = std::fabs(cum[j] - cum[i]);
+      if (js_min(ds, ring - ds) < STRAND_ARC) continue;
+      if (raised[j] || std::fabs(worldPts[j].y - worldPts[i].y) > STRAND_LEVEL) continue;
+      const double dx = worldPts[j].x - worldPts[i].x, dz = worldPts[j].z - worldPts[i].z;
+      const double reach = widths[i] / 2 + widths[j] / 2 + 2 * full + STRAND_GAP;
+      if (dx * dx + dz * dz >= reach * reach) continue;
+      const double d = ttp_fd_hypot(dx, dz);
+      const double share = js_max(0.0, (d - widths[i] / 2 - widths[j] / 2 - STRAND_GAP) / 2);
+      const int side = (dx * hx + dz * hz) > 0 ? 1 : 0;
+      allowed[side][i] = js_min(allowed[side][i], share);
+    }
   }
+  // Toward a loop both sides come down together: within SYM_REACH of one
+  // each side takes the narrower of the two, so the centre line does not
+  // swerve under the launch pad at its mouth. (Only a loop: a bridge's mouth
+  // keeps each side's own ease, and the land the world stands on beside it.)
+  {
+    // arclength to the nearest loop sample, either way round the ring
+    std::vector<double> nearOff(n, kInf);
+    for (int i = 0; i < n; i++) if (loops[i]) nearOff[i] = 0;
+    for (int k = 1; k <= 2 * n; k++) {
+      const int i = k % n, p = (k - 1) % n;
+      nearOff[i] = js_min(nearOff[i], nearOff[p] + worldPts[i].distanceTo(worldPts[p]));
+    }
+    for (int k = 2 * n - 1; k >= 0; k--) {
+      const int i = k % n, q = (k + 1) % n;
+      nearOff[i] = js_min(nearOff[i], nearOff[q] + worldPts[i].distanceTo(worldPts[q]));
+    }
+    for (int i = 0; i < n; i++)
+      if (nearOff[i] <= SYM_REACH) allowed[0][i] = allowed[1][i] = js_min(allowed[0][i], allowed[1][i]);
+  }
+  // The eroded allowance is then averaged under a TENT SAND_EASE either side
+  // (two box passes of half that, as one kernel), which makes the ease C1: a
+  // single box ramps linearly, and its kinks put spikes in the curvature of
+  // the centre line, which moves with the two strips' difference
+  // (finalizeTrack). Both are taken over ARCLENGTH, each sample weighted by the
+  // road it stands for: the samples are unevenly spaced, and an ease by sample
+  // count bends wherever the spacing changes.
+  const double h = SAND_EASE;
+  const auto dist = [&](int i, int j) {   // arclength from sample i to sample j, the short way round
+    double d = cum[j] - cum[i];
+    if (d > ring / 2) d -= ring;
+    if (d < -ring / 2) d += ring;
+    return std::fabs(d);
+  };
+  std::vector<double> weight(n);
+  for (int i = 0; i < n; i++) weight[i] = (dist(wrap(i - 1), i) + dist(i, wrap(i + 1))) / 2;
+  for (int side = 0; side < 2; side++) {
+    std::vector<double> eroded(n);
+    for (int i = 0; i < n; i++) {
+      double m = allowed[side][i];
+      for (int d = 1; d < n && dist(i, wrap(i + d)) <= h; d++) m = js_min(m, allowed[side][wrap(i + d)]);
+      for (int d = 1; d < n && dist(i, wrap(i - d)) <= h; d++) m = js_min(m, allowed[side][wrap(i - d)]);
+      eroded[i] = m;
+    }
+    for (int i = 0; i < n; i++) {
+      double acc = eroded[i] * weight[i], wsum = weight[i];
+      for (int sgn = -1; sgn <= 1; sgn += 2) {
+        for (int d = 1; d < n; d++) {
+          const int j = wrap(i + sgn * d);
+          const double t = 1 - dist(i, j) / h;
+          if (t <= 0) break;
+          acc += eroded[j] * weight[j] * t;
+          wsum += weight[j] * t;
+        }
+      }
+      out.at[side][i] = acc / wsum;
+    }
+  }
+  return out;
+}
+
+// The ribbon as drawn, before it is final: where the kerb's far edge (the
+// widest kerb any biome draws, KERB_MAX) would fall behind the asphalt's centre
+// line by more than FOLD_LIMIT of its advance over a step, as `track_fold`
+// measures it on the spline, cap that side's strip there to half what it has,
+// or the other side's where it has none (its strip is what moved the centre
+// line). The SAND_FOLD_MAX estimate keeps most corners clear on the first
+// pass; this catches what it reads low: a spline's peak between samples, and
+// the curvature the centre line's own shift adds. False when nothing folds.
+bool narrowFolds(const std::vector<Vec3>& pts, const std::vector<Vec3>& tangents, const std::vector<Vec3>& ups,
+                 const std::vector<double>& widths, const SandSides& sandAt, std::vector<double>* cap) {
+  const int n = (int) pts.size();
+  std::vector<Sample> cs(n);
+  double s = 0;
   for (int i = 0; i < n; i++) {
-    double acc = 0;
-    for (int d = -R; d <= R; d++) acc += eroded[wrap(i + d)];
-    sandAt[i] = acc / (2 * R + 1);
+    if (i > 0) s += pts[i].distanceTo(pts[i - 1]);
+    Sample& c = cs[i];
+    c.pos = pts[i]; c.tangent = tangents[i]; c.up = ups[i];
+    c.lateral = tangents[i].clone().cross(ups[i]).normalize();
+    c.width = widths[i]; c.sandL = sandAt.at[0][i]; c.sandR = sandAt.at[1][i]; c.s = s;
   }
-  return sandAt;
+  const double length = s + pts[n - 1].distanceTo(pts[0]);
+  Centerline cl(cs, length);
+  const auto at = [](const Frame& g, double lat) { return g.pos.clone().addScaledVector(g.lateral, lat); };
+  bool any = false;
+  for (double t = 0; t < length; t += FOLD_STEP) {
+    const Frame a = cl.sampleAt(t - FOLD_STEP / 2), b = cl.sampleAt(t + FOLD_STEP / 2), f = cl.sampleAt(t);
+    const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(f.tangent);
+    if (!(centre > 1e-9)) continue;
+    for (int side = 0; side < 2; side++) {
+      const double sg = side ? 1.0 : -1.0;
+      const double edge = at(b, sg * (b.width / 2 + KERB_MAX)).sub(at(a, sg * (a.width / 2 + KERB_MAX))).dot(f.tangent);
+      if (1 - edge / centre <= FOLD_LIMIT) continue;
+      int lo = 0, hi = n - 1;   // the last sample at or before t
+      while (lo < hi) { const int m = (lo + hi + 1) / 2; if (cs[m].s <= t) lo = m; else hi = m - 1; }
+      for (int k = lo; k <= lo + 1; k++) {
+        const int i = k % n;
+        const int which = sandAt.at[side][i] > 0.05 ? side : 1 - side;
+        cap[which][i] = js_min(cap[which][i], sandAt.at[which][i] / 2);
+      }
+      any = true;
+    }
+  }
+  return any;
 }
 
 RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
@@ -147,33 +288,99 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
   for (int i = 0; i < n; i++)
     tangents.push_back(worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize());
 
-  const std::vector<double> sandAt = sandWidths(worldPts, tangents, widths, pillarFlags, sand * SCALE, sandOff, nSandOff);
-  for (int i = 0; i < n; i++) widths[i] += 2 * sandAt[i];
-
   // Parallel transport an `up` vector around the ring (rotation-minimizing frame).
-  Vec3 up(0, 1, 0);
-  up.addScaledVector(tangents[0], -up.dot(tangents[0]));
-  if (up.lengthSq() < 1e-6) { up = Vec3(0, 0, 1); up.addScaledVector(tangents[0], -tangents[0].z); }
-  up.normalize();
-  std::vector<Vec3> ups;
-  ups.push_back(up.clone());
-  for (int i = 1; i < n; i++) {
-    Vec3 axis = tangents[i - 1].clone().cross(tangents[i]);
-    double sinv = axis.length();
-    if (sinv > 1e-8) {
-      axis.multiplyScalar(1.0 / sinv);
-      up.applyAxisAngle(axis, ttp_fd_atan2(sinv, js_max(-1.0, js_min(1.0, tangents[i - 1].dot(tangents[i])))));
-    }
-    up.addScaledVector(tangents[i], -up.dot(tangents[i])).normalize();
+  const auto transportUps = [&]() {
+    std::vector<Vec3> ups;
+    Vec3 up(0, 1, 0);
+    up.addScaledVector(tangents[0], -up.dot(tangents[0]));
+    if (up.lengthSq() < 1e-6) { up = Vec3(0, 0, 1); up.addScaledVector(tangents[0], -tangents[0].z); }
+    up.normalize();
     ups.push_back(up.clone());
+    for (int i = 1; i < n; i++) {
+      Vec3 axis = tangents[i - 1].clone().cross(tangents[i]);
+      double sinv = axis.length();
+      if (sinv > 1e-8) {
+        axis.multiplyScalar(1.0 / sinv);
+        up.applyAxisAngle(axis, ttp_fd_atan2(sinv, js_max(-1.0, js_min(1.0, tangents[i - 1].dot(tangents[i])))));
+      }
+      up.addScaledVector(tangents[i], -up.dot(tangents[i])).normalize();
+      ups.push_back(up.clone());
+    }
+    // Banking + roll, then unwind the residual holonomy evenly across the ring.
+    for (int i = 0; i < n; i++) if (banks[i] != 0.0) ups[i].applyAxisAngle(tangents[i], banks[i]);
+    Vec3 t0 = tangents[0];
+    double resid = ttp_fd_atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
+    for (int i = 0; i < n; i++) {
+      up.copy(ups[i]).applyAxisAngle(tangents[i], resid * ((double)i / (double)n));
+      ups[i].copy(up);
+    }
+    return ups;
+  };
+  std::vector<Vec3> ups = transportUps();
+
+  // The kerbs stand out by each side's own strip, and the centre line moves to
+  // the middle between them, so a sample stays kerb-to-kerb symmetric about its
+  // pos: the asphalt's own centre sits (sandL - sandR) / 2 along its lateral.
+  // Only road lying on the land carries one: none on pillars, nor where the
+  // deck leans past ON_GROUND_UP (a loop, a wall, a steep bank).
+  std::vector<char> offGround(n);
+  for (int i = 0; i < n; i++) offGround[i] = pillarFlags[i] || ups[i].y < ON_GROUND_UP;
+  // A loop is off the land from its entry, where it is still nearly level,
+  // to where it comes back down.
+  std::vector<char> loops(n, 0);
+  for (int e : loopEntryIdx) {
+    bool inverted = false;
+    for (int k = 0; k < n; k++) {
+      const int i = (e + k) % n;
+      if (ups[i].y < ON_GROUND_UP) inverted = true;
+      else if (inverted) break;
+      offGround[i] = loops[i] = 1;
+    }
   }
-  // Banking + roll, then unwind the residual holonomy evenly across the ring.
-  for (int i = 0; i < n; i++) if (banks[i] != 0.0) ups[i].applyAxisAngle(tangents[i], banks[i]);
-  Vec3 t0 = tangents[0];
-  double resid = ttp_fd_atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
-  for (int i = 0; i < n; i++) {
-    up.copy(ups[i]).applyAxisAngle(tangents[i], resid * ((double)i / (double)n));
-    ups[i].copy(up);
+  // A run of ground between two off it shorter than GROUND_RUN_MIN has no room
+  // to ease a strip in and out again: it would only bulge the kerb and return.
+  {
+    int first = -1;
+    for (int i = 0; i < n && first < 0; i++) if (offGround[i]) first = i;
+    if (first >= 0) {
+      for (int k = 1; k < n;) {
+        const int a = (first + k) % n;
+        if (offGround[a]) { k++; continue; }
+        int len = 0;
+        double arc = 0;
+        while (k + len < n && !offGround[(first + k + len) % n]) {
+          const int c = (first + k + len) % n;
+          arc += worldPts[c].distanceTo(worldPts[(c + 1) % n]);
+          len++;
+        }
+        if (arc < GROUND_RUN_MIN) for (int d = 0; d < len; d++) offGround[(first + k + d) % n] = 1;
+        k += len;
+      }
+    }
+  }
+  const std::vector<Vec3> basePts = worldPts, baseTangents = tangents, baseUps = ups;
+  const std::vector<double> baseWidths = widths;
+  std::vector<double> cap[2] = { std::vector<double>(n, kInf), std::vector<double>(n, kInf) };
+  SandSides sandAt;
+  for (int pass = 0;; pass++) {
+    worldPts = basePts; tangents = baseTangents; ups = baseUps; widths = baseWidths;
+    sandAt = sandWidths(worldPts, tangents, widths, offGround, loops, sand * SCALE, sandOff, nSandOff, cap);
+    bool shifted = false;
+    for (int i = 0; i < n; i++) {
+      widths[i] += sandAt.at[0][i] + sandAt.at[1][i];
+      const double shift = (sandAt.at[1][i] - sandAt.at[0][i]) / 2;
+      if (shift == 0.0) continue;
+      // along the deck's own lateral, so on a banked bend the centre line
+      // stays on the deck's plane
+      const Vec3 lateral = tangents[i].clone().cross(ups[i]).normalize();
+      worldPts[i].addScaledVector(lateral, shift);
+      shifted = true;
+    }
+    if (!shifted) break;
+    for (int i = 0; i < n; i++)
+      tangents[i] = worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize();
+    ups = transportUps();
+    if (pass == FOLD_PASSES || !narrowFolds(worldPts, tangents, ups, widths, sandAt, cap)) break;
   }
 
   std::vector<OutSample> samples;
@@ -192,7 +399,8 @@ RaceTrack finalizeTrack(std::vector<Vec3> worldPts, std::vector<double> widths,
     sm.lateral = lateral;
     sm.s = s;
     sm.width = widths[i];
-    sm.sand = sandAt[i];
+    sm.sandL = sandAt.at[0][i];
+    sm.sandR = sandAt.at[1][i];
     sm.pillars = pillarFlags[i] != 0;
     sm.hillable = hillFlags[i] != 0;
     samples.push_back(sm);
@@ -567,9 +775,13 @@ RaceTrack buildSplineTrack(const TrackDef& def) {
 }
 
 // ---- Furniture resolve: descriptor (fraction-of-lap u) → arclength s.
+// An authored `lat` is from the ASPHALT's centre, which stands off the centre
+// line wherever one side carries more strip than the other (asphalt_mid), so a
+// pad, a box or an oil stays where it was put on the asphalt.
 void resolveFurniture(RaceTrack& b, const TrackDef& def) {
   double len = b.length;
   auto u2s = [&](double u) -> double { return std::fmod(std::fmod(u, 1.0) + 1.0, 1.0) * len; };
+  auto mid = [&](double s) -> double { return asphalt_mid_at(b, s); };
   const double LOOP_PAD_LEN = 2.2, OIL_RADIUS_FRAC = 0.2, PAD_RADIUS_FRAC = 0.18,
                BOX_RADIUS_FRAC = 0.09, POLE_RADIUS = 0.45;
 
@@ -577,45 +789,68 @@ void resolveFurniture(RaceTrack& b, const TrackDef& def) {
   for (int i = 0; i < def.nOils; i++) {
     const FurnDef& o = def.oils[i];
     double radius = o.hasRadius ? o.radius : b.roadWidth * OIL_RADIUS_FRAC;
-    b.hazards.push_back({u2s(o.u), o.lat, radius});
+    b.hazards.push_back({u2s(o.u), o.lat + mid(u2s(o.u)), radius});
   }
   b.pads.clear();
   for (int i = 0; i < def.nPads; i++) {
     const FurnDef& p = def.pads[i];
     double radius = p.hasRadius ? p.radius : b.roadWidth * PAD_RADIUS_FRAC;
-    b.pads.push_back({u2s(p.u), p.lat, false, radius, 0, 0});
+    b.pads.push_back({u2s(p.u), p.lat + mid(u2s(p.u)), false, radius, 0, 0});
   }
   for (const auto& ls : b.loopStarts) {
     double sc = std::fmod(std::fmod(ls.s - LOOP_PAD_LEN / 2, len) + len, len);
-    b.pads.push_back({sc, 0, true, 0, LOOP_PAD_LEN / 2, ls.width / 2});
+    b.pads.push_back({sc, mid(sc), true, 0, LOOP_PAD_LEN / 2, ls.width / 2});
   }
   b.boxes.clear();
   for (int i = 0; i < def.nBoxes; i++) {
     const FurnDef& p = def.boxes[i];
     double radius = p.hasRadius ? p.radius : b.roadWidth * BOX_RADIUS_FRAC;
-    b.boxes.push_back({u2s(p.u), p.lat, radius});
+    b.boxes.push_back({u2s(p.u), p.lat + mid(u2s(p.u)), radius});
   }
   b.poles.clear();
   for (int i = 0; i < def.nPoles; i++) {
     const FurnDef& p = def.poles[i];
     double radius = p.hasRadius ? p.radius : POLE_RADIUS;
-    b.poles.push_back({u2s(p.u), p.lat, radius, false});
+    b.poles.push_back({u2s(p.u), p.lat + mid(u2s(p.u)), radius, false});
   }
   for (const auto& ap : b.autoPoles) b.poles.push_back({ap.s, ap.lat, ap.radius, true});
   if (b.sand > 0) {  // the gantry draws these; ghost keeps buildPoles off them
-    b.poles.push_back({0, -sand_gantry_lat(b.roadWidth), GANTRY_POST_RADIUS, true});
-    b.poles.push_back({0, sand_gantry_lat(b.roadWidth), GANTRY_POST_RADIUS, true});
+    b.poles.push_back({0, mid(0) - sand_gantry_lat(b.roadWidth), GANTRY_POST_RADIUS, true});
+    b.poles.push_back({0, mid(0) + sand_gantry_lat(b.roadWidth), GANTRY_POST_RADIUS, true});
   }
   b.bananas.clear();
   for (int i = 0; i < def.nBananas; i++) {
     const BananaDef& p = def.bananas[i];
-    b.bananas.push_back({u2s(p.u), p.lat});
+    b.bananas.push_back({u2s(p.u), p.lat + mid(u2s(p.u))});
   }
   b.kickers.clear();
   for (int i = 0; i < def.nKickers; i++) b.kickers.push_back({u2s(def.kickers[i].u)});
 }
 
 }  // namespace
+
+double asphalt_mid_at(const RaceTrack& rt, double s) {
+  const std::vector<OutSample>& sm = rt.samples;
+  const int n = (int) sm.size();
+  if (n == 0) return 0.0;
+  if (rt.length > 0) s = std::fmod(std::fmod(s, rt.length) + rt.length, rt.length);
+  // the last sample at or before s, then on to the next (round the seam)
+  int lo = 0, hi = n - 1;
+  if (s < sm[0].s) lo = n - 1;
+  else {
+    while (lo < hi) {
+      const int m = (lo + hi + 1) / 2;
+      if (sm[m].s <= s) lo = m; else hi = m - 1;
+    }
+  }
+  const OutSample& a = sm[lo];
+  const OutSample& c = sm[(lo + 1) % n];
+  double span = c.s - a.s, at = s - a.s;
+  if (span <= 0) span += rt.length;
+  if (at < 0) at += rt.length;
+  const double f = span > 0 ? js_min(1.0, js_max(0.0, at / span)) : 0.0;
+  return a.asphaltMid() + (c.asphaltMid() - a.asphaltMid()) * f;
+}
 
 PostHit post_at_sample(const OutSample& sm, const Post& post) {
   return postAtSample(sm, post);

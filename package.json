@@ -29,6 +29,7 @@
     "budget:scene": "node scripts/scene-budget.mjs",
     "score:landmarks": "node scripts/landmark-score.mjs",
     "place:landmarks": "node scripts/landmark-place.mjs",
+    "repin:world": "node scripts/repin-world.mjs",
     "see:landmarks": "node scripts/landmark-see.mjs",
     "see:pops": "node scripts/pop-see.mjs",
     "check:floating": "node scripts/set-float.mjs",

@@ -1149,7 +1149,7 @@ static void stepSession(RuntimeSession* rs, double dtMs) {
       if (!b.player || !b.ai) continue;
       const Car* car = nullptr;
       for (const auto& cp : rs->eng->cars()) if (cp->id == b.id) car = cp.get();
-      if (car && out && car->sandHere > 1.0) b.ai->holdLane(rs->track.roadWidth / 2 + 0.5 * car->sandHere);
+      if (car && out && car->sandR > 1.0) b.ai->holdLane(car->asphaltMid + rs->track.roadWidth / 2 + 0.5 * car->sandR);
       else b.ai->releaseLane();
     }
     return;
@@ -1647,7 +1647,7 @@ static Centerline centerline_of(const RaceTrack& rt) {
   for (const OutSample& s : rt.samples) {
     Sample c;
     c.pos = s.pos; c.tangent = s.tangent; c.up = s.up; c.lateral = s.lateral;
-    c.width = s.width; c.s = s.s;
+    c.width = s.width; c.sandL = s.sandL; c.sandR = s.sandR; c.s = s.s;
     cs.push_back(c);
   }
   return Centerline(std::move(cs), rt.length);
@@ -1729,6 +1729,10 @@ static Value frameValue(Centerline& cl, double s) {
   o.set("up", vec3Value(f.up));
   o.set("lateral", vec3Value(f.lateral));
   o.set("width", Value::Num(f.width));
+  // the strip each side (L: -lateral), inside `width`: the asphalt's centre
+  // stands (sandL - sandR) / 2 along `lateral`
+  o.set("sandL", Value::Num(f.sandL));
+  o.set("sandR", Value::Num(f.sandR));
   return o;
 }
 

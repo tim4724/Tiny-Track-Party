@@ -11,6 +11,11 @@ import { GEN_TRACKS, GEN_FURNITURE } from './genTracks.js';
 // registry can name a new track BEFORE gen-tracks.mjs runs (the bake pipeline itself
 // imports this module; a hard read here would deadlock that workflow).
 const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
+// The road strip between asphalt and kerb (`sand`), plan units per side at full
+// width, on every track but Skyline. It lies on all road on the land; where it
+// narrows (a corner's inside, two strands side by side, the ease onto pillars)
+// is the builder's rule (trackbuilder.cc sandWidths), not authored. `sandOff`
+// is left for road the builder cannot tell is off the land (a causeway on piles).
 const STRIP = 1.1;
 
 // Track catalogue — DATA ONLY, no renderer. The single source of truth for "what
@@ -461,7 +466,7 @@ export const SET_GROUND = {
     { kind: 'plain', yaw: 25.78, x: -28.94, z: 60.71, len: 9.22, r: 6, w: 5 },
     { kind: 'plain', yaw: 46.27, x: -49.98, z: 54.25, len: 6.39, r: 6, w: 5 },
     { kind: 'plain', yaw: 68.67, x: -68.09, z: 36.56, len: 5.00, r: 6, w: 5 },
-    { kind: 'plain', yaw: 78.26, x: -73.65, z: 31.33, len: 8.28, r: 6, w: 5 }
+    { kind: 'plain', yaw: 72.91, x: -70.79, z: 37.99, len: 8.08, r: 6, w: 5 }
   ]
 };
 
@@ -496,7 +501,6 @@ export function setGroundY(model, x, z) {
 export const TRACKS = {
   // Beach Cup — SEEDED easy circuits (scan-seeds `easy` profile: sweeping corners,
   // rolling hills + hops, width play, no crossings; auto-placed furniture).
-  // Every Beach track carries a sand strip beside the asphalt (plan units per side).
   tidepool: {
     name: 'Tidepool', sand: STRIP, waypoints: GEN_TRACKS.tidepool,
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes,
@@ -538,7 +542,7 @@ export const TRACKS = {
       { model: 'set-tidepool-headland', u: 0.72, lat: 0 },
       { model: 'set-reef-stacks', u: 0.83, lat: 0 },
       { model: 'set-lifeboat-station', u: 0.9, lat: 10, y: 1.8, scale: 1.3 },
-      { model: 'set-tidepool-cottages', u: 0.585, lat: -11, yaw: 180 },
+      { model: 'set-tidepool-cottages', u: 0.585, lat: -8.2, yaw: 180 },
       { model: 'set-crab-pots', u: 0.64, lat: 9.6, yaw: 10, y: 1.13 },
       { model: 'set-rock-poolers-park', u: 0.965, lat: 9.5, y: 0.47 },
       // palms on the downs' near flanks below the crests, placed by hand:
@@ -622,6 +626,9 @@ export const TRACKS = {
       { kind: 'paint', u: 0.546, lat: 15.5, len: 30, r: 7, w: 6, tint: 0xc4bcae },
       // nothing seeded on the camper lane (its gravel claims no footprint)
       { kind: 'clear', u: 0.973, lat: 10, len: 26, r: 5 },
+      // ...nor on the hard past the line, where a seeded palm stood at the
+      // kerb between the grid and the trawler
+      { kind: 'clear', u: 0.02, lat: 6.5, len: 10, r: 3 },
       // ...nor on the wrack past the knoll (a print, likewise: a seeded
       // boulder sat on the kelp)
       { kind: 'clear', u: 0.611, lat: 9.5, len: 14, r: 2.5 },
@@ -680,13 +687,13 @@ export const TRACKS = {
       { model: 'set-jungle-grove', u: 0.93, lat: 9.5 },
       // the lookout and its rope bridge stand on the road's own line, over it
       { model: 'set-pirate-lookout', u: 0.27, lat: 0 },
-      { model: 'set-jungle-grove', u: 0.235, lat: 11 },
+      { model: 'set-jungle-grove', u: 0.23575, lat: 10.994, yaw: 1.12 },
       // the jungle down to the kerb on the island's side of the east
       // straight, the last of them up the foothill behind the posts the
       // rope bridge lands between, so the bridge comes out of the palms;
       // and on the start straight's foothill past the cave
       { model: 'set-jungle-grove', u: 0.185, lat: -10.5, yaw: 180 },
-      { model: 'set-jungle-grove', u: 0.272, lat: -18.5, yaw: 184 },
+      { model: 'set-jungle-grove', u: 0.272, lat: -18.5, yaw: -176 },
       { model: 'set-jungle-grove', u: 0.035, lat: -10.5, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.745, lat: -11, yaw: 180 },
       { model: 'set-jungle-grove', u: 0.775, lat: 8.8 },
@@ -706,7 +713,7 @@ export const TRACKS = {
       // read as a prop put down; the green under the trail is `land`'s)
       { model: 'set-treasure-dig', u: 0.045, lat: 10.5 },
       { model: 'set-sail-yard', u: 0.125, lat: 10.5 },
-      { model: 'set-skull-trail', u: 0.587, lat: 10.5 },
+      { model: 'set-skull-trail', u: 0.585, lat: 10.5 },
       // on the dune beside the climb to the bay (the east beach
       // lay three units under the kerb there): the crew's sloop hove down
       // to have her bottom tarred, and their guns over the anchorage
@@ -732,8 +739,8 @@ export const TRACKS = {
     land: [
       // the island's peak in the middle of the lap; its foothills come down
       // to the east straight and the start straight
-      { kind: 'ridge', u: 0.27, lat: -32, len: 40, r: 24, r1: 20, h: 15, h1: 9, top: 0.15, tint: 0x3fae52 },
-      { kind: 'ridge', u: 0.22, lat: -21, len: 30, r: 18, r1: 10, h: 5.5, h1: 1, top: 0.2, near: 4, tint: 0x7ab878 },
+      { kind: 'ridge', u: 0.27, lat: -32, yaw: 0, len: 40, r: 24, r1: 20, h: 15, h1: 9, top: 0.15, tint: 0x3fae52 },
+      { kind: 'ridge', u: 0.22, lat: -21, yaw: 0, len: 30, r: 18, r1: 10, h: 5.5, h1: 1, top: 0.2, near: 4, tint: 0x7ab878 },
       { kind: 'ridge', u: 0.96, lat: -22, len: 40, r: 18, h: 5, top: 0.2, near: 6, tint: 0x7ab878 },
       // the spur the cave is cut into, green down to the cave's rock
       { kind: 'ridge', u: 0.975, lat: -15.5, len: 18, r: 8, h: 6, top: 0.25, near: 2.8, tint: 0x7ab878 },
@@ -744,7 +751,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.885, lat: -20, len: 16, r: 12, h: 2.5, top: 0.25, near: 2, tint: 0x7ab878 },
       { kind: 'ridge', u: 0.885, lat: 13, len: 16, r: 8, h: 3.4, top: 0.3, near: 0.5, tint: 0x6aaa6a },
       // the grassy rise the east beach's grove stands on
-      { kind: 'ridge', u: 0.222, lat: 17, len: 26, r: 10, h: 3.2, top: 0.3, near: 2.3, tint: 0x7ab878 },
+      { kind: 'ridge', u: 0.22234, lat: 17.009, yaw: 0.43, len: 26, r: 10, h: 3.2, top: 0.3, near: 2.3, tint: 0x7ab878 },
       // the headland behind Skull Rock, a ridge running out to the west
       // shore past the rock's clearing (which would cut any flank nearer
       // the road)
@@ -762,7 +769,7 @@ export const TRACKS = {
       // the dune beside the climb to the bay, a little over the road all
       // the way up, so what stands on it stands over the kerb; it is down
       // again before the bay's damp sand and short of the lookout's legs
-      { kind: 'ridge', u: 0.310, lat: 13.5, len: 9, r: 10, h: 3.0, h1: 3.7, top: 0.5, near: 0.4, w: 3 },
+      { kind: 'ridge', u: 0.31, lat: 13.5, len: 9, r: 10, h: 3.0, h1: 3.7, top: 0.5, near: 0.4, w: 3 },
       // the camp's own rise on the east beach: its shelter, its fire and its
       // pirates stand at the road's height instead of under the kerb
       { kind: 'ridge', u: 0.09, lat: 17, len: 8, r: 13, h: 0.92, top: 0.55, near: 0.4, w: 4 },
@@ -773,7 +780,7 @@ export const TRACKS = {
       { kind: 'clear', u: 0.69, lat: -10, len: 20, r: 6 },
       // ...nor a seeded boulder on its face from the gate down the S: sand
       // coloured, on the jungle's green, they read as props left on a lawn
-      { kind: 'clear', u: 0.53, lat: -13, len: 28, r: 9 },
+      { kind: 'clear', u: 0.53, lat: -13, yaw: 0, len: 28, r: 9 },
       { kind: 'clear', u: 0.61, lat: -13, len: 30, r: 9 },
       // the jungle's green carried on round the S's second bend, where the
       // peak's own tint has faded out down its flank (bare sand facets showed
@@ -783,16 +790,16 @@ export const TRACKS = {
       // ...and down the foothills to the kerb of the east straight, the bend
       // into it and the start straight, which stood bare sand under a green
       // crest (a dune, on an island called jungle)
-      { kind: 'paint', u: 0.215, lat: -13, len: 56, r: 8, w: 5, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.215, lat: -24, len: 56, r: 10, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.215, lat: -13, yaw: 0, len: 56, r: 8, w: 5, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.215, lat: -24, yaw: 0, len: 56, r: 10, w: 6, tint: 0x5f9f5f },
       { kind: 'paint', u: 0.115, lat: -14, len: 16, r: 9, w: 6, tint: 0x5f9f5f },
       { kind: 'paint', u: 0.025, lat: -13, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
       // ...and round the bay, the peak's flank over the anchorage
-      { kind: 'paint', u: 0.315, lat: -13, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.385, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.315, lat: -13, yaw: 0, len: 30, r: 8, w: 5, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.385, lat: -14, yaw: 0, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
       { kind: 'paint', u: 0.45, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.515, lat: -14, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
-      { kind: 'paint', u: 0.222, lat: 15, len: 26, r: 6, w: 4, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.515, lat: -14, yaw: 0, len: 22, r: 9, w: 6, tint: 0x5f9f5f },
+      { kind: 'paint', u: 0.22223, lat: 15.006, yaw: 0.33, len: 26, r: 6, w: 4, tint: 0x5f9f5f },
       // the headland's jungle brought down along the shore from Skull Rock
       // to the stockade, under the crew's trail
       { kind: 'paint', u: 0.592, lat: 13.5, len: 26, r: 6, w: 4, tint: 0x5f9f5f }
@@ -862,7 +869,7 @@ export const TRACKS = {
       // and the salt killed beside the east run
       { model: 'set-fish-racks', u: 0.012, lat: 11.5 },
       { model: 'set-chapel-ruin', u: 0.15, lat: 19 },
-      { model: 'set-ghost-wood', u: 0.31, lat: 14 },
+      { model: 'set-ghost-wood', u: 0.31, lat: 15 },
       // the storm-signal station inside the first bend, the sea
       // defence where the tide comes nearest the east run, and the ship's
       // boxes the storm threw up the strand on the run back to the net huts
@@ -874,7 +881,7 @@ export const TRACKS = {
       // ...and more of them, where the east run comes down to
       // the strand and, still coming ashore, in the surf past the groynes
       { model: 'set-storm-containers-b', u: 0.245, lat: -10.5, yaw: 180 },
-      { model: 'set-storm-containers-c', u: 0.414, lat: -12.5, yaw: 180 },
+      { model: 'set-storm-containers-c', u: 0.41, lat: -13.2, yaw: 172.38 },
       // ...and, on the dune beside the climb to the pass, the
       // fore half of a coaster the storm broke
       { model: 'set-storm-wreck', u: 0.502, lat: -12.5, yaw: 180 },
@@ -1013,8 +1020,8 @@ export const TRACKS = {
       { model: 'set-seafront-cafe', u: 0.369, lat: 9 },
       { model: 'set-promenade', u: 0.393, lat: -8.2, yaw: 180 },
       { model: 'set-surf-club', u: 0.09, lat: -11, yaw: 180, y: 0.8 },
-      { model: 'set-surf-campers', u: 0.715, lat: -8.8, yaw: 180, y: 0.55 },
-      { model: 'set-surf-contest', u: 0.84, lat: -9.5, yaw: 180 },
+      { model: 'set-surf-campers', u: 0.7121, lat: -9.2, yaw: 180, y: 0.55 },
+      { model: 'set-surf-contest', u: 0.848, lat: -9.5, yaw: 180 },
       { model: 'set-beach-day', u: 0.905, lat: -10.5, yaw: 180, y: 0.85 },
       { model: 'set-channel-beacon', u: 0.458, lat: -9.5 },
       // the causeway's piles and rope rail, both kerbs, the hop's length and
@@ -1037,11 +1044,11 @@ export const TRACKS = {
       // chase eye never saw their water. They lie on the low beach beside
       // the hop's landing now, on the plain with no rise, so the cars look
       // down into the pool off the crest (set_prototypes.py lido() has the
-      // geometry; RIP_HEADING, re-read if the row moves). The first two
-      // `shore` rows give them that beach
+      // geometry; RIP_HEADING, re-read if the row moves, or turn its yaw to
+      // keep the heading). The first two `shore` rows give them that beach
       { model: 'set-seafront-bandstand', u: 0.655, lat: -11.5, yaw: 180 },
       { model: 'set-riptide-lagoon-beach', u: 0.725, lat: 12.5 },
-      { model: 'set-lido', u: 0.158, lat: -15.3, yaw: 180 },
+      { model: 'set-lido', u: 0.154, lat: -14, yaw: 178.67 },
       // the pier's walk carried over the road where the pier sets
       // out, astride it (the promenade's stair meets it: set_prototypes.py
       // PIER_STAIR, re-read if either row moves), its far stair coming down
@@ -1068,8 +1075,11 @@ export const TRACKS = {
       { kind: 'shore', u: 0.53, lat: 10, len: 40, r: 30, w: 17 },
       // the sea under the pier: its `w` lets the bay in past the causeway's
       // reach on that bearing (the polar shore keeps 5 u past it otherwise),
-      // held narrow so no road meets it
-      { kind: 'shore', u: 0.40, lat: -13, len: 16, r: 10, w: 9 },
+      // held narrow so no road meets it. Its sunk sea eases out across the
+      // spit of beach north of the clock's bastion: a third of a unit further
+      // along, the sand stood up through the damp band there in pale shards
+      // (seen from above)
+      { kind: 'shore', u: 0.3991, lat: -13, len: 16, r: 10, w: 9 },
       // the Point, a big grassy headland north of the start straight, its
       // foothill climbing from the straight's kerb; the interior's great
       // marram dune, its flank along the north run
@@ -1098,13 +1108,15 @@ export const TRACKS = {
       { kind: 'clear', u: 0.97, lat: -30, len: 50, r: 20 },
       { kind: 'clear', u: 0.0, lat: -12, len: 50, r: 9 },
       { kind: 'clear', u: 0.85, lat: 35, r: 18 },
-      { kind: 'clear', u: 0.84, lat: 12, len: 40, r: 9 }
+      { kind: 'clear', u: 0.84, lat: 12, len: 40, r: 9 },
+      // nothing seeded between the surf contest and the kerb (a palm stood
+      // in front of its tower)
+      { kind: 'clear', u: 0.848, lat: -6.5, len: 26, r: 3 }
     ]
   },
   // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
   // fraction, no hairpins, roomy radii, but real crossings + hills; auto-placed furniture).
   powder: {
-    sandOff: [[0.036, 0.066]],   // the chairlift's pylons stand at the kerb
     name: 'Powder', sand: STRIP, waypoints: GEN_TRACKS.powder,
     oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes,
     // A ski resort in its valley: the ski mountain and its lift to the west,
@@ -1122,7 +1134,7 @@ export const TRACKS = {
       { model: 'set-ski-lift', u: 0.9, lat: -32.5, yaw: 180 },
       { model: 'set-ski-school', u: 0.54, lat: -10.2, yaw: 160 },
       { model: 'set-powder-peaks', u: 0.03, lat: -60 },
-      { model: 'set-powder-chairlift', u: 0.058, lat: 0 },
+      { model: 'set-powder-chairlift', u: 0.0317, lat: 0 },
       { model: 'set-powder-forest-a', u: 0.9749, lat: -17.75 },
       { model: 'set-powder-forest-b', u: 0.0691, lat: -18.92 },
       { model: 'set-powder-forest-c', u: 0.1109, lat: -13.45 },
@@ -1184,18 +1196,16 @@ export const TRACKS = {
     ]
   },
   flurry: {
-    // no strip past the forest that stands between two strands, nor over the stream
-    sandOff: [[0.165, 0.215], [0.79, 0.84]],
     name: 'Flurry', sand: STRIP, waypoints: GEN_TRACKS.flurry,
     oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes,
     set: [
-      { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: 180 },
+      { model: 'set-frozen-lake', u: 0.3355, lat: -11.4, yaw: -180 },
       // the fishing hamlet on the lake's south shore, dead ahead of the run
       // down off the bridge and outside the bend after it: cabins up the
       // hill's foot, the boathouse, the jetty out onto the ice, the fishing
       // huts on it beside the road (built on the ground sampled under it,
       // set_prototypes.py HAMLET_G: re-sample after moving it or the land)
-      { model: 'set-lake-hamlet', u: 0.375, lat: -11, yaw: 180 },
+      { model: 'set-lake-hamlet', u: 0.375, lat: -11, yaw: -180 },
       // one more corner of the village by the start
       { model: 'set-log-cabin', u: 0.05, lat: 12, yaw: 30 },
       { model: 'set-flurry-peaks-ne', u: 0.64, lat: 45 },
@@ -1209,21 +1219,21 @@ export const TRACKS = {
       // (the full tier's)
       { model: 'set-flurry-forest-n', u: 0.684, lat: 14, lite: false },
       { model: 'set-flurry-forest-d', u: 0.1371, lat: 15.35 },
-      { model: 'set-flurry-forest-e', u: 0.1894, lat: 14.39 },
+      { model: 'set-flurry-forest-e', u: 0.1894, lat: 14.39, yaw: 0.01 },
       // the west gap the start straight looks into: a clump where the outrun
       // of the old jump stood at the first bend, and pines on the low far ridge
       { model: 'set-flurry-forest-f', u: 0.095, lat: 10.5 },
       { model: 'set-flurry-forest-g', u: 0.075, lat: 50 },
-      { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70 },
+      { model: 'set-flurry-peaks-nw', u: 0.39, lat: -70, yaw: 0 },
       // forest in the hollows of the north-west ridge's face and along its
       // foot (the frame the ridge's: +X up the face, +Z along it)
-      { model: 'set-flurry-forest-h', u: 0.39, lat: -50 },
-      { model: 'set-flurry-forest-i', u: 0.39, lat: -50 },
-      { model: 'set-flurry-forest-j', u: 0.39, lat: -50 },
-      { model: 'set-flurry-forest-k', u: 0.39, lat: -50 },
+      { model: 'set-flurry-forest-h', u: 0.39, lat: -50, yaw: 0 },
+      { model: 'set-flurry-forest-i', u: 0.39, lat: -50, yaw: 0 },
+      { model: 'set-flurry-forest-j', u: 0.39, lat: -50, yaw: 0 },
+      { model: 'set-flurry-forest-k', u: 0.39, lat: -50, yaw: 0 },
       // (the belt along the foot is the full tier's: the box keeps the hollows)
-      { model: 'set-flurry-forest-l', u: 0.39, lat: -50, lite: false },
-      { model: 'set-flurry-forest-m', u: 0.39, lat: -50, lite: false },
+      { model: 'set-flurry-forest-l', u: 0.39, lat: -50, yaw: 0, lite: false },
+      { model: 'set-flurry-forest-m', u: 0.39, lat: -50, yaw: 0, lite: false },
       { model: 'set-flurry-peaks-se', u: 0.92, lat: -68 },
       // the hamlet's valley on round the lap's second half: its fields and
       // hay barn outside the bend north off the east loop, the frozen stream
@@ -1233,7 +1243,7 @@ export const TRACKS = {
       // FIELDS_*, FARM_*, STREAM_*; the box keeps each one's bones)
       { model: 'set-flurry-fields', u: 0.765, lat: 12 },
       { model: 'set-flurry-stream', u: 0.815, lat: 0 },
-      { model: 'set-flurry-farm', u: 0.905, lat: -10, yaw: 180 }
+      { model: 'set-flurry-farm', u: 0.905, lat: -10, yaw: -180 }
     ],
     // A frozen stream runs from the village loop under the crossing down to
     // the lake. The village's ski jump is cut into the south shoulder of the
@@ -1262,7 +1272,7 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.6848, lat: 49.96, r: 34, h: 18, top: 0.12 },
       // past the west loop: the same
       { kind: 'ridge', u: 0.1371, lat: 30.95, r: 28, h: 10, top: 0.2, near: 2 },
-      { kind: 'ridge', u: 0.1907, lat: 29.39, r: 26, h: 9, top: 0.2, near: 2 },
+      { kind: 'ridge', u: 0.19069, lat: 29.39, yaw: 0, r: 26, h: 9, top: 0.2, near: 2 },
       { kind: 'ridge', u: 0.1186, lat: 46.36, r: 34, h: 18, top: 0.12 },
       { kind: 'ridge', u: 0.16, lat: 51.74, r: 30, h: 15, top: 0.12 },
       // the open west gap the start straight looks into, closed low and far
@@ -1274,14 +1284,14 @@ export const TRACKS = {
       // stood under the road's own height, their walls behind its bank
       { kind: 'ridge', u: 0.045, lat: 12.5, r: 10, h: 1.4, top: 0.65, near: 2 },
       // the far ridges along the long sides
-      { kind: 'ridge', u: 0.39, lat: -70, len: 100, r: 28, h: 15, top: 0.15 },
+      { kind: 'ridge', u: 0.39, lat: -70, yaw: 0, len: 100, r: 28, h: 15, top: 0.15 },
       { kind: 'ridge', u: 0.92, lat: -68, len: 80, r: 28, h: 13, top: 0.15 },
       // the north-west ridge's face is no one white wall: spurs run down it
       // toward the valley, each its own length and height, hollows between
       // them in a little shade, forest up the hollows and along the foot to
       // a ragged treeline (forest-h to -k, sampled, set_prototypes.py
       // FORESTS). All inside the ridge's own reach.
-      { kind: 'ridge', u: 0.39, lat: -51, z: -33, yaw: 90, len: 14, r: 10, h: 5.5, top: 0.2 },
+      { kind: 'ridge', u: 0.39, lat: -51.001, z: -33, yaw: 90, len: 14, r: 10, h: 5.5, top: 0.2 },
       { kind: 'ridge', u: 0.39, lat: -49, z: -5, yaw: 78, len: 18, r: 11, h: 6.5, top: 0.2 },
       { kind: 'ridge', u: 0.39, lat: -52, z: 24, yaw: 100, len: 12, r: 9, h: 4.5, top: 0.2 },
       { kind: 'paint', u: 0.39, lat: -52, z: -19, yaw: 90, len: 14, r: 4, w: 5, tint: 0xdbe4f4 },
@@ -1289,24 +1299,23 @@ export const TRACKS = {
     ]
   },
   glacier: {
-    sandOff: [[0.388, 0.482], [0.889, 0.917]],   // the dog trail runs along the kerb
     name: 'Glacier', sand: STRIP, waypoints: GEN_TRACKS.glacier,
     oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes,
     set: [
       // the expedition's igloo camp, its doorways to the road
-      { model: 'set-igloo-camp', u: 0.232, lat: -12.5, yaw: 180 },
+      { model: 'set-igloo-camp', u: 0.232, lat: -12.5, yaw: -180 },
       { model: 'set-expedition-camp', u: 0.738, lat: -12, yaw: 0 },
       // each rookery turned so its white fronts face the road and the car
       // coming at it: one on the moraine outside the bottom loop, dead ahead
       // of the long raised straight, one below the NE bend's crest
       // (the first as near the kerb as its slope's foot lets it stand; the
       // second stays up its slope, where it shows over the hump's kerb)
-      { model: 'set-penguin-group', u: 0.645, lat: -7.5, yaw: 145 },
+      { model: 'set-penguin-group', u: 0.645, lat: -7.501, yaw: 145.01 },
       { model: 'set-penguin-group', u: 0.37, lat: 8, yaw: 35 },
       // the terminal moraine either side of that rookery, on the loop's
       // outside verge: slate erratics and stranded blocks of blue ice (built
       // on the ground sampled under them, set_prototypes.py MORAINE)
-      { model: 'set-glacier-moraine-a', u: 0.628, lat: -9, yaw: 180 },
+      { model: 'set-glacier-moraine-a', u: 0.628, lat: -9, yaw: -180 },
       { model: 'set-glacier-moraine-b', u: 0.678, lat: -9.5, yaw: 180 },
       // beside the raised straight: the dog team's trail along the drift on
       // its left, the flagged crevasses of the glacier's snout on its right
@@ -1325,19 +1334,19 @@ export const TRACKS = {
       { model: 'set-glacier-tongue', u: 0.9954, lat: -71.7, yaw: -122 },
       // the range on round the valley's south side, and on the massif east of
       // the east leg
-      { model: 'set-glacier-peaks-south', u: 0.661, lat: -70 },
+      { model: 'set-glacier-peaks-south', u: 0.66099, lat: -70, yaw: 0 },
       { model: 'set-glacier-peaks-east', u: 0.45, lat: -66 },
       // the expedition's airstrip inside the top loop, beside the top straight
       { model: 'set-glacier-airstrip', u: 0.2, lat: 9 },
       // a nunatak on the foothill outside the bend back to the line: the east
       // range's rock breaking out of it (the frame the range's, +X east), the
       // lateral moraine up the verge at its foot
-      { model: 'set-glacier-nunatak', u: 0.8423, lat: 24, yaw: 180 },
+      { model: 'set-glacier-nunatak', u: 0.8423, lat: 22, yaw: 180 },
       { model: 'set-glacier-moraine-c', u: 0.85, lat: 9.5 },
       // the expedition's fuel depot just past the line, and its flagged
       // route on along the start straight's outside verge
       { model: 'set-glacier-depot', u: 0.012, lat: -8.5, yaw: 180 },
-      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: 180 },
+      { model: 'set-glacier-route-flags', u: 0.062, lat: -5.6, yaw: -180 },
       // serac fields where the ice breaks up on the outside verge of a bend:
       // dead ahead of the start straight, outside the bend down to the east
       // leg, and at the nunatak's foot on the bend back to the line (a wash
@@ -1398,15 +1407,18 @@ export const TRACKS = {
       // ...nor between the road and the airstrip, where two pines stood in
       // front of the plane on the closest pass
       { kind: 'clear', u: 0.212, lat: 5.5, len: 22, r: 2.5 },
+      // ...nor along the advanced camp's tent row (in the camp's frame): a
+      // drift heap seeded at the row's end stood into its last tent
+      { kind: 'clear', u: 0.772, lat: -6.8, yaw: 150, len: 5, r: 2 },
       // foothills rising off the outside verge of the NE bend, the east leg,
       // the return beside it, the run from the line and the corner onto the
       // top straight (their flanks low where the near ramp ends),
       // the massif behind them carrying set-glacier-peaks-east
       { kind: 'ridge', u: 0.2775, lat: -27.31, r: 24, h: 5, top: 0.25, near: 2 },
-      { kind: 'ridge', u: 0.3168, lat: -27.36, r: 24, h: 5.5, top: 0.25, near: 2 },
+      { kind: 'ridge', u: 0.3168, lat: -27.36, yaw: 0, r: 24, h: 5.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.4286, lat: -27.3, r: 24, h: 6.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.846, lat: 27.32, r: 24, h: 6, top: 0.25, near: 2 },
-      { kind: 'ridge', u: 0.6143, lat: -25.81, r: 22, h: 6, top: 0.25, near: 2 },
+      { kind: 'ridge', u: 0.6143, lat: -25.81, yaw: 0, r: 22, h: 6, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.0817, lat: -25.72, r: 22, h: 3.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.1338, lat: -25.77, z: -0.49, r: 22, h: 3.5, top: 0.25, near: 2 },
       { kind: 'ridge', u: 0.3027, lat: -54.42, r: 30, h: 12, top: 0.15 },
@@ -1414,20 +1426,21 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.8209, lat: 47.88, z: 0.97, r: 28, h: 7, top: 0.15 },
       // past the moraine: the snowfield the south range stands over, a swell
       // under each of its summits
-      { kind: 'ridge', u: 0.6596, lat: -41.43, yaw: 171.8, len: 100, r: 26, h: 1.6 },
-      { kind: 'ridge', u: 0.6435, lat: -74.3, r: 18, h: 4, top: 0.15 },
-      { kind: 'ridge', u: 0.6558, lat: -65.99, r: 22, h: 5, top: 0.15 },
+      { kind: 'ridge', u: 0.6596, lat: -41.429, yaw: 171.8, len: 100, r: 26, h: 1.6 },
+      { kind: 'ridge', u: 0.6435, lat: -74.299, yaw: 0, r: 18, h: 4, top: 0.15 },
+      { kind: 'ridge', u: 0.65581, lat: -65.99, yaw: 0, r: 22, h: 5, top: 0.15 },
       { kind: 'ridge', u: 0.67, lat: -56.79, r: 20, h: 4, top: 0.15 },
       { kind: 'ridge', u: 0.6842, lat: -60.98, z: -0.99, r: 18, h: 3, top: 0.15 }
     ]
   },
   avalanche: {
-    sandOff: [[0.061, 0.082], [0.887, 0.913]],   // a forest and the windsock stand at the kerb
     name: 'Avalanche', sand: STRIP, waypoints: GEN_TRACKS.avalanche,
     oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes,
     set: [
-      { model: 'set-avalanche-slide', u: 0.76, lat: 16 },
-      { model: 'set-windsock', u: 0.894, lat: 7.5, yaw: 48 },
+      { model: 'set-avalanche-slide', u: 0.75831, lat: 14.29, yaw: 1.09 },
+      // the avalanche patrol's post past the long gallery, read from the
+      // road to it and across the infield from the run to the last loop
+      { model: 'set-windsock', u: 0.914, lat: 6.4, yaw: 10 },
       // the mountainside outside the top loop: three avalanche paths come
       // down through its forest to the road, a warning sign at the foot of
       // the first two, the third coming down onto the snow shed's roof
@@ -1444,23 +1457,23 @@ export const TRACKS = {
       // (short of the road crew's machines at the gallery's mouth, not in front of them)
       { model: 'set-warning-sign', u: 0.3, lat: 4.4, yaw: 30 },
       // and at the foot of the west slope's path, at the turn onto the crossing
-      { model: 'set-warning-sign', u: 0.085, lat: -4.4, yaw: 115 },
+      { model: 'set-warning-sign', u: 0.0858, lat: -4.4, yaw: 114.74 },
       // forest down the mountainside, the S-bend's spur, the west slope and the
       // wedge inside the S, kept off the paths (sampled, set_prototypes.py FORESTS)
       { model: 'set-avalanche-forest-a', u: 0.2693, lat: 15.72 },
-      { model: 'set-avalanche-forest-b', u: 0.3120, lat: 13.43 },
-      { model: 'set-avalanche-forest-c', u: 0.3420, lat: 17.80 },
-      { model: 'set-avalanche-forest-d', u: 0.3922, lat: 17.58 },
-      { model: 'set-avalanche-forest-e', u: 0.4190, lat: 16.98 },
-      { model: 'set-avalanche-forest-f', u: 0.0943, lat: -10.71 },
-      { model: 'set-avalanche-forest-g', u: 0.5700, lat: -13.62 },
-      { model: 'set-avalanche-forest-h', u: 0.0300, lat: 11.75 },
+      { model: 'set-avalanche-forest-b', u: 0.312, lat: 13.43 },
+      { model: 'set-avalanche-forest-c', u: 0.342, lat: 17.8 },
+      { model: 'set-avalanche-forest-d', u: 0.3922, lat: 17.58, yaw: 0 },
+      { model: 'set-avalanche-forest-e', u: 0.419, lat: 16.98 },
+      { model: 'set-avalanche-forest-f', u: 0.0943, lat: -10.71, yaw: 0 },
+      { model: 'set-avalanche-forest-g', u: 0.57, lat: -13.62, yaw: 0 },
+      { model: 'set-avalanche-forest-h', u: 0.03, lat: 11.75 },
       // forest on the cirque's lower faces up to a ragged treeline, trimmed
       // along the slide's chute (sampled, set_prototypes.py FORESTS)
-      { model: 'set-avalanche-forest-i', u: 0.7165, lat: 28.61 },
-      { model: 'set-avalanche-forest-j', u: 0.7785, lat: 26.84 },
-      { model: 'set-avalanche-forest-k', u: 0.8458, lat: 16.93 },
-      { model: 'set-avalanche-slope', u: 0.87, lat: 16, yaw: 20 },
+      { model: 'set-avalanche-forest-i', u: 0.71341, lat: 28.21, yaw: 0.03 },
+      { model: 'set-avalanche-forest-j', u: 0.77376, lat: 25.64, yaw: -2.17 },
+      { model: 'set-avalanche-forest-k', u: 0.84573, lat: 16.21, yaw: 3.25 },
+      { model: 'set-avalanche-slope', u: 0.86977, lat: 14.17, yaw: 20.09 },
       { model: 'set-avalanche-slope', u: 0.1, lat: -32.5, yaw: 160 },
       // Where the road runs under the mountains, on the outside of the last
       // loop, it is cut into the mountainside and roofed over: two galleries,
@@ -1470,8 +1483,8 @@ export const TRACKS = {
       // centreline and the land beside it in its own frame (set_prototypes.py
       // ROAD_A/FACE_A, ROAD_B/FACE_B), so a gallery's u here, its samples
       // there and the land below move together: re-sample them after either.
-      { model: 'set-avalanche-gallery-short', u: 0.722, lat: 0 },
-      { model: 'set-avalanche-gallery', u: 0.825, lat: 0 },
+      { model: 'set-avalanche-gallery-short', u: 0.71893, lat: 0 },
+      { model: 'set-avalanche-gallery', u: 0.82285, lat: 0 },
       // the third, on the run west along the top loop under the mountainside,
       // where the third avalanche path comes down onto its roof; the plough at
       // work at its east mouth (set_prototypes.py ROAD_C / FACE_C: re-sample
@@ -1481,7 +1494,7 @@ export const TRACKS = {
       // snow keeps their 9 u facets, rock in them read as stripes on a dome.
       // (The western massif's summit crags were hidden by the spur from
       // every seat; its east face's ribs carry its rock.)
-      { model: 'set-avalanche-crags', u: 0.8349, lat: 52.1, yaw: 3 },
+      { model: 'set-avalanche-crags', u: 0.83778, lat: 51.95, yaw: 5.53 },
       // the high peaks the slides start from, east of the mountainside, its
       // stands their foothills (the piece's frame is the world's: yaw cancels
       // the road's heading at u 0.276)
@@ -1489,14 +1502,14 @@ export const TRACKS = {
       // the cirque's faces: ribs of rock down their fall lines, a cornice and
       // a band of rock over the slide's crown, a piece a face so no footprint
       // spans the loop (the frames the world's)
-      { model: 'set-avalanche-ribs-w', u: 0.7075, lat: 38.7, yaw: 24.87 },
-      { model: 'set-avalanche-ribs-slide', u: 0.766, lat: 42.97, yaw: -29.84 },
+      { model: 'set-avalanche-ribs-w', u: 0.70441, lat: 38.62, yaw: 25.19 },
+      { model: 'set-avalanche-ribs-slide', u: 0.76346, lat: 40.95, yaw: -29.84 },
       // big old firs in the wedge inside the S-bend (sampled, set_prototypes.py FORESTS)
       { model: 'set-avalanche-forest-l', u: 0.9936, lat: 17.14 },
       // firs up the north-west face of the cirque's south slope to a ragged
       // treeline: the one bare dome the run to the last loop looked at (the
       // full tier's: the box's cells barely see it)
-      { model: 'set-avalanche-forest-m', u: 0.87, lat: 30, lite: false }
+      { model: 'set-avalanche-forest-m', u: 0.86978, lat: 28.17, yaw: 0, lite: false }
     ],
     // The mountains round the last loop, its outside a cirque the slide comes
     // down into: a spur off the western massif runs down to the kerb, the
@@ -1504,16 +1517,20 @@ export const TRACKS = {
     // off the verge along the long gallery's straight, a peak on it and a
     // lower one toward the cirque's slope. Every flank stands `near` the kerb
     // (the galleries' cuts stand in front of it) and joins the slide's
-    // mountain either side of its chute, clear of its forest.
+    // mountain either side of its chute, clear of its forest. The cirque's
+    // land and what stands on it (the slide, its ribs and crags, its forests,
+    // the two galleries) were made together: their rows hold each where the
+    // others expect it, so move them together where the lap's centre line
+    // moves under them.
     land: [
-      { kind: 'ridge', u: 0.7156, lat: 24.0, yaw: -101, x: -0.8, len: 32, r: 10, r1: 24, h: 8, h1: 14, top: 0.3, near: 3.8 },
-      { kind: 'ridge', u: 0.7091, lat: 67.4, x: 0.6, z: -1.5, r: 62, h: 28, top: 0.1, near: 3.8 },
-      { kind: 'ridge', u: 0.8349, lat: 52.1, yaw: 3, len: 20, r: 62, h: 28, top: 0.1, near: 3.8 },
-      { kind: 'ridge', u: 0.8371, lat: 64.0, r: 20, h: 10, near: 3.8 },
-      { kind: 'ridge', u: 0.8587, lat: 61.8, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 },
+      { kind: 'ridge', u: 0.71251, lat: 23.59, yaw: -100.97, x: -0.8, len: 32, r: 10, r1: 24, h: 8, h1: 14, top: 0.3, near: 3.8 },
+      { kind: 'ridge', u: 0.70598, lat: 67.16, yaw: 0.23, x: 0.6, z: -1.5, r: 62, h: 28, top: 0.1, near: 3.8 },
+      { kind: 'ridge', u: 0.83778, lat: 51.95, yaw: 5.53, len: 20, r: 62, h: 28, top: 0.1, near: 3.8 },
+      { kind: 'ridge', u: 0.8407, lat: 63.77, yaw: 2.38, r: 20, h: 10, near: 3.8 },
+      { kind: 'ridge', u: 0.85741, lat: 60.29, yaw: 0.2, x: -4.4, z: 2.6, r: 40, h: 18, top: 0.1, near: 3.8 },
       // no rock cluster on the open snow the run to the loop looks over: it
       // stood alone on the plain like a dropped asset
-      { kind: 'clear', u: 0.605, lat: -10, r: 1 },
+      { kind: 'clear', u: 0.605, lat: -10, yaw: 0, r: 1 },
       // The mountainside outside the top loop: foothills rising off the
       // verge (their flanks low where the near ramp ends) round its east end
       // and its north-west corner, and over the run west where the third
@@ -1529,34 +1546,33 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.3517, lat: 25, yaw: 158, len: 10, r: 26, h: 18, top: 0.15, near: 3.8 },
       { kind: 'ridge', u: 0.3334, lat: 43.16, z: -0.75, r: 24, h: 18, top: 0.12 },
       { kind: 'ridge', u: 0.3012, lat: 45.94, z: 0.56, r: 28, h: 16, top: 0.12 },
-      { kind: 'ridge', u: 0.3883, lat: 42.95, r: 28, h: 16, top: 0.12 },
-      { kind: 'ridge', u: 0.5721, lat: -29.36, r: 26, h: 11, top: 0.2, near: 2 },
+      { kind: 'ridge', u: 0.3883, lat: 42.95, yaw: 0, r: 28, h: 16, top: 0.12 },
+      { kind: 'ridge', u: 0.5721, lat: -29.36, yaw: 0, r: 26, h: 11, top: 0.2, near: 2 },
       // The ground's region held where the warning signs' cones set it (east
       // and south) before this mountainside replaced them: a region that
       // moves moves every vertex of the ground's 9 u grid, and the cirque's
       // faces and the two cirque galleries' cuts (sampled, ROAD_A/FACE_A,
       // ROAD_B/FACE_B) stand on the ground as it was drawn. Each clears a
       // unit of scatter and does nothing else.
-      { kind: 'clear', u: 0.277, lat: 0, yaw: -168.87048, x: 89.0467, z: 6.5189, r: 1 },
-      { kind: 'clear', u: 0.374, lat: 0, yaw: 93.24529, x: -4.1748, z: -82.9726, r: 1 },
+      { kind: 'clear', u: 0.27776, lat: 0, yaw: -168.87, x: 89.0467, z: 6.5189, r: 1 },
+      { kind: 'clear', u: 0.37402, lat: 0, yaw: 94, x: -4.1748, z: -82.9726, r: 1 },
       // the west slope's foot brought down to the turn, its path churned
-      { kind: 'ridge', u: 0.0943, lat: -27.78, z: 0.6, r: 24, h: 10, top: 0.2, near: 2 },
+      { kind: 'ridge', u: 0.0943, lat: -27.78, yaw: 0, z: 0.6, r: 24, h: 10, top: 0.2, near: 2 },
       { kind: 'paint', u: 0.0971, lat: -15.76, yaw: 119.6, x: 0.57, len: 22, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.2819, lat: 18.89, yaw: -87.3, len: 28, r: 3, w: 3, tint: 0xc8cfdf },
       { kind: 'paint', u: 0.3334, lat: 19.81, yaw: 99.3, x: 0.51, len: 32, r: 3, w: 3, tint: 0xc8cfdf },
-      { kind: 'paint', u: 0.3549, lat: 19.27, yaw: 67.9, len: 30, r: 3, w: 3, tint: 0xc8cfdf },
+      { kind: 'paint', u: 0.35499, lat: 19.271, yaw: 68.01, len: 30, r: 3, w: 3, tint: 0xc8cfdf },
       // under each gallery's roof no snow: the road's kerb a concrete
       // kerbstone and paving there, from a little outside one mouth to a
       // little outside the other (set_prototypes.py gallery_shed's samples)
-      { kind: 'shed', u: 0.7243, len: 12.6 },
-      { kind: 'shed', u: 0.8276, len: 31.6 },
+      { kind: 'shed', u: 0.7212, len: 12.6 },
+      { kind: 'shed', u: 0.8254, len: 31.6 },
       { kind: 'shed', u: 0.37, len: 27.6 }
     ]
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses on their own ramps,
   // decorated mid profile; auto-placed furniture).
   ribbon: {
-    sandOff: [[0.865, 0.94]],   // the farm's fences stand at the kerb
     name: 'Ribbon', sand: STRIP, waypoints: GEN_TRACKS.ribbon,
     oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes,
     // The village in its valley, and the farms round it. The church on the
@@ -1589,31 +1605,31 @@ export const TRACKS = {
       { model: 'set-village-church', u: 0.32107, lat: 13.5, yaw: 39.34, scale: 1.25 },
       { model: 'set-village-street', u: 0.37873, lat: 4, yaw: 1 },
       { model: 'set-village-street-b', u: 0.41257, lat: 4, yaw: 0 },
-      { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: 180 },
-      { model: 'set-village-street-d', u: 0.4145, lat: -4, yaw: 180 },
+      { model: 'set-village-street-c', u: 0.3812, lat: -4.05, yaw: -180 },
+      { model: 'set-village-street-d', u: 0.4197, lat: -4, yaw: 180 },
       { model: 'set-cottage-row', u: 0.608, lat: -7.6, yaw: 176.98 },
-      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 163 },
+      { model: 'set-windmill', u: 0.6, lat: 13, yaw: 162.99 },
       { model: 'set-field-wheat', u: 0.6977, lat: 12, yaw: 7.7 },
       { model: 'set-village-fete', u: 0.0125, lat: 8.6, yaw: 0 },
       { model: 'set-orchard-block', u: 0.126, lat: -7.5 },
       { model: 'set-orchard-block', u: 0.1395, lat: -7.5, yaw: 180 },
       { model: 'set-orchard-block-b', u: 0.1535, lat: -7.5, yaw: 180 },
       { model: 'set-orchard-block', u: 0.163, lat: -7.5 },
-      { model: 'set-orchard-block', u: 0.1815, lat: -7.5, yaw: 180 },
-      { model: 'set-orchard-block-b', u: 0.191, lat: -7.5, yaw: 180 },
+      { model: 'set-orchard-block', u: 0.1815, lat: -7.5, yaw: -180 },
+      { model: 'set-orchard-block-b', u: 0.191, lat: -7.5, yaw: -180 },
       { model: 'set-orchard-block', u: 0.2, lat: -7.5 },
       { model: 'set-orchard-block', u: 0.219, lat: -7.5, yaw: 180 },
       { model: 'set-orchard-block-b', u: 0.229, lat: -8.4, yaw: 180 },
-      { model: 'set-orchard-block', u: 0.239, lat: -8.6 },
-      { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: 180 },
+      { model: 'set-orchard-block', u: 0.239, lat: -8.6, yaw: 0 },
+      { model: 'set-orchard-block', u: 0.249, lat: -8.6, yaw: -180 },
       { model: 'set-orchard-block-end', u: 0.259, lat: -7.7 },
-      { model: 'set-cow-farm', u: 0.855, lat: 11.5, yaw: 0, scale: 1.3 },
-      { model: 'set-farm-fence', u: 0.885, lat: 6.2, yaw: 0, scale: 1.3, lite: false },
-      { model: 'set-farm-fence', u: 0.9205, lat: 6.2, yaw: 0, scale: 1.3, lite: false },
-      { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: 180 },
+      { model: 'set-cow-farm', u: 0.855, lat: 11.8, yaw: 0, scale: 1.3 },
+      { model: 'set-farm-fence', u: 0.88183, lat: 6.204, yaw: -12.32, scale: 1.3, lite: false },
+      { model: 'set-farm-fence', u: 0.91419, lat: 6.854, yaw: -2.38, scale: 1.3, lite: false },
+      { model: 'set-sheep-meadow', u: 0.7, lat: -8, yaw: -180 },
       { model: 'set-sheep-flock', u: 0.758, lat: -6.8, yaw: 180 },
       { model: 'set-sheepfold', u: 0.676, lat: -8.5, yaw: 180 },
-      { model: 'set-hay-meadow', u: 0.458, lat: -9, yaw: 180 }
+      { model: 'set-hay-meadow', u: 0.458, lat: -9, yaw: -180 }
     ],
     // the valley the village lies in: the west side rises off the west
     // bend's verge (`near`) to a terrace above it, the east terraces climb
@@ -1630,12 +1646,11 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.2, lat: -36, len: 60, r: 24, h: 8, top: 0.35 },
       { kind: 'ridge', u: 0.66022, lat: -22, r: 24, h: 9, top: 0.15 },
       { kind: 'ridge', u: 0.458, lat: -13.3, len: 10, r: 10, h: 3, top: 0.4, near: 0.6 },
-      { kind: 'ridge', u: 0.855, lat: 17, len: 8, r: 14, h: 3.2, top: 0.25, near: 0.6 },
+      { kind: 'ridge', u: 0.8565, lat: 19.5, yaw: 0, len: 8, r: 14, h: 3.2, top: 0.25, near: 0.6 },
       { kind: 'street', u: 0.39565, len: 32 }
     ]
   },
   pretzel: {
-    sandOff: [[0.875, 0.945]],   // the football pitch lies between the road and a ramp
     name: 'Pretzel', sand: STRIP, waypoints: GEN_TRACKS.pretzel,
     oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes,
     // The children's summer on sun-yellowed downs (the theme's ground colour;
@@ -1655,27 +1670,27 @@ export const TRACKS = {
     set: [
       { model: 'set-avenue-oaks', u: 0.01011, lat: 5.5, yaw: 0 },
       { model: 'set-avenue-oaks', u: 0.01011, lat: -5.5, yaw: 180 },
-      { model: 'set-treehouse', u: 0.0561, lat: 10.59, yaw: 22.49, scale: 1.3 },
-      { model: 'set-football-pitch', u: 0.91, lat: -8.6, yaw: 1.41 },
-      { model: 'set-den-camp', u: 0.565, lat: 8.3, scale: 1.4 },
-      { model: 'set-swing-oak', u: 0.17, lat: 7.5, yaw: 39.71 },
-      { model: 'set-swing-oak', u: 0.755, lat: -9, yaw: 142.46 },
-      { model: 'set-picnic-oak', u: 0.86, lat: 7.5, yaw: 0, scale: 1.35 },
-      { model: 'set-hay-wain-oak', u: 0.52, lat: 7, yaw: 0, scale: 1.35 },
-      { model: 'set-kite-flyers', u: 0.715, lat: -9, yaw: 180, scale: 1.4 },
-      { model: 'set-oak-copse', u: 0.3749, lat: 12, yaw: 26, scale: 1.3 },
-      { model: 'set-summer-camp', u: 0.776, lat: -7.7, yaw: 180, scale: 1.6 }
+      { model: 'set-treehouse', u: 0.05618, lat: 10.59, yaw: 22.49, scale: 1.3 },
+      { model: 'set-football-pitch', u: 0.91438, lat: -8.6, yaw: 1.41 },
+      { model: 'set-den-camp', u: 0.56453, lat: 8.3, scale: 1.4 },
+      { model: 'set-swing-oak', u: 0.17018, lat: 7.5, yaw: 39.71 },
+      { model: 'set-swing-oak', u: 0.75474, lat: -9, yaw: 142.46 },
+      { model: 'set-picnic-oak', u: 0.85981, lat: 7.5, yaw: 0, scale: 1.35 },
+      { model: 'set-hay-wain-oak', u: 0.51948, lat: 7.001, yaw: 0, scale: 1.35 },
+      { model: 'set-kite-flyers', u: 0.71469, lat: -9, yaw: 180, scale: 1.4 },
+      { model: 'set-oak-copse', u: 0.37622, lat: 12.95, yaw: 30.26, scale: 1.3 },
+      { model: 'set-summer-camp', u: 0.77576, lat: -7.7, yaw: 180, scale: 1.6 }
     ],
     // low wide downs round the lap's outsides, each rising off the verge
     // (`near`) gently enough to keep its grass (a steep face goes to earth)
     land: [
       { kind: 'clear', u: 0.01011, len: 28, r: 14 },
-      { kind: 'ridge', u: 0.715, lat: -21, len: 22, r: 20, h: 7, top: 0.2, near: 0.6 },
-      { kind: 'ridge', u: 0.674, lat: -15, len: 8, r: 14, h: 4, top: 0.2, near: 0.6 },
-      { kind: 'ridge', u: 0.81, lat: -18, len: 16, r: 15, h: 4.5, top: 0.2, near: 0.6 },
-      { kind: 'ridge', u: 0.11, lat: 27, len: 30, r: 22, h: 6, top: 0.15, near: 0.6 },
-      { kind: 'ridge', u: 0.5756, lat: 30, r: 20, h: 6.5, top: 0.15 },
-      { kind: 'ridge', u: 0.3749, lat: 27, len: 30, r: 22, h: 6.5, top: 0.15, near: 0.6 }
+      { kind: 'ridge', u: 0.7147, lat: -21, yaw: -0.01, len: 22, r: 20, h: 7, top: 0.2, near: 0.6 },
+      { kind: 'ridge', u: 0.67365, lat: -15, yaw: 0, len: 8, r: 14, h: 4, top: 0.2, near: 0.6 },
+      { kind: 'ridge', u: 0.80979, lat: -18, len: 16, r: 15, h: 4.5, top: 0.2, near: 0.6 },
+      { kind: 'ridge', u: 0.11015, lat: 27, len: 30, r: 22, h: 6, top: 0.15, near: 0.6 },
+      { kind: 'ridge', u: 0.57514, lat: 30.001, r: 20, h: 6.5, top: 0.15 },
+      { kind: 'ridge', u: 0.3771, lat: 27.942, yaw: 3.21, len: 30, r: 22, h: 6.5, top: 0.15, near: 0.6 }
     ]
   },
   tangle: {
@@ -1703,13 +1718,13 @@ export const TRACKS = {
     set: [
       { model: 'set-watermill', u: 0.0935, lat: 10.8, yaw: 0 },
       { model: 'set-mill-wood', u: 0.885, lat: -12, yaw: 180 },
-      { model: 'set-mill-wood-b', u: 0.92, lat: -12.5, yaw: 180 },
+      { model: 'set-mill-wood-b', u: 0.92, lat: -12.5, yaw: -180 },
       { model: 'set-mill-wood-c', u: 0.955, lat: -12, yaw: 180 },
-      { model: 'set-mill-wood', u: 0.995, lat: 12, yaw: 0 },
+      { model: 'set-mill-wood', u: 0.995, lat: 10.5, yaw: 0 },
       { model: 'set-mill-wood-b', u: 0.03, lat: 12.5, yaw: 0 },
-      { model: 'set-mill-wood-c', u: 0.58, lat: -8.5, yaw: 180 },
+      { model: 'set-mill-wood-c', u: 0.58, lat: -8.5, yaw: -180 },
       { model: 'set-mill-wood', u: 0.61, lat: -8.5, yaw: 180 },
-      { model: 'set-mill-wood-b', u: 0.285, lat: -9, yaw: 180 },
+      { model: 'set-mill-wood-b', u: 0.285, lat: -9, yaw: -180 },
       { model: 'set-mill-wood-c', u: 0.79, lat: -9, yaw: 180 },
       { model: 'set-mill-wood', u: 0.0959, lat: 22.37, yaw: 17.86 },
       { model: 'set-brook-parapet', u: 0.84819, lat: 3.9, yaw: 0, y: 0.26 },
@@ -1724,12 +1739,12 @@ export const TRACKS = {
       { model: 'set-brook-c', u: 0.94478, lat: -8.554, yaw: 2.15 },
       { model: 'set-brook-d', u: 0.99622, lat: -7.232, yaw: -7.68 },
       { model: 'set-brook-e', u: 0.06548, lat: 8.641, yaw: -3.89 },
-      { model: 'set-brook-f', u: 0.09588, lat: 9.104, yaw: -1.23 },
+      { model: 'set-brook-f', u: 0.09588, lat: 9.105, yaw: -1.23 },
       { model: 'set-brook-g', u: 0.12394, lat: 10.621, yaw: -15.75 },
       { model: 'set-pond-ducks', u: 0.1474, lat: -9.43, yaw: 180 },
       { model: 'set-springhouse', u: 0.7328, lat: -7.8, yaw: 180 },
-      { model: 'set-alder-grove', u: 0.28, lat: -5.8, yaw: 180, scale: 1.1 },
-      { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: 180 },
+      { model: 'set-alder-grove', u: 0.28, lat: -5.8, yaw: -180, scale: 1.1 },
+      { model: 'set-alder-grove', u: 0.68, lat: -5.8, yaw: -180 },
       { model: 'set-alder-grove', u: 0.755, lat: -12, yaw: 180, scale: 1.2 },
       { model: 'set-alder-grove', u: 0.905, lat: 5.8, yaw: 0, scale: 0.9 },
       { model: 'set-alder-grove', u: 0.958, lat: -5.3, yaw: 180 },
@@ -1744,20 +1759,19 @@ export const TRACKS = {
     // the timber yard's bank outside the south loop's apex, low and flat on
     // top, rising off the verge
     land: [
-      { kind: 'ridge', u: 0.325, lat: -16, len: 8, r: 15, h: 1.8, top: 0.35, near: 0.6 },
+      { kind: 'ridge', u: 0.325, lat: -16, yaw: 0, len: 8, r: 15, h: 1.8, top: 0.35, near: 0.6 },
       { kind: 'ridge', u: 0.38886, lat: -26.736, yaw: 146.41, r: 12, h: 3, top: 0.2 },
       { kind: 'pond', u: 0.1471, lat: -1.93, yaw: 89.13, len: 15, r: 5.3, w: 6 },
       { kind: 'ridge', u: 0.0538, lat: 32.83, yaw: 8.07, len: 23, r: 26, h: 9, top: 0.1, near: 10.5 },
       { kind: 'ridge', u: 0.8939, lat: -34.87, yaw: 1.04, len: 18, r: 28, h: 9, top: 0.1, near: 7.5 },
-      { kind: 'ridge', u: 0.0947, lat: 36, r: 24, h: 8, top: 0.1 },
-      { kind: 'ridge', u: 0.757, lat: -20.3, len: 20, r: 15, h: 6.5, top: 0.25, near: 0.6 },
+      { kind: 'ridge', u: 0.0947, lat: 36.001, yaw: 0, r: 24, h: 8, top: 0.1 },
+      { kind: 'ridge', u: 0.75701, lat: -20.299, yaw: 0, len: 20, r: 15, h: 6.5, top: 0.25, near: 0.6 },
       { kind: 'ridge', u: 0.66, lat: -20, len: 12, r: 15, h: 4.5, top: 0.3, near: 0.6 },
-      { kind: 'ridge', u: 0.283, lat: -22, len: 14, r: 20, h: 7.5, top: 0.15, near: 0.6 },
-      { kind: 'ridge', u: 0.791, lat: -24, r: 22, h: 7.5, top: 0.1, near: 0.6 }
+      { kind: 'ridge', u: 0.283, lat: -22, yaw: 0, len: 14, r: 20, h: 7.5, top: 0.15, near: 0.6 },
+      { kind: 'ridge', u: 0.791, lat: -24, yaw: 0, r: 22, h: 7.5, top: 0.1, near: 0.6 }
     ]
   },
   cloverleaf: {
-    sandOff: [[0.922, 0.943]],   // the park's rails stand at the kerb
     name: 'Cloverleaf', sand: STRIP, waypoints: GEN_TRACKS.cloverleaf,
     oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes,
     // A spring park: cherries in pale blossom, planted as a park plants them,
@@ -1799,24 +1813,24 @@ export const TRACKS = {
       { model: 'set-park-kiosk', u: 0.4, lat: -9.5, yaw: 142.61, y: -0.1, scale: 1.45 },
       { model: 'set-floral-clock', u: 0.448, lat: -8.5, yaw: 180 },
       { model: 'set-carpet-bed', u: 0.4915, lat: -8.2, yaw: 180 },
-      { model: 'set-park-railway', u: 0.01755, lat: 8.184, yaw: -179.62 },
-      { model: 'set-park-rails-a', u: 0.25382, lat: 4.735, yaw: 94.22 },
-      { model: 'set-park-rails-b', u: 0.6714, lat: -6.567, yaw: -10.08 },
-      { model: 'set-park-rails-c', u: 0.91938, lat: 8.495, yaw: -157.05 },
-      { model: 'set-park-rails-d', u: 0.88896, lat: 12.244, yaw: -176.47 },
-      { model: 'set-park-rails-e', u: 0.86206, lat: 12.536, yaw: -164.54 },
-      { model: 'set-park-rails-loop-a', u: 0.0503, lat: 8.47, yaw: 0 },
-      { model: 'set-park-rails-loop-b', u: 0.84393, lat: 19.518, yaw: 0 },
-      { model: 'set-park-halt', u: 0.86206, lat: 12.513, yaw: -167.52 },
+      { model: 'set-park-railway', u: 0.017284, lat: 6.485, yaw: -179.64 },
+      { model: 'set-park-rails-a', u: 0.25596, lat: 4.833, yaw: 92.1 },
+      { model: 'set-park-rails-b', u: 0.670003, lat: -8.411, yaw: -1.15 },
+      { model: 'set-park-rails-c', u: 0.920653, lat: 8.496, yaw: -157.04 },
+      { model: 'set-park-rails-d', u: 0.890822, lat: 12.245, yaw: -176.5 },
+      { model: 'set-park-rails-e', u: 0.861618, lat: 12.594, yaw: -169.56 },
+      { model: 'set-park-rails-loop-a', u: 0.038648, lat: 7.606, yaw: -12.86 },
+      { model: 'set-park-rails-loop-b', u: 0.845381, lat: 19.482, yaw: -2.07 },
+      { model: 'set-park-halt', u: 0.861626, lat: 12.572, yaw: -172.54 },
       { model: 'set-boating-lake', u: 0.8316, lat: 16.16, yaw: -170.59 },
       { model: 'set-lake-shore', u: 0.8316, lat: 16.16, yaw: -170.59 },
-      { model: 'set-boathouse', u: 0.8252, lat: 12.6, yaw: 42.59, scale: 1.3 },
+      { model: 'set-boathouse', u: 0.824627, lat: 12.254, yaw: 38.96, scale: 1.3 },
       { model: 'set-bandstand', u: 0.23, lat: -16, yaw: 180, scale: 1.5 },
       { model: 'set-cherry-avenue', u: 0.145, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.525, lat: -6.5, yaw: 180 },
       { model: 'set-cherry-avenue', u: 0.785, lat: 6.5, yaw: 0 },
       { model: 'set-cherry-avenue', u: 0.89, lat: 6.5, yaw: 0 },
-      { model: 'set-blossom-grove-b', u: 0.21, lat: -5.8, yaw: 180 },
+      { model: 'set-blossom-grove-b', u: 0.21, lat: -6.8, yaw: 180 },
       { model: 'set-blossom-grove-b', u: 0.345, lat: 7.5, yaw: 0, scale: 1.25 },
       { model: 'set-blossom-grove-b', u: 0.38, lat: 6.4, yaw: 0 },
       { model: 'set-blossom-grove', u: 0.47, lat: -5.8, yaw: 180, scale: 1.1 },
@@ -1849,7 +1863,6 @@ export const TRACKS = {
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
   // crossings, width pinches, crest hills; auto-placed furniture).
   wash: {
-    sandOff: [[0.285, 0.36], [0.698, 0.729], [0.863, 0.894], [0.924, 0.951]],   // the bench ledge, the tinaja and the cottonwood stand between two strands
     name: 'Wash', sand: STRIP, waypoints: GEN_TRACKS.wash,
     oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes,
     // A dry wash and the canyon it cut: out of the start the road drops into
@@ -1881,27 +1894,30 @@ export const TRACKS = {
     set: [
       // (a reach a road crosses is a ford: its banks stop on the road's half)
       { model: 'set-dry-creek', u: 0.9221, lat: -18.5, yaw: 112 },
-      { model: 'set-dead-cottonwood', u: 0.324, lat: 9.5 },   // (nearer, its rocks lay on the start straight below)
+      { model: 'set-dead-cottonwood', u: 0.324, lat: 12 },   // (nearer, it stood on the start's bends' strip below)
       { model: 'set-fallen-cottonwood', u: 0.95, lat: -7, yaw: -150 },
-      { model: 'set-wash-bed', u: 0.7086, lat: -25.2, yaw: -144 },
+      { model: 'set-wash-bed', u: 0.7069, lat: -23, yaw: -144 },   // (where it lay before the strip pushed it out)
       { model: 'set-wash-bed-ford', u: 0.68, lat: -3.6, yaw: 77 },
       { model: 'set-wash-bed-ford', u: 0.5997, lat: 10.7, yaw: -64 },
       { model: 'set-wash-bed-ford', u: 0.5941, lat: -19, yaw: 87 },
       // (the east and south arms' last reaches run out into the plain)
       { model: 'set-wash-bed-end', u: 0.5933, lat: -48.9, yaw: 95 },
-      { model: 'set-wash-bed-end', u: 0.5397, lat: -44.4, yaw: 78 },
-      { model: 'set-wash-bed-ford', u: 0.5332, lat: -17.6, yaw: 68 },
-      { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.6, yaw: -91 },
+      { model: 'set-wash-bed-end', u: 0.5397, lat: -46.5, yaw: 78 },
+      { model: 'set-wash-bed-ford', u: 0.5332, lat: -19.603, yaw: 68 },
+      { model: 'set-wash-bed-ford', u: 0.5182, lat: 8.804, yaw: -91 },
       // between the east loop's two fords the road runs down the bed itself,
       // a cut bank past each kerb, and the last flood's log jam on the bar
       { model: 'set-wash-road-reach', u: 0.537, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.553, lat: 0 },
-      { model: 'set-flood-jam', u: 0.558, lat: -5.6, yaw: 180 },
+      { model: 'set-flood-jam', u: 0.558, lat: -5.698, yaw: -180 },
       { model: 'set-wash-road-reach', u: 0.612, lat: 0 },
       { model: 'set-wash-road-reach', u: 0.628, lat: 0 },
-      { model: 'set-wash-road-reach', u: 0.644, lat: 0 },
-      { model: 'set-wash-road-reach', u: 0.660, lat: 0 },
-      { model: 'set-wash-road-reach', u: 0.674, lat: 0 },
+      // (the loop's last reaches stand a little to its inside: each is
+      // straight, and with the strip at the kerb its inner bank's far end
+      // stood on it)
+      { model: 'set-wash-road-reach', u: 0.644, lat: 0.5 },
+      { model: 'set-wash-road-reach', u: 0.66, lat: 0.5 },
+      { model: 'set-wash-road-reach', u: 0.674, lat: 0.75 },
       // the canyon's mountainsides, each face toward the road: the outer
       // range (left) down the straight, round the bend and on, lower spurs
       // on the inside of the straight and after the bend, the inside of the
@@ -1915,9 +1931,9 @@ export const TRACKS = {
       // a butte of the strata inside the low hairpin, and the tinaja where
       // the side wash meets the road past the east loop, burros at it
       { model: 'set-wash-butte', u: 0.85, lat: -10, scale: 0.75 },
-      { model: 'set-bench-ledge', u: 0.318, lat: -9, yaw: 180 },
+      { model: 'set-bench-ledge', u: 0.315, lat: -9, yaw: 174 },   // (its far end clear of the low strand's strip)
       // (at its own size: grown, its mustangs stood twice a car's length)
-      { model: 'set-tinaja', u: 0.715, lat: -5.5, yaw: 180 },
+      { model: 'set-tinaja', u: 0.715, lat: -5.5, yaw: -180 },
       // the flood gauge where the road goes down to the first ford, the
       // last flood's wrack stranded at its foot
       { model: 'set-flood-gauge', u: 0.507, lat: 4.4 }
@@ -1946,15 +1962,13 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.3508, lat: -7.24, yaw: 0.1, z: 0.01, len: 11.9, r: 6, h: 1.3, h1: 1.3, top: 0.6, near: 0.5 },
       { kind: 'ridge', u: 0.2715, lat: 5.68, yaw: -0.1, z: 0.02, len: 11.9, r: 6, h: 1.06, h1: 2.01, top: 0.6, near: 0.5 },
       { kind: 'ridge', u: 0.3078, lat: 6.04, yaw: -0.3, z: -0.10, len: 12.0, r: 6, h: 2.00, h1: 2.00, top: 0.6, near: 0.5 },
-      { kind: 'ridge', u: 0.3480, lat: 6.01, yaw: -0.0, z: -0.01, len: 12.1, r: 6, h: 1.3, h1: 1.3, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.348, lat: 6.01, yaw: 0, z: -0.01, len: 12.1, r: 6, h: 1.3, h1: 1.3, top: 0.6, near: 0.5 },
       { kind: 'ridge', u: 0.3848, lat: 6.35, yaw: -1.1, z: -0.31, len: 7.6, r: 6, h: 1.96, h1: 1.20, top: 0.6, near: 0.5 },
-      { kind: 'ridge', u: 0.4500, lat: -7.29, yaw: -2.9, z: 1.53, len: 11.9, r: 6, h: 1.55, h1: 1.47, top: 0.6, near: 0.5 },
+      { kind: 'ridge', u: 0.45, lat: -7.29, yaw: -2.9, z: 1.53, len: 11.9, r: 6, h: 1.55, h1: 1.47, top: 0.6, near: 0.5 },
       { kind: 'ridge', u: 0.4413, lat: 5.69, yaw: -0.2, z: -0.10, len: 11.9, r: 6, h: 1.55, h1: 2.04, top: 0.6, near: 0.5 }
     ]
   },
   gulch: {
-    // no strip under the headframe, by the tailings at the line, through the boomtown
-    sandOff: [[0.037, 0.06], [0.18, 0.23], [0.33, 0.385], [0.592, 0.619], [0.73, 0.853], [0.88, 0.902]],
     name: 'Gulch', sand: STRIP, waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes,
     // A gold mine at its own size, reached down a canyon of mountainsides off
@@ -1981,7 +1995,7 @@ export const TRACKS = {
       { model: 'set-ore-line', u: 0.018, lat: 16 },
       // the headframe astride the road at the east bend, the ore line's
       // loading shed under its bin on the outside verge where the line ends
-      { model: 'set-headframe', u: 0.205, lat: 0 },
+      { model: 'set-headframe', u: 0.202, lat: 0 },
       // the gulch itself: off the crest the road drops into a canyon, its
       // faces at the kerb the near faces of the range's massifs (`land`):
       // from the run-in on the outside round the long left-hander, down the
@@ -2017,7 +2031,7 @@ export const TRACKS = {
       // the boomtown down the north loop's top, both sides of the road; the
       // miners' camp before the canyon, the left there left open for the
       // sight line to the mill
-      { model: 'set-boomtown-north', u: 0.355, lat: 6.8 },
+      { model: 'set-boomtown-north', u: 0.3525, lat: 8.4 },   // (its livery stable clear of the bend's strip)
       { model: 'set-boomtown-south', u: 0.355, lat: -6, yaw: 180 },
       { model: 'set-miners-camp', u: 0.785, lat: 8.3, yaw: -30, scale: 1.2 },
       // the powder magazine past the town, vaulted and banked with earth
@@ -2077,7 +2091,6 @@ export const TRACKS = {
     ]
   },
   crag: {
-    sandOff: [[0.297, 0.42], [0.579, 0.619], [0.845, 0.881]],   // the rimrock and the hoodoos stand between two strands
     name: 'Crag', sand: STRIP, waypoints: GEN_TRACKS.crag,
     oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes,
     // A ranch in butte country. The long straight runs from the ranch on
@@ -2120,8 +2133,9 @@ export const TRACKS = {
       { model: 'set-windpump', u: 0.48, lat: 9.5, yaw: -137 },
       { model: 'set-ranch-lane', u: 0.032, lat: -5.4, yaw: 180 },
       // (two stands, the third the first turned and a size down: one trio
-      // at all three read as one piece copied)
-      { model: 'set-hoodoos', u: 0.32, lat: -12 },
+      // at all three read as one piece copied; the first turned to fit the
+      // hairpin's lobe between its strips)
+      { model: 'set-hoodoos', u: 0.31, lat: -10, yaw: 70 },
       { model: 'set-crag-hoodoos-b', u: 0.61, lat: 13, yaw: 180 },
       { model: 'set-hoodoos', u: 0.9, lat: 16, yaw: 105, scale: 0.85 },
       { model: 'set-crag-saguaros', u: 0.05, lat: 10 },
@@ -2168,16 +2182,15 @@ export const TRACKS = {
       // the skyline: mesas and buttes standing apart on the plain, 55 to 95
       // units out (a ring of them read as the walls of a box), each broad
       // enough for the ground's 9 u grid to draw a table, not a pyramid
-      { kind: 'ridge', u: 0.4487, lat: 73.7, yaw: 146.2, len: 80, r: 24, h: 16, top: 0.5 },
-      { kind: 'ridge', u: 0.3683, lat: 55.5, yaw: 141.4, len: 14, r: 20, h: 22, top: 0.55 },
-      { kind: 'ridge', u: 0.33, lat: 65.9, yaw: -4.6, len: 70, r: 24, h: 18, top: 0.5 },
-      { kind: 'ridge', u: 0.8738, lat: 94, yaw: -116.4, len: 50, r: 22, h: 15, top: 0.5 },
-      { kind: 'ridge', u: 0.8177, lat: 62.4, yaw: 14.8, len: 70, r: 26, h: 20, top: 0.5 },
-      { kind: 'ridge', u: 0.1052, lat: -71.9, yaw: -152.1, len: 14, r: 18, h: 20, top: 0.55 }
+      { kind: 'ridge', u: 0.449798, lat: 73.754, yaw: 145.89, len: 80, r: 24, h: 16, top: 0.5 },
+      { kind: 'ridge', u: 0.367252, lat: 55.52, yaw: 140.289, len: 14, r: 20, h: 22, top: 0.55 },
+      { kind: 'ridge', u: 0.334012, lat: 66.022, yaw: -2.879, len: 70, r: 24, h: 18, top: 0.5 },
+      { kind: 'ridge', u: 0.873725, lat: 93.886, yaw: -116.473, len: 50, r: 22, h: 15, top: 0.5 },
+      { kind: 'ridge', u: 0.813713, lat: 62.4, yaw: 14.573, len: 70, r: 26, h: 20, top: 0.5 },
+      { kind: 'ridge', u: 0.106368, lat: -71.734, yaw: -151.822, len: 14, r: 18, h: 20, top: 0.55 }
     ]
   },
   sidewinder: {
-    sandOff: [[0.066, 0.141], [0.29, 0.385]],   // the tunnel, and two strands side by side
     name: 'Sidewinder', sand: STRIP, waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes,
     // An oil field in the desert, one company's (white and red, its mark a
@@ -2212,8 +2225,8 @@ export const TRACKS = {
       // jack and the flowing well a step off the verge, where the chase
       // camera passes them at their own size
       { model: 'set-oil-field', u: 0.77, lat: 5.2 },
-      { model: 'set-tank-farm', u: 0.63, lat: 12 },
-      { model: 'set-drilling-rig', u: 0.368, lat: -6.6, yaw: 180 },
+      { model: 'set-tank-farm', u: 0.62698, lat: 12 },
+      { model: 'set-drilling-rig', u: 0.368, lat: -7, yaw: 180 },
       { model: 'set-well-pad', u: 0.42, lat: 7 },
       { model: 'set-wellhead', u: 0.488, lat: 5.2 },
       { model: 'set-mountain-tunnel', u: 0.1039, lat: 0 },
@@ -2225,38 +2238,41 @@ export const TRACKS = {
       { model: 'set-pipe-yard', u: 0.297, lat: 11.5 },
       // the railway round the field, length by length on the rim (laid in
       // the world by scratch geometry, set_prototypes.py SW_RING, each
-      // length placed on its own chord): the rack behind the tank farm, the
-      // open line (the lengths behind the south loop's ridge, h to m, never
+      // length placed on its own chord, its row solved for SW_PIECE's frame
+      // on the road as built: the strip's push and the lap's length both
+      // move a row, so re-solve them when the road changes): the rack
+      // behind the tank farm, the open line (the lengths behind the south
+      // loop's ridge, h to m, never
       // seen from the seat, are full-only), and four trains, each built on a
       // length of its own a quarter of the way round from the next (two of
       // them full-only: at the trains' pace two pass every part of the line
       // a racer sees, and c stands on the full-only lengths); the rack fed from the farm
       // through a pipe that comes up at the farm's edge
-      { model: 'set-tank-rack', u: 0.63973, lat: 37.034, yaw: -1.586 },
-      { model: 'set-tank-line-a', u: 0.652316, lat: 33.785, yaw: 6.158 },
-      { model: 'set-tank-line-b', u: 0.668314, lat: 30.645, yaw: 7.611 },
-      { model: 'set-tank-line-c', u: 0.685867, lat: 30.402, yaw: -6.683 },
-      { model: 'set-tank-train-a', u: 0.712178, lat: 34.01, yaw: -3.782 },
-      { model: 'set-tank-line-d', u: 0.733355, lat: 33.929, yaw: 0.284 },
-      { model: 'set-tank-line-e', u: 0.749814, lat: 33.838, yaw: 0.118 },
-      { model: 'set-tank-line-f', u: 0.764304, lat: 41.239, yaw: -32.089 },
-      { model: 'set-tank-line-g', u: 0.052027, lat: 38.927, yaw: 5.107 },
-      { model: 'set-tank-train-b', u: 0.10493, lat: 42.107, yaw: -19.959, lite: false },
-      { model: 'set-tank-line-h', u: 0.151833, lat: 42.854, yaw: 14.553, lite: false },
-      { model: 'set-tank-line-i', u: 0.167175, lat: 35.839, yaw: 13.165, lite: false },
-      { model: 'set-tank-line-j', u: 0.174209, lat: 34.364, yaw: -7.059, lite: false },
-      { model: 'set-tank-line-k', u: 0.181239, lat: 34.783, yaw: 4.931, lite: false },
-      { model: 'set-tank-train-c', u: 0.191286, lat: 32.654, yaw: 5.488, lite: false },
-      { model: 'set-tank-line-l', u: 0.229999, lat: 30.105, yaw: 8.786, lite: false },
-      { model: 'set-tank-line-m', u: 0.257327, lat: 29.422, yaw: -4.96, lite: false },
-      { model: 'set-tank-line-n', u: 0.408735, lat: 31.764, yaw: 32.096 },
-      { model: 'set-tank-line-o', u: 0.427437, lat: 23.974, yaw: -0.487 },
-      { model: 'set-tank-train-d', u: 0.44725, lat: 25.604, yaw: -5.485 },
-      { model: 'set-tank-line-p', u: 0.483383, lat: 29.707, yaw: -3.963 },
-      { model: 'set-tank-line-q', u: 0.874983, lat: -24.093, yaw: -162.897 },
-      { model: 'set-tank-line-r', u: 0.86413, lat: -29.847, yaw: 139.231 },
-      { model: 'set-pipeline-rise', u: 0.634694, lat: 17.544, yaw: 105.681 },
-      { model: 'set-pipeline-16', u: 0.634694, lat: 17.544, yaw: -74.319 },
+      { model: 'set-tank-rack', u: 0.636585, lat: 37.003, yaw: -1.585 },
+      { model: 'set-tank-line-a', u: 0.649011, lat: 32.462, yaw: 6.122 },
+      { model: 'set-tank-line-b', u: 0.664751, lat: 28.456, yaw: 7.627 },
+      { model: 'set-tank-line-c', u: 0.682052, lat: 28.202, yaw: -6.671 },
+      { model: 'set-tank-train-a', u: 0.713818, lat: 31.962, yaw: 0.742 },
+      { model: 'set-tank-line-d', u: 0.730322, lat: 31.761, yaw: 0.421 },
+      { model: 'set-tank-line-e', u: 0.745647, lat: 31.669, yaw: -1.314 },
+      { model: 'set-tank-line-f', u: 0.760838, lat: 39.065, yaw: -33.012 },
+      { model: 'set-tank-line-g', u: 0.050308, lat: 36.73, yaw: 4.415 },
+      { model: 'set-tank-train-b', u: 0.1035, lat: 39.907, yaw: -19.959, lite: false },
+      { model: 'set-tank-line-h', u: 0.155496, lat: 41.003, yaw: 17.94, lite: false },
+      { model: 'set-tank-line-i', u: 0.166214, lat: 33.698, yaw: 13.482, lite: false },
+      { model: 'set-tank-line-j', u: 0.174121, lat: 32.221, yaw: -7.094, lite: false },
+      { model: 'set-tank-line-k', u: 0.181938, lat: 32.638, yaw: 4.594, lite: false },
+      { model: 'set-tank-train-c', u: 0.191416, lat: 30.519, yaw: 3.958, lite: false },
+      { model: 'set-tank-line-l', u: 0.231751, lat: 27.913, yaw: 8.788, lite: false },
+      { model: 'set-tank-line-m', u: 0.258682, lat: 27.229, yaw: -4.955, lite: false },
+      { model: 'set-tank-line-n', u: 0.407714, lat: 29.579, yaw: 32.917 },
+      { model: 'set-tank-line-o', u: 0.426849, lat: 21.864, yaw: 0.013 },
+      { model: 'set-tank-train-d', u: 0.44416, lat: 23.492, yaw: -7.909 },
+      { model: 'set-tank-line-p', u: 0.482517, lat: 27.604, yaw: -3.963 },
+      { model: 'set-tank-line-q', u: 0.875104, lat: -21.907, yaw: -161.846 },
+      { model: 'set-tank-line-r', u: 0.863471, lat: -27.647, yaw: 139.293 },
+      { model: 'set-pipeline-rise', u: 0.631606, lat: 17.544, yaw: 105.679 },
+      { model: 'set-pipeline-16', u: 0.631606, lat: 17.544, yaw: -74.287 },
       // the trunk line on its stilts, span by span along the right-hand
       // verge, each span a chord of the road's curve with a support at every
       // joint (each span's anchor is the last one's end as the game stands
@@ -2270,38 +2286,38 @@ export const TRACKS = {
       // is full-only (the wells and the deck hide it from the seat): in
       // lite its first span is the line going under the ground
       // (set-pipeline-8-under's lite build), up again at the south run.
-      { model: 'set-pipeline-8', u: 0.643008, lat: 6.470, yaw: 14.485 },
-      { model: 'set-pipeline-8', u: 0.654964, lat: 6.234, yaw: 11.040 },
-      { model: 'set-pipeline-8', u: 0.666829, lat: 6.350, yaw: 11.701 },
-      { model: 'set-pipeline-8', u: 0.679031, lat: 6.345, yaw: 12.072 },
-      { model: 'set-pipeline-12', u: 0.690927, lat: 6.365, yaw: 9.265 },
-      { model: 'set-pipeline-16', u: 0.713930, lat: 6.485, yaw: 8.091 },
-      { model: 'set-pipeline-8-under', u: 0.738772, lat: 8.706, yaw: -35.271 },
-      { model: 'set-pipeline-8', u: 0.746143, lat: 14.121, yaw: -3.976, lite: false },
-      { model: 'set-pipeline-8', u: 0.754355, lat: 15.778, yaw: 8.209, lite: false },
-      { model: 'set-pipeline-8', u: 0.762468, lat: 15.733, yaw: 6.602, lite: false },
-      { model: 'set-pipeline-12', u: 0.771206, lat: 15.965, yaw: 5.724, lite: false },
-      { model: 'set-pipeline-8', u: 0.792834, lat: 15.615, yaw: 47.579, lite: false },
-      { model: 'set-pipeline-8', u: 0.800125, lat: 10.155, yaw: 37.135, lite: false },
-      { model: 'set-pipeline-dive', u: 0.808887, lat: 6.588, yaw: 5.926, lite: false },
-      { model: 'set-pipeline-rise', u: 0.915, lat: 7.5, yaw: 179.9 },
-      { model: 'set-pipeline-16', u: 0.915000, lat: 7.500, yaw: -1.200 },
-      { model: 'set-pipeline-16', u: 0.950978, lat: 7.510, yaw: -0.359 },
-      { model: 'set-pipeline-16', u: 0.986573, lat: 7.494, yaw: -0.061 },
-      { model: 'set-pipeline-16', u: 0.021973, lat: 7.494, yaw: 0.108 },
-      { model: 'set-pipeline-dive', u: 0.057270, lat: 7.500, yaw: 0.001 },
-      { model: 'set-pipeline-rise', u: 0.1421, lat: 6.5, yaw: 179.8 },
-      { model: 'set-pipeline-8', u: 0.142100, lat: 6.498, yaw: 2.400 },
-      { model: 'set-pipeline-8', u: 0.157804, lat: 6.497, yaw: 14.325 },
-      { model: 'set-pipeline-8', u: 0.168967, lat: 6.280, yaw: 23.767 },
-      { model: 'set-pipeline-8', u: 0.176702, lat: 6.034, yaw: 19.672 },
-      { model: 'set-pipeline-8', u: 0.185589, lat: 6.112, yaw: 12.420 },
-      { model: 'set-pipeline-16', u: 0.197911, lat: 6.334, yaw: 4.520 },
-      { model: 'set-pipeline-8', u: 0.230999, lat: 6.371, yaw: 6.868 },
-      { model: 'set-pipeline-8', u: 0.245070, lat: 6.446, yaw: 6.583 },
-      { model: 'set-pipeline-8', u: 0.259503, lat: 6.471, yaw: 7.112 },
-      { model: 'set-pipeline-8', u: 0.273948, lat: 6.422, yaw: 6.006 },
-      { model: 'set-pipeline-dive', u: 0.288269, lat: 6.536, yaw: 1.169 }
+      { model: 'set-pipeline-8', u: 0.639822, lat: 6.287, yaw: 3.316 },
+      { model: 'set-pipeline-8', u: 0.651035, lat: 6.130, yaw: 7.304 },
+      { model: 'set-pipeline-8', u: 0.661746, lat: 6.042, yaw: 10.739 },
+      { model: 'set-pipeline-8', u: 0.672602, lat: 6.030, yaw: 11.699 },
+      { model: 'set-pipeline-12', u: 0.683477, lat: 5.955, yaw: 11.994 },
+      { model: 'set-pipeline-16', u: 0.704202, lat: 6.258, yaw: 10.766 },
+      { model: 'set-pipeline-8-under', u: 0.730530, lat: 6.908, yaw: -19.725 },
+      { model: 'set-pipeline-8', u: 0.738973, lat: 10.728, yaw: -21.339, lite: false },
+      { model: 'set-pipeline-8', u: 0.746039, lat: 14.536, yaw: -1.812, lite: false },
+      { model: 'set-pipeline-8', u: 0.753438, lat: 15.535, yaw: 3.910, lite: false },
+      { model: 'set-pipeline-12', u: 0.761956, lat: 15.561, yaw: 6.984, lite: false },
+      { model: 'set-pipeline-8', u: 0.780058, lat: 15.600, yaw: 15.860, lite: false },
+      { model: 'set-pipeline-8', u: 0.793455, lat: 13.729, yaw: 44.055, lite: false },
+      { model: 'set-pipeline-dive', u: 0.799560, lat: 8.916, yaw: 19.753, lite: false },
+      { model: 'set-pipeline-rise', u: 0.916225, lat: 7.500, yaw: 179.875 },
+      { model: 'set-pipeline-16', u: 0.916225, lat: 7.500, yaw: -1.180 },
+      { model: 'set-pipeline-16', u: 0.951862, lat: 7.510, yaw: -0.360 },
+      { model: 'set-pipeline-16', u: 0.987010, lat: 7.494, yaw: -0.060 },
+      { model: 'set-pipeline-16', u: 0.022346, lat: 7.495, yaw: 1.250 },
+      { model: 'set-pipeline-dive', u: 0.056045, lat: 7.503, yaw: -1.967 },
+      { model: 'set-pipeline-rise', u: 0.149115, lat: 6.412, yaw: -167.372 },
+      { model: 'set-pipeline-8', u: 0.149115, lat: 6.412, yaw: 15.240 },
+      { model: 'set-pipeline-8', u: 0.161240, lat: 5.929, yaw: 19.484 },
+      { model: 'set-pipeline-8', u: 0.170356, lat: 5.457, yaw: 18.066 },
+      { model: 'set-pipeline-8', u: 0.178268, lat: 5.694, yaw: 14.437 },
+      { model: 'set-pipeline-8', u: 0.186530, lat: 6.010, yaw: 9.846 },
+      { model: 'set-pipeline-16', u: 0.196793, lat: 6.175, yaw: -0.238 },
+      { model: 'set-pipeline-8', u: 0.230367, lat: 6.305, yaw: 6.643 },
+      { model: 'set-pipeline-8', u: 0.243495, lat: 6.253, yaw: 6.264 },
+      { model: 'set-pipeline-8', u: 0.256940, lat: 6.271, yaw: 6.891 },
+      { model: 'set-pipeline-8', u: 0.270365, lat: 6.227, yaw: 6.205 },
+      { model: 'set-pipeline-dive', u: 0.283722, lat: 6.249, yaw: 1.970 }
     ],
     // the mesa rims: across the far end of the long straight, and south-west
     // past the south loop, no crest edge more than about 8 degrees over the
@@ -2316,9 +2332,9 @@ export const TRACKS = {
       { kind: 'ridge', u: 0.172, lat: 18, len: 8, r: 9, h: 3.6, top: 0.3, near: 4.6, tint: 0xc8846a },
       { kind: 'ridge', u: 0.214, lat: 18.5, len: 10, r: 9, h: 4.2, top: 0.3, near: 4.6, tint: 0xc8846a },
       { kind: 'ridge', u: 0.258, lat: 18, len: 8, r: 9, h: 3.4, top: 0.3, near: 4.6, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.106085, lat: 84.07, yaw: 80.369, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
-      { kind: 'ridge', u: 0.1784, lat: 100, yaw: 4, len: 120, r: 30, h: 13, top: 0.5 },
-      { kind: 'ridge', u: 0.7313, lat: 106, yaw: 151, len: 130, r: 30, h: 14, top: 0.5 },
+      { kind: 'ridge', u: 0.104635, lat: 84.07, yaw: 80.369, len: 40, r: 13, h: 9, top: 0.3, tint: 0xc8846a },
+      { kind: 'ridge', u: 0.17885, lat: 99.809, yaw: 3.992, len: 120, r: 30, h: 13, top: 0.5 },
+      { kind: 'ridge', u: 0.728609, lat: 106.051, yaw: 150.853, len: 130, r: 30, h: 14, top: 0.5 },
       // The field (the S round the north loop) keeps the biome's hoodoo
       // family off: it stands at the first spot off the road and the pieces
       // from the tunnel on, and every such spot here put its tall stack
@@ -2343,7 +2359,10 @@ export const TRACKS = {
       // ...nor at the kerb before the tank farm, towering over its tanks
       { kind: 'clear', u: 0.535, lat: 11.5, len: 16, r: 1 },
       { kind: 'clear', u: 0.575, lat: 11.5, len: 22, r: 1 },
-      { kind: 'clear', u: 0.61, lat: 11.5, len: 12, r: 1 }
+      { kind: 'clear', u: 0.61, lat: 11.5, len: 12, r: 1 },
+      // The filling station's forecourt, from its pumps to the kerb, kept
+      // clear of the scatter's boulders.
+      { kind: 'clear', u: 0.967, lat: -8, len: 14, r: 4 }
     ]
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
@@ -2357,7 +2376,6 @@ export const TRACKS = {
   // its walk already opens with enough straight behind the line.
   skysnake: {
     name: 'Skysnake', sand: STRIP, segments: SKYSNAKE, startU: 0.026,
-    sandOff: [[0.855, 0.93]],   // two strands side by side
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake,
     // Snakes and ladders, raced across the board at the toy cars' own scale,
     // and the board stood up where the racers look: two of its printed
@@ -2372,19 +2390,19 @@ export const TRACKS = {
     // train runs over the board's edge.
     set: [
       { model: 'set-snake-board', u: 0, lat: 0 },
-      { model: 'set-dice-tower', u: 0.196, lat: 11 },
-      { model: 'set-game-box', u: 0.39, lat: 9, scale: 1.4 },
-      { model: 'set-windup-ducks', u: 0.104, lat: 4.5 },
-      { model: 'set-snake-humps-blue', u: 0.16, lat: 7.2 },
-      { model: 'set-ladder-stack', u: 0.452, lat: 8 },
-      { model: 'set-game-board', u: 0.497, lat: 8.5 },
-      { model: 'set-card-house', u: 0.6054, lat: 7.25, yaw: -35 },
-      { model: 'set-game-stack', u: 0.675, lat: 8 },
-      { model: 'set-snake-jaws', u: 0.772, lat: 0 },
-      { model: 'set-game-pawns', u: 0.932, lat: 5.6 },
-      { model: 'set-snake-humps-purple', u: 0.975, lat: 7.5 },
+      { model: 'set-dice-tower', u: 0.19648, lat: 11.002 },
+      { model: 'set-game-box', u: 0.39096, lat: 9.004, scale: 1.4 },
+      { model: 'set-windup-ducks', u: 0.10426, lat: 4.5 },
+      { model: 'set-snake-humps-blue', u: 0.16039, lat: 7.201 },
+      { model: 'set-ladder-stack', u: 0.45311, lat: 8.005 },
+      { model: 'set-game-board', u: 0.49817, lat: 8.506 },
+      { model: 'set-card-house', u: 0.60689, lat: 7.258, yaw: -35 },
+      { model: 'set-game-stack', u: 0.67666, lat: 8.01, yaw: -4.05 },
+      { model: 'set-snake-jaws', u: 0.7739, lat: 0 },
+      { model: 'set-game-pawns', u: 0.93142, lat: 5.173 },
+      { model: 'set-snake-humps-purple', u: 0.97494, lat: 7.5 },
       { model: 'set-room-train-skysnake', u: 0, lat: 0 },
-      { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.96 },
+      { model: 'set-play-sunbeam', u: 0.207, lat: 30.17, yaw: -72.98 },
       // The toy box's classics left out on the board (each its own piece, to
       // keep or drop), as a child left a game: a line of dominoes run across
       // the middle into the chessmen, knocking the pawn over (the chess row
@@ -2393,12 +2411,12 @@ export const TRACKS = {
       // spinning by the dice; the pull-along snake watching the cars. Set
       // from the grid straight's frame, so lat is minus the board's x and u
       // its z.
-      { model: 'set-board-top', u: 0.025335, lat: -10, yaw: 0 },
-      { model: 'set-board-rocking-horse', u: 0.078951, lat: -16, yaw: -90 },
-      { model: 'set-board-teddy', u: 0.093061, lat: -12.5, yaw: -130 },
-      { model: 'set-board-ring-stack', u: 0.115638, lat: -20, yaw: 0 },
-      { model: 'set-board-dominoes', u: 0.064003, lat: -34.6615, yaw: 25.821 },
-      { model: 'set-board-chess', u: 0.113661, lat: -43.18, yaw: 25.821 },
+      { model: 'set-board-top', u: 0.0254, lat: -10, yaw: 0 },
+      { model: 'set-board-rocking-horse', u: 0.07915, lat: -16.001, yaw: -90 },
+      { model: 'set-board-teddy', u: 0.09329, lat: -12.501, yaw: -130 },
+      { model: 'set-board-ring-stack', u: 0.11592, lat: -20.001, yaw: 0 },
+      { model: 'set-board-dominoes', u: 0.06416, lat: -34.662, yaw: 25.82 },
+      { model: 'set-board-chess', u: 0.11394, lat: -43.182, yaw: 25.82 },
       { model: 'set-board-pull-snake', u: 0.983007, lat: -28, yaw: -100 }
     ],
     // The dive is the board's snake, from the top deck down to the board.
@@ -2409,7 +2427,6 @@ export const TRACKS = {
     ]
   },
   gauntlet: {
-    sandOff: [[0.065, 0.195], [0.216, 0.239], [0.3, 0.446], [0.585, 0.665], [0.82, 0.915]],   // the siege camp, the fortress, the barbican, two strands side by side
     name: 'Gauntlet', sand: STRIP, segments: GAUNTLET,
     oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet,
     // The toy castle siege, one set of toy knights split into two sides,
@@ -2445,32 +2462,32 @@ export const TRACKS = {
     // quintain. The floor's scatter is the tourney's too (theme.cc): shields,
     // butts and banners, none of the biome's other toys.
     set: [
-      { model: 'set-toy-soldiers', u: 0.8, lat: 6.7, lite: false },
-      { model: 'set-siege-mantlets', u: 0.81, lat: -8.7, yaw: 180 },
-      { model: 'set-castle-gate', u: 0.83, lat: 0 },
-      { model: 'set-toy-soldiers', u: 0.875, lat: 7 },
-      { model: 'set-castle-watchtower', u: 0.5637, lat: 9 },
-      { model: 'set-barbican', u: 0.6106, lat: 0 },
-      { model: 'set-cannon-battery', u: 0.6752, lat: 7, scale: 1.2 },
-      { model: 'set-siege-ram', u: 0.7241, lat: 8.5, yaw: -150.5 },
-      { model: 'set-toy-dragon', u: 0.95, lat: 7.2, scale: 1.25 },
-      { model: 'set-block-fortress', u: 0.4193, lat: -14.08 },
-      { model: 'set-siege-camp', u: 0.1198, lat: -8.37, yaw: -90 },
-      { model: 'set-trebuchet', u: 0.1133, lat: -17.77, yaw: -90 },
-      { model: 'set-siege-tower', u: 0.0777, lat: 11, yaw: 35 },
-      { model: 'set-toy-soldiers', u: 0.9977, lat: -8.7, yaw: 180 },
-      { model: 'set-tilt-yard', u: 0.027, lat: 8.5 },
-      { model: 'set-tourney-camp', u: 0.762, lat: -9.5, yaw: 180 },
-      { model: 'set-windup-knights', u: 0.92, lat: 4.3 },
-      { model: 'set-tourney-rug', u: 0.885, lat: 0, yaw: 90 },
-      { model: 'set-supply-wagon', u: 0.64, lat: 8.4 },
-      { model: 'set-wooden-horse', u: 0.97, lat: -9, yaw: 180 },
-      { model: 'set-siege-works', u: 0.15, lat: 7.2 },
-      { model: 'set-play-sunbeam', u: 0.087, lat: 30.24, yaw: -72.68 }
+      { model: 'set-toy-soldiers', u: 0.79934, lat: 6.698, lite: false },
+      { model: 'set-siege-mantlets', u: 0.80937, lat: -8.698, yaw: 180 },
+      { model: 'set-castle-gate', u: 0.82944, lat: 0, yaw: 3.51 },
+      { model: 'set-toy-soldiers', u: 0.87459, lat: 6.999 },
+      { model: 'set-castle-watchtower', u: 0.56225, lat: 8.991 },
+      { model: 'set-barbican', u: 0.60931, lat: 0 },
+      { model: 'set-cannon-battery', u: 0.67412, lat: 6.995, scale: 1.2 },
+      { model: 'set-siege-ram', u: 0.72318, lat: 8.496, yaw: -150.5 },
+      { model: 'set-toy-dragon', u: 0.94983, lat: 7.2, scale: 1.25 },
+      // the castle, the camp and the trebuchet face the world's north (yaw against the road's heading, lat short by the strip's push)
+      { model: 'set-block-fortress', u: 0.42404, lat: -12.706, yaw: -3.77 },
+      { model: 'set-siege-camp', u: 0.12018, lat: -6.169, yaw: -90 },
+      { model: 'set-trebuchet', u: 0.11366, lat: -15.571, yaw: -90 },
+      { model: 'set-siege-tower', u: 0.07796, lat: 11, yaw: 35 },
+      { model: 'set-toy-soldiers', u: 0.022, lat: -6, yaw: 180 },
+      { model: 'set-tilt-yard', u: 0.02709, lat: 8.5 },
+      { model: 'set-tourney-camp', u: 0.76121, lat: -9.496, yaw: 180 },
+      { model: 'set-windup-knights', u: 0.91973, lat: 4.3 },
+      { model: 'set-tourney-rug', u: 0.88462, lat: 0, yaw: 90 },
+      { model: 'set-supply-wagon', u: 0.63881, lat: 8.393 },
+      { model: 'set-wooden-horse', u: 0.9699, lat: -9, yaw: 180 },
+      { model: 'set-siege-works', u: 0.15033, lat: 7.198, yaw: -0.44 },
+      { model: 'set-play-sunbeam', u: 0.08727, lat: 28.04, yaw: -72.68 }
     ]
   },
   helix: {
-    sandOff: [[0.102, 0.15], [0.765, 0.88], [0.915, 0.953]],   // the marble run's head and stair, and two strands side by side
     name: 'Helix', sand: STRIP, segments: HELIX, startU: 0.020,
     oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix,
     // The marble run: ONE run round the whole room in the race's direction,
@@ -2494,24 +2511,27 @@ export const TRACKS = {
     // column begun beside it. Nothing of the run stands apart from its one
     // loop. The run is the room's one mover: this
     // room has no train. Each section is built in the world's
-    // frame (set_prototypes.py RUN_ORIGIN): its place is that origin, its yaw
-    // the heading's opposite.
+    // frame (set_prototypes.py RUN_ORIGIN), and its row lands it there facing
+    // north: its yaw the road heading's opposite, its lat short of the
+    // origin by the strip the renderer pushes it out by (re-solve the rows
+    // whenever the road or its strip moves). The marble tower's row likewise
+    // stands its column on TOWER.
     set: [
-      { model: 'set-marble-tower', u: 0.1253, lat: 14.5, yaw: -45 },
-      { model: 'set-spinning-top', u: 0.215, lat: -5.5 },
-      { model: 'set-marble-run-head', u: 0.096259, lat: 7, yaw: 0 },
-      { model: 'set-marble-run-wheel', u: 0.179241, lat: -6.97, yaw: -90 },
-      { model: 'set-marble-run-summit', u: 0.241867, lat: -6.97, yaw: -90 },
-      { model: 'set-marble-run-skyway', u: 0.474724, lat: 6.96, yaw: 180 },
-      { model: 'set-marble-run-vortex', u: 0.521114, lat: 6.96, yaw: 180 },
+      { model: 'set-marble-tower', u: 0.1253, lat: 12.3, yaw: -44.98 },
+      { model: 'set-spinning-top', u: 0.21539, lat: -5.5 },
+      { model: 'set-marble-run-head', u: 0.09626, lat: 4.8, yaw: 0 },
+      { model: 'set-marble-run-wheel', u: 0.17924, lat: -4.77, yaw: -90 },
+      { model: 'set-marble-run-summit', u: 0.24187, lat: -5.023, yaw: -90 },
+      { model: 'set-marble-run-skyway', u: 0.47472, lat: 6.96, yaw: 180 },
+      { model: 'set-marble-run-vortex', u: 0.52111, lat: 6.96, yaw: 180 },
       { model: 'set-marble-run-loop', u: 0.81056, lat: 7.03, yaw: 90 },
-      { model: 'set-marble-run-stair', u: 0.934415, lat: 7.03, yaw: 90 },
-      { model: 'set-marble-run-racer', u: 0.035952, lat: 7, yaw: 0 },
-      { model: 'set-marble-zigzag', u: 0.535, lat: 9.2 },
-      { model: 'set-helix-run-box', u: 0.505, lat: 17.3 },
-      { model: 'set-windup-robots', u: 0.06, lat: -4.6, yaw: 180 },
-      { model: 'set-play-rug', u: 0.06, lat: 0, yaw: 90 },
-      { model: 'set-play-sunbeam', u: 0.13475, lat: 30.24, yaw: -72.53 }
+      { model: 'set-marble-run-stair', u: 0.93441, lat: 4.924, yaw: 90 },
+      { model: 'set-marble-run-racer', u: 0.03595, lat: 4.8, yaw: 0 },
+      { model: 'set-marble-zigzag', u: 0.53596, lat: 9.2 },
+      { model: 'set-helix-run-box', u: 0.50591, lat: 17.3 },
+      { model: 'set-windup-robots', u: 0.06011, lat: -4.6, yaw: 180 },
+      { model: 'set-play-rug', u: 0.06011, lat: 0, yaw: 90 },
+      { model: 'set-play-sunbeam', u: 0.13475, lat: 28.388, yaw: -72.53 }
     ]
   },
   skyline: {

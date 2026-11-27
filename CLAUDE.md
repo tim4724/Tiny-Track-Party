@@ -54,6 +54,9 @@ npm run check:floating [-- --track id] [--detail lite]
 npm run place:landmarks [-- --track id] [--write]
                                   # better spots for the pieces a racer barely sees;
                                   # --write moves them in tracks.js (then rebuild, re-score)
+npm run repin:world -- ref|solve [--write]   # after the ROAD changes (strip rules or widths,
+                                  # a layout re-bake): record every set piece's and landform's
+                                  # world pose first, then solve their rows back onto it
 npm run film:laps -- --track id [--tree path] [--players 4] [--detail lite]   # cell 0's lap 2, frame-gated:
                                   # two trees' (or tiers') films are one race
 npm run score:verge -- --track id|--all [--tree path] [--detail lite] [--map] # how much of the lap the

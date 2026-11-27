@@ -63,7 +63,7 @@ inline std::unique_ptr<Centerline> make_centerline(const RaceTrack& rt) {
   for (const OutSample& s : rt.samples) {
     Sample cs;
     cs.pos = s.pos; cs.tangent = s.tangent; cs.up = s.up; cs.lateral = s.lateral;
-    cs.width = s.width; cs.sand = s.sand; cs.s = s.s;
+    cs.width = s.width; cs.sandL = s.sandL; cs.sandR = s.sandR; cs.s = s.s;
     samples.push_back(cs);
   }
   return std::make_unique<Centerline>(std::move(samples), rt.length);

@@ -1570,9 +1570,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     };
     // A strip vertex's shade: by ring and by which edge of the strip it is on,
     // so the mottle runs along AND across.
-    const auto stripTone = [&](uint32_t ring, bool outer) {
+    const auto stripTone = [&](uint32_t ring, bool outer, int side) {
         // ...and a sloped strip's shade across it (TrackBin::sandShade)
-        const float shade = std::min(0.8f, tb.sandShade * tb.slopeOf(frames[ring])) * (outer ? 0.5f : -0.5f);
+        const float shade = std::min(0.8f, tb.sandShade * tb.slopeOf(frames[ring], side)) * (outer ? 0.5f : -0.5f);
         return (1.0f + kStripMottle * stripWave(ring, toneA, toneB, outer ? 3.9f : 1.3f)) * (1.0f + shade);
     };
     // Retained on the bin: uv0's track space is linear along exactly these
@@ -1843,14 +1843,18 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // any (a causeway: tracks.js sandOffFrom/To) keeps the gap every deck has
     // (deckGap), and that is asphalt: sand-coloured, it drew a yellow hairline
     // inside both kerbs the length of the bridge.
-    const auto sandOn = [&](uint32_t i) { return tb.sand > 0 && frames[i].sand > 0.03f; };
+    // Each side has its own strip; the dash (points 9, 10) is on the asphalt's
+    // centre, which stands off the centre line where the two differ.
+    const auto sandOn = [&](uint32_t i, int side) {
+        return tb.sand > 0 && (side < 0 ? frames[i].sandL : frames[i].sandR) > 0.03f;
+    };
     const auto offAt = [&](uint32_t i, int j) {
-        const float g = tb.gapOf(frames[i]);
         switch (j) {
-            case 7: case kStepL: return g;
-            case 8: return g + lw;
-            case 11: return -g - lw;
-            case 12: case kStepR: return -g;
+            case 7: case kStepL: return tb.gapOf(frames[i], -1);
+            case 8: return tb.gapOf(frames[i], -1) + lw;
+            case 9: case 10: return P[j].off + frames[i].asphaltMid();
+            case 11: return -tb.gapOf(frames[i], 1) - lw;
+            case 12: case kStepR: return -tb.gapOf(frames[i], 1);
             default: return P[j].off;
         }
     };
@@ -1881,8 +1885,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const float l = P[j].sign * halfAt(i) + off + (outer ? P[j].sign * wider : 0.0f);
             // The strip's two edges stand at its step (TrackBin::stepOf): the
             // kerb's foot and the step's foot under the edge line's outer edge.
-            if (j == 6 || j == 13 || j == kStepL || j == kStepR) y += tb.stepOf(f);
-            if (j == 6 || j == 13) y += tb.slopeOf(f);   // its kerb edge, the cross slope higher
+            const int side = (j == 6 || j == kStepL) ? -1 : 1;
+            if (j == 6 || j == 13 || j == kStepL || j == kStepR) y += tb.stepOf(f, side);
+            if (j == 6 || j == 13) y += tb.slopeOf(f, side);   // its kerb edge, the cross slope higher
             ringPts[(size_t) i * kAll + j] = f.pos + f.up * y + f.lat * l;
         }
     }
@@ -2007,6 +2012,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         for (int s = 0; s < kLaid; s++) {
             const Strip& st = STRIPS[s];
             const bool onDeck = P[st.a].y == 0.0f && P[st.b].y == 0.0f;
+            // the side a gap, step or edge line is on (its strip's)
+            const int gs = (st.a == 6 || st.a == 7 || st.a == kStepL) ? -1 : 1;
             float3 cb;
             switch (st.kind) {
                 case K_KERB:
@@ -2036,9 +2043,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                     cb = bare ? ASPHALT : (tb.edgeLines ? LINE : SHOULDER);
                     // beside a strip whose biome has one, the damp or packed
                     // band the loose ground leaves at the road's edge
-                    if (!bare && tb.sandEdge && (sandOn(i) || sandOn(ni))) cb = SAND_EDGE;
+                    if (!bare && tb.sandEdge && (sandOn(i, gs) || sandOn(ni, gs))) cb = SAND_EDGE;
                     break;
-                case K_GAP: cb = sandOn(i) || sandOn(ni) ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
+                case K_GAP: cb = sandOn(i, gs) || sandOn(ni, gs) ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
                 default: cb = ASPHALT; break;
             }
             if (game >= 0 && st.kind != K_KERB && st.kind != K_SKIRT) cb = GAME[game][0];
@@ -2095,10 +2102,10 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // A sand strip's alpha is 0: vroad.mat reads it as "a tyre
                 // leaves a groove here, not rubber". The deck is opaque, so the
                 // alpha is free.
-                const float flag = (st.kind == K_GAP && sandOn(ri)) ? 0.0f : 1.0f;
+                const float flag = (st.kind == K_GAP && sandOn(ri, gs)) ? 0.0f : 1.0f;
                 // the strip's mottle, per vertex so it shades smoothly (stripTone)
-                const float3 cv = (st.kind == K_GAP && sandOn(ri) && game < 0)
-                        ? cb * stripTone(ri, pt == 6 || pt == 13) : cb;
+                const float3 cv = (st.kind == K_GAP && sandOn(ri, gs) && game < 0)
+                        ? cb * stripTone(ri, pt == 6 || pt == 13, gs) : cb;
                 corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cv, ao, flag) },
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,
@@ -2505,9 +2512,10 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind, uint32_t baseColor) {
 void TtpRenderer::buildGantry(const TrackBin& tb) {
     const TrackBin::Sample f = tb.frameAt(0);
     const float3 tanv = f.tangent();
+    const float mid = f.asphaltMid();   // centred on the asphalt, as its pylons collide (resolveFurniture)
     const auto toWorld = [&](float x, float y, float z) {
         // buildFinishGate seats the group a hair (0.02) INTO the road.
-        return f.pos + f.lat * x + f.up * (y - 0.02f) + tanv * z;
+        return f.pos + f.lat * (mid + x) + f.up * (y - 0.02f) + tanv * z;
     };
     // theme.gantry picks the plastic colours; theme.gate multiplies its
     // near-white colour grade over every part (sun-bleach / heat / cold).
@@ -2883,14 +2891,17 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     // THE WORLD KEEPS ITS DISTANCE FROM THE KERB. A set piece and a free
-    // landform are authored a `lat` from the centre line of bare asphalt;
-    // where the road carries a sand strip the kerb stands that much further
-    // out, and so does everything authored beside it. What is authored over
-    // the asphalt itself (a gate, a stream across the road) stays.
+    // landform are authored a `lat` from the centre of the bare asphalt, which
+    // stands asphaltMid() off the centre line; where the road carries a sand
+    // strip the kerb stands that side's strip further out, and so does
+    // everything authored beside it. What is authored over the asphalt itself
+    // (a gate, a stream across the road) stays on it.
     if (tb.sand > 0) {
         const auto out = [&](float u, float& lat) {
             const TrackBin::Sample f = tb.frameAt(u * tb.length);
-            if (std::abs(lat) > f.width * 0.5f - f.sand) lat += lat < 0 ? -f.sand : f.sand;
+            const float half = f.width * 0.5f - (f.sandL + f.sandR) * 0.5f;   // the asphalt's
+            const float strip = std::abs(lat) > half ? f.sandOn(lat) : 0.0f;
+            lat = f.asphaltMid() + lat + (lat < 0 ? -strip : strip);
         };
         for (auto& p : tb.setPieces) out(p.u, p.lat);
         for (ttp::rt::Landform& l : tb.land)

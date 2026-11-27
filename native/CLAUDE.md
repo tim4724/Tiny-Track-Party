@@ -145,6 +145,21 @@ included, so a catalogue id's map is a lookup and the phones' chooser list
 
 Node reads geometry through `scripts/native-track.mjs` over the shipped wasm.
 
+**The road strip is per side, and the centre line sits between the kerbs.** A
+sample's `width` runs kerb to kerb about `pos`, with `sandL`/`sandR` inside it,
+so where the two differ the asphalt's own centre stands `asphaltMid()` off the
+centre line. Everything authored from the asphalt reads it: furniture `lat`
+(`resolveFurniture`), set pieces and landforms (the renderer), the racing line
+and every bot lane (`RacingLine::midAt`), the wear planner, the gantry. Anything
+measured ALONG the road the cars drive is taken on the asphalt's centre line,
+not the centre line, which stands on a corner's outside and runs longer there:
+the crest table (`Game`), the racing line's curvature. The strip narrows only
+where it must, by rule (`sandWidths`, `narrowFolds`), and `track_fold` measures
+the drawn kerb against the asphalt's centre. Any change to those rules moves
+the centre line and the lap's length, so every u-anchored set piece and
+landform slides with it: record the world and solve it back
+(`npm run repin:world`).
+
 ## Building
 
 `native/scripts/build-runtime-web.sh` builds the engine and needs the Filament

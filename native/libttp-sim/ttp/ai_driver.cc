@@ -120,13 +120,33 @@ RacingLine::RacingLine(Centerline& centerline) {
   frames.reserve(n);
   for (int i = 0; i < n; i++) frames.push_back(centerline.sampleAt(i * h));
 
+  // The line is solved about the ASPHALT's centre (pos + lateral * mid), so
+  // its curvature is that line's: where one side carries more strip the centre
+  // line stands off it, and bends where the strips change, which the asphalt
+  // does not. Where the two coincide the tangents give it directly.
+  std::vector<double> mid(n);
+  for (int i = 0; i < n; i++) mid[i] = frames[i].asphaltMid();
+  std::vector<Vec3> asphalt(n);
+  for (int i = 0; i < n; i++) asphalt[i] = frames[i].pos.clone().addScaledVector(frames[i].lateral, mid[i]);
+
   std::vector<double> kappa(n);
   for (int i = 0; i < n; i++) {
-    const Vec3& a = frames[(i - 1 + n) % n].tangent;
-    const Vec3& b = frames[(i + 1) % n].tangent;
-    double cross = a.clone().cross(b).dot(frames[i].up);
-    double dot = clampd(a.dot(b), -1, 1);
-    kappa[i] = dmath::atan2(cross, dot) / (2 * h);
+    const int prev = (i - 1 + n) % n, next = (i + 1) % n;
+    if (mid[prev] == 0 && mid[i] == 0 && mid[next] == 0) {
+      const Vec3& a = frames[prev].tangent;
+      const Vec3& b = frames[next].tangent;
+      double cross = a.clone().cross(b).dot(frames[i].up);
+      double dot = clampd(a.dot(b), -1, 1);
+      kappa[i] = dmath::atan2(cross, dot) / (2 * h);
+    } else {
+      Vec3 a = asphalt[i].clone().sub(asphalt[prev]);
+      Vec3 b = asphalt[next].clone().sub(asphalt[i]);
+      const double la = a.length(), lb = b.length();
+      if (la < 1e-9 || lb < 1e-9) { kappa[i] = 0; continue; }
+      double dot = clampd(a.dot(b) / (la * lb), -1, 1);   // before cross() — cross MUTATES a
+      double cross = a.cross(b).dot(frames[i].up) / (la * lb);
+      kappa[i] = dmath::atan2(cross, dot) / ((la + lb) / 2);
+    }
   }
 
   auto boundFor = [&](double kAbs, int i) -> double {
@@ -158,7 +178,7 @@ RacingLine::RacingLine(Centerline& centerline) {
 
   auto measure = [&]() -> std::vector<double> {
     std::vector<Vec3> pts(n);
-    for (int i = 0; i < n; i++) pts[i] = frames[i].pos.clone().addScaledVector(frames[i].lateral, e[i]);
+    for (int i = 0; i < n; i++) pts[i] = frames[i].pos.clone().addScaledVector(frames[i].lateral, mid[i] + e[i]);
     std::vector<double> out(n);
     for (int i = 0; i < n; i++) {
       Vec3 v1 = pts[i].clone().sub(pts[(i - 1 + n) % n]);
@@ -206,7 +226,7 @@ RacingLine::RacingLine(Centerline& centerline) {
   std::vector<double> k(n);
   for (int i = 0; i < n; i++) k[i] = (kLine[(i - 1 + n) % n] + 2 * kLine[i] + kLine[(i + 1) % n]) / 4;
   length_ = L; n_ = n; h_ = h;
-  e_ = std::move(e); k_ = std::move(k); bound_ = std::move(bound);
+  e_ = std::move(e); k_ = std::move(k); bound_ = std::move(bound); mid_ = std::move(mid);
 }
 
 double RacingLine::at(const std::vector<double>& arr, double s) const {
@@ -284,11 +304,11 @@ double cornerBrake(const Car& car, Centerline& centerline, double turn, double c
 // ---- avoidThreat -------------------------------------------------------------
 namespace {
 struct Dodge { bool has = false; double lane = 0; };
-struct Best { bool has = false; double lat = 0, r = 0; };
+struct Best { bool has = false; double lat = 0, r = 0, s = 0; };
 }  // namespace
 
 template <class LaneFor>
-static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double maxLat,
+static Dodge avoidThreat(const Car& car, LaneFor laneFor, const RacingLine& line, Game& game, double maxLat,
                          bool prevSet, double prevLane) {
   double L = game.length();
   double lane = prevSet ? prevLane : laneFor(car.totalS);
@@ -302,7 +322,7 @@ static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double max
     // straight over oil and their own bananas from the lap before.
     double plan = laneFor(hs), clear = radius + EVADE_CLEAR;
     if (hlat < js_min(car.lat, plan) - clear || hlat > js_max(car.lat, plan) + clear) return;
-    if (ds < bestDs) { bestDs = ds; best.has = true; best.lat = hlat; best.r = radius; }
+    if (ds < bestDs) { bestDs = ds; best.has = true; best.lat = hlat; best.r = radius; best.s = hs; }
   };
   for (const auto& h : game.hazards()) consider(h.s, h.lat, h.radius);
   for (const auto& p : game.poles()) consider(p.s, p.lat, p.radius);
@@ -310,18 +330,19 @@ static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double max
     if (b.owner != car.id || game.elapsed() >= b.armAt) consider(b.s, b.lat, BANANA_AVOID_R);
   if (!best.has) return {};
   double m = js_max(0.1, maxLat - 0.1);
+  double c = line.midAt(best.s);   // the asphalt's centre there
   double off = best.r + EVADE_CLEAR;
   double left = best.lat - off, right = best.lat + off;
-  bool okL = left >= -m, okR = right <= m;
+  bool okL = left >= c - m, okR = right <= c + m;
   if (okL && okR) {
-    double clearL = m - std::fabs(left), clearR = m - std::fabs(right);
+    double clearL = m - std::fabs(left - c), clearR = m - std::fabs(right - c);
     if (std::fabs(clearL - clearR) < 0.05)
       return {true, std::fabs(left - lane) <= std::fabs(right - lane) ? left : right};
     return {true, clearL > clearR ? left : right};
   }
   if (okL) return {true, left};
   if (okR) return {true, right};
-  return {true, best.lat >= 0 ? -m : m};
+  return {true, best.lat >= c ? c - m : c + m};
 }
 
 // ---- seekBox -----------------------------------------------------------------
@@ -377,25 +398,28 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
 
   double maxLat = game.maxLat();
   RacingLine& line = game.racingLine();
+  // Every lane is laid about the asphalt's centre (RacingLine::midAt), and
+  // answered in centre-line lat.
   auto laneFor = [&](double sAbs) -> double {
-    // A weaker bot uses less of the racing line: skill 0 drives the centerline.
-    double e = line.laneAt(sAbs) * skill_;
+    // A weaker bot uses less of the racing line: skill 0 drives the asphalt's centre.
+    double c = line.midAt(sAbs);
+    double e = (line.laneAt(sAbs) - c) * skill_;
     double room = line.roomAt(sAbs);
     double fade = room > 0.05 ? clampd(1 - std::fabs(e) / room, 0, 1) : 1;
     double lim = js_min(js_max(room, FAN_MIN_ROOM), maxLat - 0.1);
-    return clampd(e + laneBias_ * fade, -lim, lim);
+    return c + clampd(e + laneBias_ * fade, -lim, lim);
   };
   double lane = laneFor(car.totalS + lookahead_);
   if (skill_ < 1) {
-    double lim = maxLat - 0.1;
-    lane = clampd(lane + weave_ * WOBBLE_LANE * (1 - skill_), -lim, lim);
+    double lim = maxLat - 0.1, c = line.midAt(car.totalS + lookahead_);
+    lane = c + clampd(lane - c + weave_ * WOBBLE_LANE * (1 - skill_), -lim, lim);
     if (mistakeGap_ < 0) drawMistakeGap();
     if (mistakeT_ > 0) {
       mistakeT_--;
-      lane = mistakeSide_ * (maxLat + car.sandHere + MISTAKE_OVERSHOOT);
+      lane = c + mistakeSide_ * (maxLat + (mistakeSide_ > 0 ? car.sandR : car.sandL) + MISTAKE_OVERSHOOT);
     } else if (--mistakeGap_ <= 0) {
       mistakeT_ = MISTAKE_FRAMES;
-      mistakeSide_ = car.lat >= 0 ? 1 : -1;
+      mistakeSide_ = car.lat - car.asphaltMid >= 0 ? 1 : -1;
       drawMistakeGap();
     }
   }
@@ -405,7 +429,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
     lane = seekLane;
     look = EVADE_LOOK;
   }
-  Dodge dodge = avoidThreat(car, laneFor, game, maxLat, dodgeSet_, dodgeLane_);
+  Dodge dodge = avoidThreat(car, laneFor, line, game, maxLat, dodgeSet_, dodgeLane_);
   dodgeSet_ = dodge.has; dodgeLane_ = dodge.lane;
   if (dodge.has) { lane = dodge.lane; look = EVADE_LOOK; }
   if (held_) lane = heldLat_;   // the strip showcase's lane outranks all of it
@@ -413,7 +437,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   double s = pursue(car, centerline, look, gain_, lane);
   if (!dodge.has) {
     double room = clampd(1 - std::fabs(s) / WANDER_FADE, 0, 1);
-    double curbRoom = clampd((maxLat - std::fabs(car.lat)) / WANDER_CURB, 0, 1);
+    double curbRoom = clampd((maxLat - std::fabs(car.lat - car.asphaltMid)) / WANDER_CURB, 0, 1);
     s = clampd(s + weave_ * STEER_WANDER * room * curbRoom, -1, 1);
   }
   double corner = cornerBrake(car, centerline, 0, caution_, &line, skill_);

@@ -24,7 +24,9 @@ namespace {
 // the radius: past 1 it folds, and near 1 it already draws as a point. The
 // generator rounds to |k| * halfWidth <= 0.7 (track-gen.mjs ROAD_FOLD_MAX), which
 // on a 5 m road under the widest kerb lands near 0.85 here, so raising either
-// limit means re-reading the other.
+// limit means re-reading the other. The builder narrows the strip on a
+// corner's inside to keep the drawn ribbon under its own FOLD_LIMIT
+// (trackbuilder.cc narrowFolds), which sits below this one.
 const double KERB_FOLD_MAX = 0.9;
 const double STEP = 0.1;
 
@@ -45,16 +47,28 @@ int main() {
     Centerline& cl = *bt.game.centerline;
     double worst = 0, worstS = 0;
     for (double s = 0; s < bt.game.length; s += STEP) {
-      // Curvature IN THE ROAD PLANE, the only kind that stretches a lateral
-      // offset: a loop's pitch does not fold its kerbs.
-      const Frame a = cl.sampleAt(s - STEP / 2), b = cl.sampleAt(s + STEP / 2);
-      const double k = std::fabs(b.lateral.clone().sub(a.lateral).dot(a.tangent)) / STEP;
-      const double fold = k * (cl.widthAt(s) / 2 + kerb);
+      // How far the kerb's far edge falls behind the ASPHALT's centre line
+      // (pos + lateral * asphaltMid) over one step, measured on the drawn
+      // rulings: 1 - (its advance along the road) / (the centre's). On a road
+      // with no strip, or the same strip both sides, that is |k| * (half +
+      // kerb) about the centre line. A strip on a corner's outside alone moves
+      // the centre line out and leaves the inner kerb where it was, so the
+      // centre line is no reference there; the asphalt's centre is. Curvature
+      // IN THE ROAD PLANE only stretches an offset: a loop's pitch does not
+      // fold its kerbs, and the advance is taken along the tangent.
+      const Frame a = cl.sampleAt(s - STEP / 2), b = cl.sampleAt(s + STEP / 2), f = cl.sampleAt(s);
+      const auto at = [&](const Frame& g, double lat) { return g.pos.clone().addScaledVector(g.lateral, lat); };
+      const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(f.tangent);
+      double fold = 0;
+      for (const double side : { -1.0, 1.0 }) {
+        const double edge = at(b, side * (b.width / 2 + kerb)).sub(at(a, side * (a.width / 2 + kerb))).dot(f.tangent);
+        if (centre > 1e-9) fold = std::fmax(fold, 1 - edge / centre);
+      }
       if (fold > worst) { worst = fold; worstS = s; }
     }
     const bool ok = worst <= KERB_FOLD_MAX;
     if (!ok) failures++;
-    std::printf("%s %-11s kerb %.2f  worst |k|*(half+kerb) %.2f at s=%.1f\n", ok ? "ok  " : "FAIL", id, kerb, worst,
+    std::printf("%s %-11s kerb %.2f  worst kerb fold %.2f at s=%.1f\n", ok ? "ok  " : "FAIL", id, kerb, worst,
                 worstS);
   }
   std::printf("track fold check: %d tracks, %d failures\n", TTP_TRACK_COUNT, failures);

@@ -2137,8 +2137,8 @@ void TtpRenderer::renderSandSpray(const TtpFrameInput& input, const TtpCarInput*
                     : right * ((wheel ? 1.0f : -1.0f) * c.halfWid * 0.85f) - fwd * (c.halfLen * 0.7f);
             // Each tyre answers for itself: only the one actually on the sand raises
             // any, so a car straddling the edge shows it on its outer side alone.
-            const bool onSand = f.sand > 0
-                    && std::fabs(dot(pos + tyre - f.pos, f.lat)) > f.asphaltHalf();
+            const float tl = dot(pos + tyre - f.pos, f.lat);
+            const bool onSand = f.sandOn(tl) > 0 && f.pastAsphalt(tl);
             const float before = on;
             on += ((onSand ? 1.0f : 0.0f) - on) * (1.0f - std::exp(-(onSand ? ON : OFF) * dt));
             const bool shed = !onSand && before > 0.15f;
@@ -2510,8 +2510,8 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 // channels say, and only that tyre: the one still on the
                 // asphalt leaves no rubber for it.
                 const TrackBin::Sample here = mTrack->sand > 0 ? mTrack->frameAt(ws) : TrackBin::Sample{};
-                const bool grooving = here.sand > 0 && c.airborne < 0.5f
-                        && std::fabs(wl) > here.asphaltHalf();
+                const bool grooving = here.sandOn(wl) > 0 && c.airborne < 0.5f
+                        && here.pastAsphalt(wl);
                 const float strengthHere = grooving ? 1.0f : strength;
                 if (!st.seeded) {
                     st.last = cur;

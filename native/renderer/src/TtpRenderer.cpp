@@ -1432,7 +1432,8 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
         d.lat = { (float) s.lateral.x, (float) s.lateral.y, (float) s.lateral.z };
         d.up = { (float) s.up.x, (float) s.up.y, (float) s.up.z };
         d.width = (float) s.width;
-        d.sand = (float) s.sand;
+        d.sandL = (float) s.sandL;
+        d.sandR = (float) s.sandR;
         d.s = (float) s.s;
     }
 

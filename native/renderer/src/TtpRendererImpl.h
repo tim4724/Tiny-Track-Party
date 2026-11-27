@@ -304,8 +304,13 @@ struct TtpRenderer::TrackBin {
     struct Sample {
         float3 pos, lat, up;
         float width, s;
-        float sand = 0;   // per side, inside `width` (the built track's own)
-        float asphaltHalf() const { return width / 2 - sand; }  // a tyre past this is on the sand
+        // The strip on each side (L: -lat, R: +lat), inside `width` (the
+        // built track's own), which runs kerb to kerb about `pos`: the
+        // asphalt's centre stands asphaltMid() along `lat`.
+        float sandL = 0, sandR = 0;
+        float sandOn(float l) const { return l < 0 ? sandL : sandR; }   // the strip on l's side
+        float asphaltMid() const { return (sandL - sandR) * 0.5f; }
+        bool pastAsphalt(float l) const { return std::fabs(l) > width / 2 - sandOn(l); }  // a tyre there is on the strip
         // Travel direction. The JS frame derives lateral = tangent × up
         // (Centerline._sampleInto), so recovering the tangent is up × lateral —
         // cross(lat, up) is its NEGATIVE, which pointed the boost-pad chevrons
@@ -329,7 +334,9 @@ struct TtpRenderer::TrackBin {
     // sand track the gap is the sample's own sand (gapOf), never under deckGap.
     std::vector<Sample> rings;
     float deckGap = 0, deckLine = 0;
-    float gapOf(const Sample& smp) const { return sand > 0 ? std::max(smp.sand, deckGap) : deckGap; }
+    float gapOf(const Sample& smp, int side) const {   // side -1 L, +1 R
+        return sand > 0 ? std::max(side < 0 ? smp.sandL : smp.sandR, deckGap) : deckGap;
+    }
     static constexpr float kDashW = 0.18f;
     std::vector<uint32_t> carColors;
     std::vector<int32_t> carModels; // per slot: TtpRosterCar::carIndex
@@ -556,7 +563,8 @@ struct TtpRenderer::TrackBin {
         r.up = normalize(mix(pB.up, pC.up, u));
         r.lat = normalize(cross(tan, r.up));
         r.width = pB.width + (pC.width - pB.width) * u;
-        r.sand = pB.sand + (pC.sand - pB.sand) * u;
+        r.sandL = pB.sandL + (pC.sandL - pB.sandL) * u;
+        r.sandR = pB.sandR + (pC.sandR - pB.sandR) * u;
         r.s = w;
         return r;
     }
@@ -606,25 +614,32 @@ struct TtpRenderer::TrackBin {
     // it is gone where the strip is. Drawn only: the sim's deck stays the
     // ruled line. One rule for the mesh (buildRoadMesh), the wheels
     // (deckPoint) and the car shadows' planes (deckTri).
-    float stepOf(const Sample& f) const { return sand > 0 ? sandStep * std::min(1.0f, f.sand / sand) : 0.0f; }
+    float stepOf(const Sample& f, int side) const {
+        return sand > 0 ? sandStep * std::min(1.0f, (side < 0 ? f.sandL : f.sandR) / sand) : 0.0f;
+    }
     // How much of the strip a WHEEL at lateral `l` is on: 0 on the asphalt, 1
     // on the strip, across kStepEase past the strip's edge (a tyre has width:
     // it rolls over the step, it does not teleport down it), scaled by how
     // much strip the ring has.
     static constexpr float kStepEase = 0.08f;
     float stripRamp(const Sample& f, float l) const {
-        if (!(sand > 0) || !(f.sand > 0)) return 0;
-        const float in = f.width * 0.5f - gapOf(f);   // the strip's inner edge
+        const float here = f.sandOn(l);
+        if (!(sand > 0) || !(here > 0)) return 0;
+        const float in = f.width * 0.5f - gapOf(f, l < 0 ? -1 : 1);   // the strip's inner edge
         const float t = (std::fabs(l) - in) / kStepEase;
-        return std::min(1.0f, f.sand / sand) * std::min(1.0f, std::max(0.0f, t));
+        return std::min(1.0f, here / sand) * std::min(1.0f, std::max(0.0f, t));
     }
     // The strip's cross slope (theme.road.sandSlope): its kerb edge stands that
     // much over its road edge, rising evenly across it (snow piled to the bank).
-    float slopeOf(const Sample& f) const { return sand > 0 ? sandSlope * std::min(1.0f, f.sand / sand) : 0.0f; }
+    float slopeOf(const Sample& f, int side) const {
+        return sand > 0 ? sandSlope * std::min(1.0f, (side < 0 ? f.sandL : f.sandR) / sand) : 0.0f;
+    }
     float slopeAt(const Sample& f, float l) const {
-        if (sandSlope == 0 || !(sand > 0) || !(f.sand > 0.05f)) return 0;
-        const float in = f.width * 0.5f - gapOf(f);
-        return slopeOf(f) * std::min(1.0f, std::max(0.0f, (std::fabs(l) - in) / f.sand));
+        const float here = f.sandOn(l);
+        const int side = l < 0 ? -1 : 1;
+        if (sandSlope == 0 || !(sand > 0) || !(here > 0.05f)) return 0;
+        const float in = f.width * 0.5f - gapOf(f, side);
+        return slopeOf(f, side) * std::min(1.0f, std::max(0.0f, (std::fabs(l) - in) / here));
     }
 
     // dP/ds at (s, l) — the deck's along-track direction AT THAT LATERAL
@@ -700,12 +715,13 @@ struct TtpRenderer::TrackBin {
     // The deck's seven strips at a ring, as the EIGHT lat bounds buildRoadMesh
     // sweeps (gap, line, road, dash, road, line, gap): the uv0.y every deck
     // vertex of that ring carries. One derivation for project() below and for
-    // deckTriAt, which must agree with it exactly.
+    // deckTriAt, which must agree with it exactly. Each gap is its own side's
+    // strip, and the dash is on the asphalt's centre.
     void deckStripBounds(const Sample& ring, float* o) const {
-        const float h = ring.width * 0.5f, g = gapOf(ring);
-        o[0] = -h; o[1] = -h + g; o[2] = -h + g + deckLine;
-        o[3] = -kDashW / 2; o[4] = kDashW / 2;
-        o[5] = h - g - deckLine; o[6] = h - g; o[7] = h;
+        const float h = ring.width * 0.5f, gL = gapOf(ring, -1), gR = gapOf(ring, 1), m = ring.asphaltMid();
+        o[0] = -h; o[1] = -h + gL; o[2] = -h + gL + deckLine;
+        o[3] = m - kDashW / 2; o[4] = m + kDashW / 2;
+        o[5] = h - gR - deckLine; o[6] = h - gR; o[7] = h;
     }
 
     // THE MESH'S OWN uv0 -> WORLD MAP, one triangle at a time. The road is
@@ -736,8 +752,8 @@ struct TtpRenderer::TrackBin {
         float sa = 0, sb = 0;
         float bA[8], bB[8];
         float3 posA, latA, posB, latB;
-        float3 liftA, liftB;   // the strip's step at each ring (stepOf), along its up
-        float3 outA, outB;     // ...and its kerb edge's, the cross slope more (slopeOf)
+        float3 liftA[2], liftB[2];   // each strip's step (0 L, 1 R) at each ring (stepOf), along its up
+        float3 outA[2], outB[2];     // ...and its kerb edge's, the cross slope more (slopeOf)
     };
     int deckRingAt(float sWrapped) const {
         const size_t n = rings.size();
@@ -758,10 +774,13 @@ struct TtpRenderer::TrackBin {
         deckStripBounds(b, q.bB);
         q.posA = a.pos; q.latA = a.lat;
         q.posB = b.pos; q.latB = b.lat;
-        q.liftA = a.up * stepOf(a);
-        q.liftB = b.up * stepOf(b);
-        q.outA = a.up * (stepOf(a) + slopeOf(a));
-        q.outB = b.up * (stepOf(b) + slopeOf(b));
+        for (int k = 0; k < 2; k++) {
+            const int side = k ? 1 : -1;
+            q.liftA[k] = a.up * stepOf(a, side);
+            q.liftB[k] = b.up * stepOf(b, side);
+            q.outA[k] = a.up * (stepOf(a, side) + slopeOf(a, side));
+            q.outB[k] = b.up * (stepOf(b, side) + slopeOf(b, side));
+        }
     }
     // The triangle of quad `q` holding (sWrapped, lat): false off the deck.
     bool deckTriIn(const DeckQuad& q, float sWrapped, float lat, DeckTri& out) const {
@@ -802,8 +821,9 @@ struct TtpRenderer::TrackBin {
         const auto lift = [onStrip](int k, const float3& in, const float3& out) {
             return !onStrip ? float3{} : (k == 0 || k == 7) ? out : in;
         };
-        const auto wA = [&](int k) { return q.posA + q.latA * q.bA[k] + lift(k, q.liftA, q.outA); };
-        const auto wB = [&](int k) { return q.posB + q.latB * q.bB[k] + lift(k, q.liftB, q.outB); };
+        const int sd = j == 6 ? 1 : 0;   // which strip: 0 on the left, 6 on the right
+        const auto wA = [&](int k) { return q.posA + q.latA * q.bA[k] + lift(k, q.liftA[sd], q.outA[sd]); };
+        const auto wB = [&](int k) { return q.posB + q.latB * q.bB[k] + lift(k, q.liftB[sd], q.outB[sd]); };
         out.U[0] = A;
         out.W[0] = wA(j);
         if (side == 0) {

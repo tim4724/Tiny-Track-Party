@@ -643,10 +643,11 @@ void TtpRenderer::placeCarShadow(size_t slot, const float3& origin, const float3
             const auto lift = [&](int b, const float3& in, const float3& out) {
                 return !onStrip ? float3{} : (b == 0 || b == 7) ? out : in;
             };
-            const float3 WAlo = q.posA + q.latA * q.bA[k] + lift(k, q.liftA, q.outA);
-            const float3 WAhi = q.posA + q.latA * q.bA[k + 1] + lift(k + 1, q.liftA, q.outA);
-            const float3 WBlo = q.posB + q.latB * q.bB[k] + lift(k, q.liftB, q.outB);
-            const float3 WBhi = q.posB + q.latB * q.bB[k + 1] + lift(k + 1, q.liftB, q.outB);
+            const int sd = k == 6 ? 1 : 0;   // which strip: 0 on the left, 6 on the right
+            const float3 WAlo = q.posA + q.latA * q.bA[k] + lift(k, q.liftA[sd], q.outA[sd]);
+            const float3 WAhi = q.posA + q.latA * q.bA[k + 1] + lift(k + 1, q.liftA[sd], q.outA[sd]);
+            const float3 WBlo = q.posB + q.latB * q.bB[k] + lift(k, q.liftB[sd], q.outB[sd]);
+            const float3 WBhi = q.posB + q.latB * q.bB[k + 1] + lift(k + 1, q.liftB[sd], q.outB[sd]);
             ClipV Alo{ 0.0f, q.bA[k], 0, 0 }, Ahi{ 0.0f, q.bA[k + 1], 0, 0 };
             ClipV Blo{ 1.0f, q.bB[k], 0, 0 }, Bhi{ 1.0f, q.bB[k + 1], 0, 0 };
             stampUV(WAlo, Alo.u, Alo.v); stampUV(WAhi, Ahi.u, Ahi.v);
