@@ -280,6 +280,7 @@ class GameCoordinator(
         // persists the blob and decides nothing about it — nothing stored loads a
         // fresh couch.
         Ttp.ttp_ui_progress_load(TtpJson.arg(prefs.getString(PROGRESS_KEY, null)), 0)
+        val catalogue = TtpJson.obj(Ttp.ttp_ui_catalogue_json())
 
         // The seat card's thumbnail lookup table. From the manifest, held once.
         state.carModels = proto.carModels
