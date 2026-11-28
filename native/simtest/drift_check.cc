@@ -1,7 +1,7 @@
 // Drift check — the slide behind Game::update's DRIFT_* block.
 //
-// The brake with a steer at speed slides, letting go ends it, the look rises in
-// and fades out, the slide's brake turns tighter and costs no speed, the slide
+// The brake with a steer at speed slides, letting go or straightening up ends
+// it (and a brake still held then brakes), the look rises in and fades out, the slide's brake turns tighter and costs no speed, the slide
 // holds more speed than plain steering and more the better the car handles, a
 // straight or light-steer brake is a plain brake, and a bot slides by the same
 // rule, as often as its skill. Assertions rather than a corpus, like
@@ -112,8 +112,26 @@ int main() {
     r.drive(0, 0, releaseFrames + 1);
     check(r.car->driftMix == 0, "the release ends in plain driving");
     back.drive(1, 1, 10);
-    back.drive(-0.5, 1, 5);
-    check(back.car->drifting, "a counter-steer with the brake down keeps the slide");
+    back.drive(0.3, 1, 5);
+    check(back.car->drifting, "easing off the steer with the brake down keeps the slide");
+  }
+
+  // Straightening up ends the slide, and the brake still held then brakes —
+  // a steer back past DRIFT_START does not slide again until a fresh press.
+  {
+    Rig r(false);
+    r.drive(1, 1, 20);
+    const double v0 = r.car->v;
+    r.drive(0, 1, 1);
+    check(!r.car->drifting, "straightening up ends the slide");
+    r.drive(0, 1, 20);
+    check(r.car->v < v0 - 1, "…and the brake still held brakes");
+    r.car->v = r.car->vmax * 0.9;
+    r.drive(1, 1, 5);
+    check(!r.car->drifting, "steering hard again on the same press does not slide");
+    r.drive(1, 0, 1);
+    r.drive(1, 1, 1);
+    check(r.car->drifting, "a fresh press slides again");
   }
 
   // A bot slides corners on its own inputs, by its skill: the full bot brakes
@@ -158,6 +176,21 @@ int main() {
     const double poorSlide = lockSpeed(0.88, 1), poorPlain = lockSpeed(0.88, 0);
     check(poorSlide > poorPlain, "a slide holds more speed than plain lock steering");
     check(goodSlide - goodPlain > 2 * (poorSlide - poorPlain), "a better handler's slide holds far more of it");
+  }
+
+  // slideGain (cosmetic: the look scales by it) is what the slide saves: all of
+  // lock's scrub for the best handler at lock, less on a lighter lean, little
+  // for a poor handler.
+  {
+    auto gainAt = [](double turn, double s) {
+      Rig r(false, turn);
+      for (int i = 0; i < 30; i++) { r.car->lat = 0; r.car->heading = 0; r.drive(s, 1, 1); }
+      return r.car->slideGain;
+    };
+    const double goodLock = gainAt(1.24, 1), goodHalf = gainAt(1.24, 0.6), poorLock = gainAt(0.88, 1);
+    check(std::fabs(goodLock - 1) < 1e-9, "the best handler at lock saves all of lock's scrub");
+    check(goodHalf > 0 && goodHalf < 0.5 * goodLock, "a lighter lean saves much less");
+    check(poorLock > 0 && poorLock < 0.2, "a poor handler's slide saves little");
   }
 
   // The brake in a slide turns it tighter and costs no speed.

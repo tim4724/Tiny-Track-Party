@@ -9,10 +9,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let Haptics, EFFECTS, BRAKE_PATTERN, BRAKE_RENEW_MS, REARM_GAP_MS, airConsoleBackend, hapticChain;
+let Haptics, EFFECTS, BRAKE_PATTERN, DRIFT_PATTERN, BRAKE_RENEW_MS, REARM_GAP_MS, airConsoleBackend, hapticChain;
+let DriftFeel;
 test.before(async () => {
-  ({ Haptics, EFFECTS, BRAKE_PATTERN, BRAKE_RENEW_MS, REARM_GAP_MS, airConsoleBackend, hapticChain } =
+  ({ Haptics, EFFECTS, BRAKE_PATTERN, DRIFT_PATTERN, BRAKE_RENEW_MS, REARM_GAP_MS, airConsoleBackend, hapticChain } =
     await import('../public/controller/Haptics.js'));
+  ({ DriftFeel } = await import('../public/controller/driftFeel.js'));
 });
 
 // A deterministic stand-in for the browser: records every vibrate() argument and
@@ -86,6 +88,40 @@ test('starting a running loop again is a no-op (a repeated press cannot stack re
   assert.equal(calls.length, 1);
   advance(BRAKE_RENEW_MS + 1);
   assert.equal(calls.length, 2, 'exactly one renewal, not three');
+});
+
+test('another loop replaces a running one at once and renews as itself (a drift ending in a brake)', () => {
+  const { h, calls, advance } = harness();
+  h.startLoop(DRIFT_PATTERN);
+  h.startLoop(DRIFT_PATTERN);
+  h.startLoop(BRAKE_PATTERN);
+  assert.deepEqual(calls, [DRIFT_PATTERN, BRAKE_PATTERN], 'the same pattern is a no-op, another one plays now');
+  advance(BRAKE_RENEW_MS + 1);
+  assert.deepEqual(calls.slice(2), [BRAKE_PATTERN], 'and only the new one renews');
+});
+
+test('the drift rumble is slower and heavier than the brake\'s, and outlasts the renewal', () => {
+  const on = (p) => p.filter((_, i) => i % 2 === 0);
+  const sum = (p) => p.reduce((a, b) => a + b, 0);
+  assert.ok(Math.min(...on(DRIFT_PATTERN)) > Math.max(...on(BRAKE_PATTERN)), 'longer pulses');
+  assert.ok(on(DRIFT_PATTERN).length / sum(DRIFT_PATTERN) < on(BRAKE_PATTERN).length / sum(BRAKE_PATTERN),
+    'fewer of them a second');
+  assert.ok(sum(DRIFT_PATTERN) > BRAKE_RENEW_MS, 'no gap before the renewal');
+  assert.ok(hapticChain(DRIFT_PATTERN).every((s) => s.primitive === 'click'), 'a firmer tick on a primitive backend');
+  assert.ok(hapticChain(BRAKE_PATTERN).every((s) => s.primitive === 'low_tick'), 'the brake keeps its light one');
+});
+
+// driftFeel.js: the sim's slide rule (game.cc) on the phone's own steer and button.
+test('a held button rumbles drift only while the steer slides the car, as the sim rules', () => {
+  const f = new DriftFeel();
+  assert.equal(f.step(false, 1), null, 'nothing held, no rumble');
+  assert.equal(f.step(true, 0.1), 'brake', 'a straight press brakes');
+  assert.equal(f.step(true, 0.6), 'drift', '…and steering past the start slides, on the same press');
+  assert.equal(f.step(true, 0.3), 'drift', 'easing off keeps the slide');
+  assert.equal(f.step(true, 0.1), 'brake', 'straightening up ends it in a brake');
+  assert.equal(f.step(true, 0.9), 'brake', 'and no slide again until a fresh press');
+  assert.equal(f.step(false, 0.9), null);
+  assert.equal(f.step(true, -0.7), 'drift', 'a fresh press with a steer slides, either way');
 });
 
 test('stopLoop kills the motor immediately and stops renewing', () => {

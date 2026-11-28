@@ -66,6 +66,8 @@ Value manifest() {
   steer.set("STRONG_THRESHOLD", Value::Num(STEER_STRONG_THRESHOLD));
   steer.set("SEND_INTERVAL_MS", Value::Num(STEER_SEND_INTERVAL_MS));
   steer.set("SEND_MIN_INTERVAL_MS", Value::Num(STEER_SEND_MIN_INTERVAL_MS));
+  steer.set("DRIFT_START", Value::Num(STEER_DRIFT_START));
+  steer.set("DRIFT_END", Value::Num(STEER_DRIFT_END));
   m.set("STEER", std::move(steer));
 
   Value liveness = Value::Obj();

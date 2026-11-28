@@ -97,13 +97,12 @@ const Persona AI_PERSONALITIES[7] = {
 static const double AI_TIER_SKILL[4] = {0.15, 0.6, 0.65, 0.9};
 
 // A bot slides a corner the way a player does: the brake down once its steer
-// passes DRIFT_START, up again once it eases under AI_SLIDE_OFF on the way out,
+// passes DRIFT_START, up again once it eases under DRIFT_END on the way out,
 // and only into a slide it can start (canStartSlide), since otherwise that
 // brake is a plain one. Which corners it slides so is rolled once each at its
 // skill, on its own stream so the wander and the mistakes draw exactly what
 // they always did. The other corners keep the plain corner braking, which past
 // DRIFT_START slides too, by the player's rule, just not held through.
-static const double AI_SLIDE_OFF = 0.2;
 static const uint32_t SLIDE_RNG_SALT = 0x9e3779b9u;
 
 double aiSkillForTier(int tier) {
@@ -457,7 +456,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   out.hasS = true; out.s = s;
   out.hasB = true; out.b = corner;
   out.hasU = true; out.u = useSeq_;
-  const bool hard = std::fabs(s) >= (hardSteer_ ? AI_SLIDE_OFF : DRIFT_START);
+  const bool hard = std::fabs(s) >= (hardSteer_ ? DRIFT_END : DRIFT_START);
   if (hard && !hardSteer_) slideCorner_ = slideRng_.next() < skill_;
   hardSteer_ = hard;
   if (slideCorner_ && hard && (car.drifting || canStartSlide(car))) out.b = 1;

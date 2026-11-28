@@ -163,6 +163,7 @@ export class Display {
       debugMonsterPitch: mod.cwrap('ttp_display_debug_monster_pitch', 'number', ['number']),
       debugMonsterBack: mod.cwrap('ttp_display_debug_monster_back', 'number', ['number']),
       debugSandDust: mod.cwrap('ttp_display_debug_sand_dust', 'number', ['number', 'number']),
+      debugDriftLook: mod.cwrap('ttp_display_debug_drift_look', 'number', ['number', 'number']),
       dressKeep: mod.cwrap('ttp_display_dress_keep', null, ['number']),
       dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
@@ -853,6 +854,8 @@ export class Display {
   debugMonsterPitch(deg) { return this._fn.debugMonsterPitch(deg); }
   debugMonsterBack(units) { return this._fn.debugMonsterBack(units); }
   debugSandDust(knob, value) { return this._fn.debugSandDust(knob, value); }
+  // One of a drift's looks on or off, by its bit ("Drift look" in the panel).
+  debugDriftLook(look, on) { return this._fn.debugDriftLook(look, on); }
 
   dressKeep(f) { this._fn.dressKeep(f); }
 

@@ -54,6 +54,13 @@ const BRAKE_PULSE = [12, 60];                                     // 72 ms cycle
 export const BRAKE_PATTERN = Array(25).fill(BRAKE_PULSE).flat();  // ~1.8 s of rumble
 export const BRAKE_RENEW_MS = 1500;                               // renew before it ends (1.8 s > 1.5 s, no gap)
 
+// Drift rumble: SLOWER and HEAVIER than the brake's ticking, so a held button
+// says by feel which one the car is doing (driftFeel.js decides). Fewer, longer
+// pulses; on a primitive backend a pulse this long is a firmer tick
+// (hapticChain). Renewed on the brake's clock, so it too must outlast it.
+const DRIFT_PULSE = [30, 110];                                    // 140 ms cycle: ~7 heavier ticks a second
+export const DRIFT_PATTERN = Array(13).fill(DRIFT_PULSE).flat();  // ~1.8 s of rumble
+
 // Gap between a transient ending and the loop resuming underneath it. Small
 // enough not to read as a hole in the rumble, large enough that the re-arming
 // vibrate() call can't land while the transient is still playing and truncate it.
@@ -89,12 +96,13 @@ export class Haptics {
     if (this._loop) this._arm(durationOf(effect.ms) + REARM_GAP_MS);
   }
 
-  // Start a self-renewing background loop (the brake rumble). navigator.vibrate
-  // has no native loop, so we play a long pattern and re-issue it just before it
-  // ends — the motor never falls silent. A second call while one is running is a
-  // no-op, so a repeated press can't stack renewals.
+  // Start a self-renewing background loop (the brake or drift rumble).
+  // navigator.vibrate has no native loop, so we play a long pattern and re-issue
+  // it just before it ends — the motor never falls silent. A second call with
+  // the same pattern while it runs is a no-op, so a repeated press can't stack
+  // renewals; another pattern replaces it at once (a drift ending in a brake).
   startLoop(pattern = BRAKE_PATTERN, renewMs = BRAKE_RENEW_MS) {
-    if (this._loop) return;
+    if (this._loop && this._loop.pattern === pattern) return;
     this._loop = { pattern, renewMs };
     this._vibrate(pattern);
     this._arm(renewMs);
@@ -126,10 +134,12 @@ export class Haptics {
 
 // A vibrate() pattern as a composition — the step shape both the Paper Balloon
 // launcher (CONTRACT.md §12 hapticComposition) and the AirConsole SDK take:
-// one low tick per on-segment, and the pattern's off-segments become each
+// one tick per on-segment (a low tick, or a firmer click for an on-segment of
+// FIRM_TICK_MS or more: the drift's heavier pulse), and the pattern's off-segments become each
 // step's `delay`, the rest AFTER the previous step ends (Android's composition
 // clock), so the tick itself stands in for the on-segment and only the gap is
 // delay. The cancel call (0) is the empty sequence.
+export const FIRM_TICK_MS = 25;
 export function hapticChain(p) {
   if (!Array.isArray(p)) p = [p];
   const chain = [];
@@ -137,7 +147,10 @@ export function hapticChain(p) {
   for (let i = 0; i < p.length; i++) {
     const ms = +p[i] || 0;
     if (i % 2 === 1) gap += ms;
-    else if (ms > 0) { chain.push({ primitive: 'low_tick', scale: 1, delay: gap }); gap = 0; }
+    else if (ms > 0) {
+      chain.push({ primitive: ms >= FIRM_TICK_MS ? 'click' : 'low_tick', scale: 1, delay: gap });
+      gap = 0;
+    }
   }
   return chain;
 }

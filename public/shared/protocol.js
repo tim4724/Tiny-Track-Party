@@ -260,7 +260,13 @@ var STEER = {
   // at least this long, so the wire rate is provably bounded at 1000/this
   // msgs/s — sized to the strictest platform message budget in sight
   // (AirConsole allows 25 messages/s).
-  SEND_MIN_INTERVAL_MS: 40
+  SEND_MIN_INTERVAL_MS: 40,
+  // DISPLAY + PHONE. The slide (game.cc): the brake held with |steer| at or past
+  // DRIFT_START slides the car, and |steer| under DRIFT_END ends it. The phone
+  // runs the same rule to pick the drift's rumble over the brake's
+  // (controller/driftFeel.js), so the two cannot disagree about a lean.
+  DRIFT_START: 0.5,
+  DRIFT_END: 0.2
 };
 
 // Car livery palette, indexed by the dense color slot RoomFlow.lowestFreeSlot

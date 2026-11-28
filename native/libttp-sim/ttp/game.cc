@@ -43,9 +43,12 @@ static const double STEER_SCRUB = 0.35;
 // ---- drift ----
 // The BRAKE starts it: braking while steering past DRIFT_START at DRIFT_SPEED
 // of vmax, on the ground (canStartSlide), SLIDES the car — the hop, the drawn
-// body slip and the squeal — and letting go of the brake ends it. A brake with
-// a light steer, or slow, is a plain brake. Nothing shows before the slide: a
-// body swung off its travel outside one read as the car swimming.
+// body slip and the squeal. Letting go of the brake ends it, and so does
+// straightening up (the steer under DRIFT_END): the brake still held then
+// BRAKES until it comes up (driftSpent), so a corner can be slid and the
+// straight after it braked on one press. A brake with a light steer, or slow,
+// is a plain brake. Nothing shows before the slide: a body swung off its
+// travel outside one read as the car swimming.
 //
 // The slide is the faster way through a corner, and more so the better the car
 // handles. Its brake costs no speed and turns up to 1 + SLIDE_TIGHT x the
@@ -1244,10 +1247,13 @@ void Game::update(double dtMs) {
     if (c.monsterT > 0) { c.monsterT -= dt; if (c.monsterT <= 0) { c.monsterT = 0; Event e; e.type = "monster_end"; e.id = c.id; emit(e); } }
     if (c.shoveT > 0) { c.shoveT -= dt; if (c.shoveT < 0) c.shoveT = 0; }
     // The slide (DRIFT_* above): the brake with a steer at speed starts it,
-    // letting go of the brake ends it.
+    // letting go of the brake or straightening up ends it.
+    if (c.brake <= 0) c.driftSpent = false;
     if (c.finished || spinning) { c.drifting = false; c.driftMix = 0; }
     else if (c.drifting && c.brake <= 0) c.drifting = false;
-    else if (!c.drifting && c.brake > 0 && std::fabs(c.steer) >= DRIFT_START && canStartSlide(c)) {
+    else if (c.drifting && std::fabs(c.steer) < DRIFT_END) { c.drifting = false; c.driftSpent = true; }
+    else if (!c.drifting && !c.driftSpent && c.brake > 0 && std::fabs(c.steer) >= DRIFT_START
+             && canStartSlide(c)) {
       c.drifting = true;
       c.driftT = 0;
     }
@@ -1267,10 +1273,12 @@ void Game::update(double dtMs) {
     // actually turns (capped at full lock's): an extra yaw that skipped the
     // scrub let a slide take every corner on less lean and so at more speed
     if (c.drifting) {
+      const double plain = scrubEff;
       steerIn *= 1 + SLIDE_TIGHT * c.brake;
       const double billed = js_min(1.0, std::fabs(steerIn));
       const double hold = js_min(1.0, SLIDE_HOLD * dmath::pow(c.turn / TURN_RATE, SLIDE_HOLD_POW));
       if (!boosting) scrubEff = STEER_SCRUB * billed * billed * (1 - hold);
+      c.slideGain = grounded && !boosting ? js_max(0.0, plain - scrubEff) / STEER_SCRUB : 0;
     }
     // Tyres off the deck scrub nothing: a tilt held through a flight still
     // steers (at AIR_STEER) but costs no speed, so a tilt never slows a car

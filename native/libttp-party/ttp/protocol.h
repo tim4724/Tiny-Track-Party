@@ -100,10 +100,10 @@ inline constexpr double RANDOM_RACES_MAX = 8;
 
 // ---- the steering contract (protocol.js STEER) ------------------------------
 // The numbers the phone and the display's sim must agree on; see the JS block
-// for what each one does and why they only mean anything together. Only STEER_
-// EXPO has a C++ consumer today (libttp-sim's steering curve — partytest/
-// protocol_check.cc asserts ttp::getSteerExpo() equals it, which is what stops
-// game.cc drifting from the phone), but all are mirrored because this header
+// for what each one does and why they only mean anything together. STEER_EXPO
+// and the two DRIFT_ leans have C++ consumers (libttp-sim's steering curve and
+// slide — partytest/protocol_check.cc asserts the sim's values equal them,
+// which is what stops game.cc drifting from the phone), but all are mirrored because this header
 // mirrors protocol.js 1:1 and a TV shell will want the tilt numbers the moment
 // one exists.
 inline constexpr double STEER_EXPO = 1.25;
@@ -114,6 +114,10 @@ inline constexpr double STEER_GATE_THRESHOLD = 0.03;
 inline constexpr double STEER_STRONG_THRESHOLD = 0.15;
 inline constexpr double STEER_SEND_INTERVAL_MS = 100;
 inline constexpr double STEER_SEND_MIN_INTERVAL_MS = 40;
+// The slide's start and end lean (libttp-sim game.h DRIFT_START / DRIFT_END,
+// which protocol_check holds to these).
+inline constexpr double STEER_DRIFT_START = 0.5;
+inline constexpr double STEER_DRIFT_END = 0.2;
 
 inline const std::vector<std::string> CAR_COLORS = {
     "#e6492d", "#f2b134", "#2bb673", "#2d9cdb",

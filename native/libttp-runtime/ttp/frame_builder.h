@@ -70,6 +70,22 @@ constexpr float DRIFT_HOP_HEIGHT = 0.02f;
 constexpr float DRIFT_HOP_TIME = 0.18f;
 float driftHop(float t);
 
+// A drift's looks, a bit each (ttp_display_debug_drift_look), on a test build
+// so they can be judged in combination. The first three cross to the renderer
+// as TTP_FRAME_DRIFT_* flags; the camera's swing is the chase rig's
+// (DRIFT_CAM_SWING in camera.h).
+enum DriftLook : uint32_t {
+    DRIFT_LOOK_TYRES = 1u << 0,
+    DRIFT_LOOK_RUBBER = 1u << 1,
+    DRIFT_LOOK_SPARKS = 1u << 2,
+    DRIFT_LOOK_CAMERA = 1u << 3,
+};
+constexpr uint32_t DRIFT_LOOK_AUTHORED = 0xF;
+// The looks grow with what the slide is SAVING (Car::slideGain), so they
+// promise no more than the drift pays; every slide keeps this share of them,
+// so a drift that saves nothing still reads as one.
+constexpr float DRIFT_LOOK_FLOOR = 0.25f;
+
 // Everything the display owns that is not the renderer or the platform surface.
 struct DisplayState {
     // The surface, in its own physical pixels — the only unit this struct
@@ -99,6 +115,8 @@ struct DisplayState {
     float chaseHeight = CHASE_HEIGHT;   // ttp_display_debug_chase_pitch; authored otherwise
     // ttp_display_debug_monster_{pitch,back}; negative = authored
     float monsterPitch = -1, monsterBack = -1;
+    // ttp_display_debug_drift_look: a bit per DriftLook.
+    uint32_t driftLook = DRIFT_LOOK_AUTHORED;
     FollowCam follow;                   // CAM_FOLLOW's rig; reset with `chase`
     Coverage coverage;                  // CAM_COVERAGE's shot; reset with `chase`
     CoverChase coverChase;              // ...and its CHASE shot's rig

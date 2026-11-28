@@ -39,6 +39,10 @@ namespace rt {
 // read oil and boost paint, which a playtest at 10.5 struggled to see.
 constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.69f, CHASE_LOOK = 1.7f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
+// A drift swings the eye toward the INSIDE of the turn by this share of the
+// body's slip (Car::slip): the car is seen more side-on, so its angle reads,
+// and the rig looks further round the bend. The eye's own damping eases it.
+constexpr float DRIFT_CAM_SWING = 0.8f;
 // How much of a kicker hop the rig rides. All of it pins the car to one spot on
 // screen and the jump does not read; none of it lets a boosted hop climb out of
 // the top of the frame from this close.
@@ -118,9 +122,12 @@ struct ChaseCam {
     bool init = false;  // first update snaps, so it doesn't lag in from the origin
 
     // height / rise / back are the authored rig unless a debug slider moved them.
+    // `swing` turns the eye about the car, radians toward the side the drawn
+    // body's nose turns to (a drift's inside, DRIFT_CAM_SWING); 0 is the plain
+    // rig exactly.
     void update(const ttp::Pose& pose, float spd, float dt, bool monster = false,
                 float height = CHASE_HEIGHT, float rise = MONSTER_CAM_RISE,
-                float back = MONSTER_CAM_BACK, bool aim = false);
+                float back = MONSTER_CAM_BACK, bool aim = false, float swing = 0);
 };
 
 // DEBUG (the ttp_display_debug_*_pitch sliders): the chase pitch in degrees

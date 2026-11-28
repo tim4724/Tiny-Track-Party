@@ -736,8 +736,27 @@ void TtpRenderer::rebuildCarMerge() {
                 if (!e.isNull() && rcm.getInstance(e)) sources.push_back(e);
             }
             carNodes += (int) sources.size();
+            const size_t before = mMergedCars.size();
             buildMergedGroup(mMergedCars, sources, nodes[0]->prims,
                     /*dynamic=*/true, kFeatCars);
+            // A WHEEL group draws on copies of its materials, which the body
+            // shares on the asset, so a drift's glow lands on this car's wheels
+            // alone (renderDriftTyres). Same draws: only the instances differ.
+            bool wheels = true;
+            for (const auto* n : nodes) wheels = wheels && n->name.rfind("wheel", 0) == 0;
+            for (size_t k = before; wheels && k < mMergedCars.size(); k++) {
+                MergedGroup& g = mMergedCars[k];
+                const auto ri = rcm.getInstance(g.ent);
+                if (!ri) continue;
+                for (size_t p = 0; p < rcm.getPrimitiveCount(ri); p++) {
+                    MaterialInstance* src = rcm.getMaterialInstanceAt(ri, p);
+                    if (!src || !src->getMaterial()->hasParameter("glow")) continue;
+                    MaterialInstance* own = MaterialInstance::duplicate(src, "hot-tyre");
+                    rcm.setMaterialInstanceAt(ri, p, own);
+                    g.ownMis.push_back(own);
+                }
+                g.car = (int) c;
+            }
         }
     }
     int merged = 0;

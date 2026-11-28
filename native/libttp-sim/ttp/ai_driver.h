@@ -105,7 +105,7 @@ class AiController {
   double mistakeGap_ = -1;
   int mistakeT_ = 0;
   double mistakeSide_ = 1;
-  // The slide (see AI_SLIDE_OFF): this corner's roll, and whether the steer is
+  // The slide (see DRIFT_END's use in ai_driver.cc): this corner's roll, and whether the steer is
   // past the slide's threshold right now.
   Mulberry32 slideRng_;
   bool hardSteer_ = false, slideCorner_ = false;

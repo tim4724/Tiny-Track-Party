@@ -32,10 +32,11 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
 
 // The controller's two steering modules, loaded live rather than scraped: both
 // are browser ES modules written to import headlessly (see their headers).
-let tilt, gate;
+let tilt, gate, driftFeel;
 test.before(async () => {
   tilt = await import(pathToFileURL(path.join(ROOT, 'public/controller/TiltInput.js')).href);
   gate = await import(pathToFileURL(path.join(ROOT, 'public/controller/InputGate.js')).href);
+  driftFeel = await import(pathToFileURL(path.join(ROOT, 'public/controller/driftFeel.js')).href);
 });
 
 // The runtime C ABI, same cwrap conventions as tests/runtime-abi.test.js (ids
@@ -132,6 +133,14 @@ test('TiltInput spends the manifest steering numbers', () => {
   assert.equal(tilt.ROLL_LOCK, S.ROLL_LOCK_DEG, 'TiltInput ROLL_LOCK drifted from protocol.STEER.ROLL_LOCK_DEG');
   assert.equal(tilt.DEADZONE, S.DEADZONE, 'TiltInput DEADZONE drifted from protocol.STEER.DEADZONE');
   assert.equal(tilt.SMOOTH, S.SMOOTH, 'TiltInput SMOOTH drifted from protocol.STEER.SMOOTH');
+});
+
+// The phone's drift rumble runs the sim's slide rule (driftFeel.js); the sim's
+// own leans are held to the same manifest by partytest/protocol_check.
+test('driftFeel spends the manifest slide leans', () => {
+  const S = protocol.STEER;
+  assert.equal(driftFeel.DRIFT_START, S.DRIFT_START, 'driftFeel DRIFT_START drifted from protocol.STEER.DRIFT_START');
+  assert.equal(driftFeel.DRIFT_END, S.DRIFT_END, 'driftFeel DRIFT_END drifted from protocol.STEER.DRIFT_END');
 });
 
 test('InputGate spends the manifest steering numbers', () => {

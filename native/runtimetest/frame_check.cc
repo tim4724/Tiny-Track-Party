@@ -431,10 +431,11 @@ void testAtRest() {
   c.up = {0.0f, 1.0f, 0.0f};
   c.spd = 0.8f; c.steer = -0.4f; c.steerYaw = -0.3f; c.brake = 0.6f; c.boostMul = 1.9f;
   c.monster = 1.0f; c.spin = 2.5f; c.scrub = 1.0f;
-  c.hop = 0.1f;
+  c.hop = 0.1f; c.drift = 1.0f;
 
   rt::atRest(c);
   check(c.hop == 0, "atRest lands a hop");
+  check(c.drift == 0, "atRest ends a drift's tint");
 
   check(c.pos.x == 1.5f && c.pos.y == 2.25f && c.pos.z == -3.75f, "atRest keeps the position");
   check(c.forward.x == 0.5f && c.up.y == 1.0f, "atRest keeps the orientation");
@@ -446,6 +447,21 @@ void testAtRest() {
   checkF(c.scrub, 0.0f, "atRest zeroes scrub");
   checkF(c.boostMul, 1.0f, "atRest returns boostMul to 1, not 0");
   checkF(c.monster, 1.0f, "atRest keeps the monster transform (a shape, not a motion cue)");
+}
+
+// A drift's look (TtpCarInput::drift) is driftMix grown with what the slide
+// saves, on every car (the renderer keeps the rubber to a followed car).
+void testDriftTint(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+  for (auto& c : game.cars()) { c->drifting = true; c->driftMix = 0.5; c->slideGain = 0.6; }
+  DisplayState d = freshState();
+  d.roster = {P0, P2};
+  d.cells = {P0};
+  const TtpCarInput* cars = ttp_frame_cars(rt::buildFrame(d, &game, DT, caseAspect(d)));
+  const float want = 0.5f * (rt::DRIFT_LOOK_FLOOR + (1 - rt::DRIFT_LOOK_FLOOR) * 0.6f);
+  checkF(cars[0].drift, want, "a slide looks by driftMix, grown with what it saves");
+  checkF(cars[1].drift, want, "…a bot's as well as a player's");
 }
 
 // ---------------------------------------------------------------------------
@@ -2866,6 +2882,7 @@ int main() {
   testAtRest();
   testDriftHop();
   testCarsAndRoster(bt.game);
+  testDriftTint(bt.game);
   testHold(bt.game);
   testFilmsScenery(bt.game);
   testHeldChaseCam(bt.game);

@@ -2357,6 +2357,219 @@ void TtpRenderer::resetSandState() {
     mSandPrevSpd.clear();
 }
 
+// HOT TYRES (TTP_FRAME_DRIFT_TYRES): a drifting car's tyres glow where they meet
+// the road (vglb weights the glow by the surface facing down), added over their
+// lit albedo through the wheel groups' own instances (rebuildCarMerge).
+// The heat BUILDS over the drift, at the rate of its look (what the slide saves),
+// so a flick barely warms the tyres and a long clean slide makes them glow; it
+// cools once the slide is over. Written only when it moves a step: every setParameter
+// dirties that instance's UBO (the item boxes' throb has the same rule).
+void TtpRenderer::renderDriftTyres(const TtpFrameInput& input, const TtpCarInput* cars,
+        uint32_t nCars) {
+    constexpr float BUILD = 0.8f;   // heat a second at the full look: lit through in ~1.25 s
+    constexpr float COOL = 2.0f;    // 1/s, exponential
+    constexpr float STEPS = 32.0f;                      // glow written in 1/32 steps
+    // Warm orange, on the tyre's underside only (vglb): a red glow read as a
+    // warning light, and a faint one over the whole tyre as mud.
+    static const float3 GLOW = srgbUnit(0xff8a2a) * 0.75f;
+    const bool on = (input.flags & TTP_FRAME_DRIFT_TYRES) != 0;
+    mTyreHeat.resize(nCars, 0.0f);
+    for (uint32_t i = 0; i < nCars; i++) {
+        const float d = on ? std::min(1.0f, std::max(0.0f, cars[i].drift)) : 0.0f;
+        float& h = mTyreHeat[i];
+        if (d > 0.05f) h = std::min(1.0f, h + BUILD * d * input.dt);
+        else h *= std::exp(-COOL * input.dt);
+        if (d <= 0.05f && h < 0.5f / STEPS) h = 0;
+    }
+    for (MergedGroup& g : mMergedCars) {
+        if (g.car < 0 || g.ownMis.empty()) continue;
+        const float h = (uint32_t) g.car < nCars ? mTyreHeat[(size_t) g.car] : 0.0f;
+        const float q = std::round(h * STEPS) / STEPS;
+        if (q == g.glowSet) continue;
+        g.glowSet = q;
+        for (MaterialInstance* mi : g.ownMis) mi->setParameter("glow", GLOW * q);
+    }
+}
+
+// SPARKS (TTP_FRAME_DRIFT_SPARKS): a few short bright streaks off the side of
+// each of a drifting car's tyres that faces the turn's inside, falling as they
+// cool from white to gold. One blended draw of camera-facing quads, each
+// stretched along its own velocity.
+void TtpRenderer::buildSparkDraws() {
+    if (!mBlendMaterial || !mScene) return;
+    for (uint32_t k = 0; k < mCellRing; k++) {
+        mSparkVbRing.push_back(VertexBuffer::Builder()
+                .vertexCount(kSparks * 4)
+                .bufferCount(1)
+                .attribute(VertexAttribute::POSITION, 0,
+                        VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
+                .attribute(VertexAttribute::COLOR, 0,
+                        VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
+                .normalized(VertexAttribute::COLOR)
+                .build(*mEngine));
+    }
+    mSparkRingAt = 0;
+    mSparkIb = IndexBuffer::Builder()
+            .indexCount(kSparks * 6)
+            .bufferType(IndexBuffer::IndexType::USHORT)
+            .build(*mEngine);
+    const size_t ib = kSparks * 6 * sizeof(uint16_t);
+    uint16_t* idx = (uint16_t*) malloc(ib);
+    for (uint32_t s = 0; s < kSparks; s++) {
+        const uint16_t b = (uint16_t) (s * 4);
+        uint16_t* o = idx + s * 6;
+        o[0] = b; o[1] = (uint16_t) (b + 1); o[2] = (uint16_t) (b + 2);
+        o[3] = (uint16_t) (b + 2); o[4] = (uint16_t) (b + 1); o[5] = (uint16_t) (b + 3);
+    }
+    mSparkIb->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(idx, ib,
+            [](void* b, size_t, void*) { free(b); }));
+    mSparkEntity = utils::EntityManager::get().create();
+    RenderableManager::Builder(1)
+            .boundingBox({ float3{ 0.0f }, float3{ 1e4f } })
+            .culling(false)
+            .receiveShadows(false)
+            .castShadows(false)
+            .material(0, sceneInstance(mBlendMaterial))
+            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                    mSparkVbRing[0], mSparkIb, 0, 0)
+            .build(*mEngine, mSparkEntity);
+    mScene->addEntity(mSparkEntity);
+}
+
+void TtpRenderer::releaseSparkDraws() {
+    if (!mSparkEntity.isNull()) {
+        mScene->remove(mSparkEntity);
+        mEngine->getRenderableManager().destroy(mSparkEntity);
+        utils::EntityManager::get().destroy(mSparkEntity);
+        mSparkEntity = utils::Entity{};
+    }
+    for (VertexBuffer* vb : mSparkVbRing) mEngine->destroy(vb);
+    mSparkVbRing.clear();
+    if (mSparkIb) { mEngine->destroy(mSparkIb); mSparkIb = nullptr; }
+    mSparks.clear();
+    mSparkDue.clear();
+    mSparkDrawn = false;
+}
+
+void TtpRenderer::renderSparks(const TtpFrameInput& input, const TtpCarInput* cars,
+        uint32_t nCars) {
+    if (mSparkEntity.isNull()) return;
+    constexpr float RATE = 30.0f;          // sparks a second per tyre, full drift
+    constexpr float GRAVITY = 9.0f;        // world units / s^2
+    constexpr float NEAR = 25.0f;          // no camera this close: none thrown
+    constexpr float LEN_T = 0.025f;        // a streak is this many seconds of its travel
+    constexpr float LEN_MIN = 0.025f, LEN_MAX = 0.09f, WIDTH = 0.012f;
+    const float dt = input.dt;
+    const TtpViewInput* views = ttp_frame_views(&input);
+    const auto rnd = [&](float lo, float hi) {
+        mSparkSeed = mSparkSeed * 1664525u + 1013904223u;
+        return lo + (hi - lo) * (float) (mSparkSeed >> 16) / 65536.0f;
+    };
+    size_t live = 0;
+    for (Spark& s : mSparks) {
+        s.age += dt;
+        if (s.age >= s.life) continue;
+        s.vel.y -= GRAVITY * dt;
+        s.pos += s.vel * dt;
+        mSparks[live++] = s;
+    }
+    mSparks.resize(live);
+    mSparkDue.resize(nCars * 4, 0.0f);
+    const bool on = (input.flags & TTP_FRAME_DRIFT_SPARKS) != 0;
+    for (uint32_t i = 0; on && i < nCars; i++) {
+        const TtpCarInput& c = cars[i];
+        const float d = std::min(1.0f, std::max(0.0f, c.drift));
+        if (d < 0.2f || c.airborne > 0.5f || c.hop > 0 || c.spd < 0.3f) {
+            for (int w = 0; w < 4; w++) mSparkDue[i * 4 + w] = 0;
+            continue;
+        }
+        const float3 pos = { c.pos.x, c.pos.y, c.pos.z };
+        bool near = input.viewCount == 0;
+        for (uint32_t k = 0; k < input.viewCount && !near; k++) {
+            const float3 cam{ views[k].world[12], views[k].world[13], views[k].world[14] };
+            near = length(cam - pos) < NEAR;
+        }
+        if (!near) continue;
+        const float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
+        const float3 up = { c.up.x, c.up.y, c.up.z };
+        const float3 right = normalize(cross(up, fwd));
+        const CarWheels* cw = i < mCarWheels.size() && mCarWheels[i].hasWheelOff
+                ? &mCarWheels[i] : nullptr;
+        const float speed = i < mCarWheels.size() && dt > 0 ? mCarWheels[i].lastDs / dt : 0.0f;
+        // The nose turns to right*sin(spin) (the renderer's drawn yaw), into the
+        // turn: every tyre throws its sparks off its side toward the turn's
+        // inside (a left-hand drift sparks at each wheel's left).
+        const float inSide = std::sin(c.spin) > 0 ? 1.0f : -1.0f;
+        // The body's own right (its local +x under the drawn yaw).
+        const float3 bodyRight = right * std::cos(c.spin) - fwd * std::sin(c.spin);
+        const float halfTyre = cw ? cw->skidWidth * 0.5f : 0.06f;
+        for (int wheel = 0; wheel < 4; wheel++) {
+            float& due = mSparkDue[i * 4 + wheel];
+            due += RATE * d * dt;
+            const float3 off = cw ? cw->wheelOff[wheel] : float3{ 0.0f };
+            const float3 tyre = cw
+                    ? right * (off.x * std::cos(c.spin) + off.z * std::sin(c.spin))
+                            + fwd * (-off.x * std::sin(c.spin) + off.z * std::cos(c.spin))
+                    : right * ((wheel & 1 ? 1.0f : -1.0f) * c.halfWid * 0.85f)
+                            + fwd * ((wheel < 2 ? 1.0f : -1.0f) * c.halfLen * 0.7f);
+            while (due >= 1.0f && mSparks.size() < kSparks) {
+                due -= 1.0f;
+                Spark s;
+                s.pos = pos + tyre + bodyRight * (inSide * halfTyre) + up * 0.015f
+                        - fwd * (speed * dt * rnd(0, 1));
+                s.carVel = fwd * speed;
+                s.vel = fwd * (speed * rnd(0.55f, 0.8f))
+                        + bodyRight * (inSide * rnd(0.2f, 0.8f))
+                        + up * rnd(0.2f, 0.7f);
+                s.age = 0;
+                s.life = rnd(0.12f, 0.24f);
+                s.car = (int32_t) i;
+                mSparks.push_back(s);
+            }
+            due = std::min(due, 1.0f);
+        }
+    }
+    const bool any = !mSparks.empty() && input.viewCount > 0;
+    if (!any && !mSparkDrawn) return;
+    auto& rcm = mEngine->getRenderableManager();
+    if (any) {
+        static const float3 HOT = srgbUnit(0xffffff), COOL = srgbUnit(0xffb21e);
+        mSparkRingAt = (mSparkRingAt + 1) % (uint32_t) mSparkVbRing.size();
+        const size_t vb = mSparks.size() * 4 * sizeof(Vertex);
+        Vertex* v = (Vertex*) malloc(vb);
+        for (size_t k = 0; k < mSparks.size(); k++) {
+            const Spark& s = mSparks[k];
+            const TtpViewInput* view = &views[0];
+            for (uint32_t j = 0; j < input.viewCount; j++) if (views[j].car == s.car) view = &views[j];
+            const float3 cam{ view->world[12], view->world[13], view->world[14] };
+            const float t = s.age / s.life;
+            const float3 rel = s.vel - s.carVel;
+            const float sp = length(rel);
+            const float3 dir = sp > 1e-4f ? rel / sp : float3{ 0, 1, 0 };
+            const float len = std::min(LEN_MAX, std::max(LEN_MIN, sp * LEN_T));
+            const float3 head = s.pos, tail = s.pos - dir * len;
+            float3 side = cross(dir, cam - head);
+            side = dot(side, side) > 1e-10f ? normalize(side) * (WIDTH * 0.5f) : float3{ 0.0f };
+            // Full strength for most of its life, so a spark is a bright line
+            // and never a dull stick; its tail half as strong, so it streaks.
+            const float a = t < 0.6f ? 1.0f : (1.0f - t) / 0.4f;
+            const uint32_t hot = packAbgr(HOT + (COOL - HOT) * t, a);
+            const uint32_t cool = packAbgr(COOL, a * 0.7f);
+            Vertex* o = v + k * 4;
+            o[0] = { head.x - side.x, head.y - side.y, head.z - side.z, hot };
+            o[1] = { head.x + side.x, head.y + side.y, head.z + side.z, hot };
+            o[2] = { tail.x - side.x, tail.y - side.y, tail.z - side.z, cool };
+            o[3] = { tail.x + side.x, tail.y + side.y, tail.z + side.z, cool };
+        }
+        mSparkVbRing[mSparkRingAt]->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(v, vb,
+                [](void* b, size_t, void*) { free(b); }));
+    }
+    const size_t indices = any ? mSparks.size() * 6 : 0;
+    rcm.setGeometryAt(rcm.getInstance(mSparkEntity), 0, RenderableManager::PrimitiveType::TRIANGLES,
+            mSparkVbRing[mSparkRingAt], mSparkIb, 0, indices);
+    mSparkDrawn = any;
+}
+
 void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* cars,
         uint32_t nCars) {
 
@@ -2401,6 +2614,10 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             mSkidWipe = false;
         }
         constexpr float SKID_MAX_OPACITY = 0.28f, SKID_THRESH = 0.2f;
+        // A drift's rubber (TTP_FRAME_DRIFT_RUBBER), by TtpCarInput::drift:
+        // laid at the deck's cap on summed ink in one pass (vroad's skidColor
+        // .a), and wider than the tyre, so a slid line reads on fresh asphalt.
+        constexpr float SKID_DRIFT_OPACITY = 0.48f, SKID_DRIFT_WIDEN = 0.6f;
         constexpr float SKID_SEG_MIN = 0.06f, SKID_SEG_MAX = 1.5f;
         constexpr float SKID_EDGE_DOT = 0.3f, SKID_BRAKE_MIN = 0.6f;
         constexpr float SKID_LAUNCH_MIN = 0.5f;
@@ -2417,8 +2634,9 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         // s-values arrive RELATIVE to the segment's own centre so the lap
         // wrap is taken once, not per corner.
         const auto stamp = [&](float midS, const float2& rL, const float2& rR,
-                const float2& fL, const float2& fR, float strength) {
-            const float peak = SKID_MAX_OPACITY * std::min(1.0f, strength);
+                const float2& fL, const float2& fR, float strength, float drift) {
+            const float peak = (SKID_MAX_OPACITY + (SKID_DRIFT_OPACITY - SKID_MAX_OPACITY) * drift)
+                    * std::min(1.0f, strength);
             const float u0 = (L > 0) ? (midS - L * std::floor(midS / L)) / L : 0.0f;
             const float2 e[2][2] = { { rL, rR }, { fL, fR } };
             // The outer columns ARE the tyre's contact width and the ink
@@ -2577,8 +2795,16 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                     : std::max(0.0f, cw.skidAllHold - input.dt / SKID_RELEASE);
             const bool marksAll = cw.skidAllHold > 0.02f;
             if (!marksAll) { trails[0].seeded = false; trails[1].seeded = false; }
+            // A PLAYER's car only (one a view follows): the drift rubber stays
+            // on the road, and the bots slide nearly every corner.
+            bool followed = false;
+            for (uint32_t k = 0; k < input.viewCount; k++) {
+                followed = followed || ttp_frame_views(&input)[k].car == (int32_t) i;
+            }
+            const float drift = followed && (input.flags & TTP_FRAME_DRIFT_RUBBER)
+                    ? std::min(1.0f, std::max(0.0f, c.drift)) : 0.0f;
             const float halfW = (mwp && mMonsterSkidWidth > 0
-                    ? mMonsterSkidWidth * rs : cw.skidWidth) / 2;
+                    ? mMonsterSkidWidth * rs : cw.skidWidth) / 2 * (1.0f + SKID_DRIFT_WIDEN * drift);
             // Anchored at the wheel node's ground point (the contact patch
             // centre), with NO lead along the body axis: a body yawed off its
             // travel (drift slip, spin-out) would put any such shift ACROSS
@@ -2643,7 +2869,7 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 const auto rel = [&](const float2& p) {
                     return float2{ wrapS(p.x - cur.x), p.y };
                 };
-                stamp(cur.x, rel(rL), rel(rR), rel(fL), rel(fR), strengthHere);
+                stamp(cur.x, rel(rL), rel(rR), rel(fL), rel(fR), strengthHere, drift);
                 st.edgeL = fL;
                 st.edgeR = fR;
                 st.hasEdge = true;
@@ -3693,6 +3919,8 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     mProfile[kProfWorld] = ttpNowMs() - tMark; tMark += mProfile[kProfWorld];
     renderSkids(input, cars, nCars);
     renderSandSpray(input, cars, nCars);
+    renderDriftTyres(input, cars, nCars);
+    renderSparks(input, cars, nCars);
     mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
     renderAmbient(input);
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];

@@ -8,6 +8,9 @@
 // The item's IDENTITY is shown on the main display (flashy roulette there); the
 // phone stays a clean driving surface. The only controller-side cue is the USE
 // button lighting up when you're holding something, plus a light buzz on pickup.
+import { BRAKE_PATTERN, DRIFT_PATTERN } from './Haptics.js';
+import { DriftFeel } from './driftFeel.js';
+
 const el = (id) => document.getElementById(id);
 
 let _tilt = null;
@@ -55,6 +58,7 @@ export function startDriving(playerName, paused = false) {
   steerRaf = requestAnimationFrame(function loop() {
     fill.style.transform = `translateX(${_tilt.state.steer * 50}%)`;
     refreshMotionTip();
+    rumble();   // a lean can start or end a drift under a held button
     steerRaf = requestAnimationFrame(loop);
   });
 }
@@ -63,7 +67,8 @@ export const isDriving = () => !!steerRaf;
 
 export function stopDriving() {
   _tilt.stop();
-  _haptics.stopLoop(); // never leave the motor humming if BRAKE was held at race end
+  _brakeHeld = false;
+  rumble();            // never leave the motor humming if BRAKE was held at race end
   if (steerRaf) cancelAnimationFrame(steerRaf);
   steerRaf = null;
   releaseSteerButtons();
@@ -108,6 +113,21 @@ export function resetHeldItem() {
   setHeldItem(null);
 }
 
+// --- the held button's rumble ---
+// BRAKE held (or the ‹ › chord) rumbles: the brake's light ABS ticking, or the
+// drift's slower, heavier pulse while the held button is sliding the car
+// (driftFeel.js runs the sim's slide rule on this phone's own steer).
+let _brakeHeld = false;
+const _feel = new DriftFeel();
+
+function rumble() {
+  const held = _mode === 'buttons' ? _steerHeld.left && _steerHeld.right : _brakeHeld;
+  const kind = _feel.step(held, _tilt.state.steer);
+  if (kind === 'drift') _haptics.startLoop(DRIFT_PATTERN);
+  else if (kind === 'brake') _haptics.startLoop(BRAKE_PATTERN);
+  else _haptics.stopLoop();
+}
+
 // --- the ‹ › steer buttons (buttons mode) ---
 // Held → full lock that side; BOTH held is the brake chord, confirmed by the
 // same continuous rumble the tilt-mode BRAKE runs (one motor, one meaning).
@@ -119,7 +139,7 @@ function pressSteer(side, on) {
   el(side === 'left' ? 'steer-left' : 'steer-right').classList.toggle('held', on);
   _tilt.pressSteer(side, on);
   const braking = _steerHeld.left && _steerHeld.right;
-  if (braking) _haptics.startLoop(); else _haptics.stopLoop();
+  rumble();
   if (on && !braking) _buzz('steer');        // light tick on a steer press; the chord gets the rumble
 }
 
@@ -147,11 +167,13 @@ export function initDriveSurface({ tilt, buzz, haptics }) {
 
   // BRAKE — held = brake at the fixed rate, released = release. A continuous
   // rumble runs while it's held: the player's eyes-free confirmation they're
-  // braking (they're watching the car on the main display, not the phone).
+  // braking, or drifting (they're watching the car on the main display, not
+  // the phone).
   const brakeBtn = el('brake-btn');
   const pressBrake = (on) => {
-    on ? _haptics.startLoop() : _haptics.stopLoop();
+    _brakeHeld = on;
     _tilt.pressBrake(on);
+    rumble();
     brakeBtn.classList.toggle('held', on);
   };
   brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressBrake(true); });

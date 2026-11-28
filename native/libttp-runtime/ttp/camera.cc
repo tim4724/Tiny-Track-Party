@@ -12,8 +12,16 @@ namespace ttp {
 namespace rt {
 
 void ChaseCam::update(const ttp::Pose& pose, float spd, float dt, bool monster, float height,
-                      float rise, float back, bool aim) {
+                      float rise, float back, bool aim, float swing) {
     const V3 p = v3(pose.pos), fwd = v3(pose.forward), up = v3(pose.up);
+    // The eye's way back from the car: the travel, turned by the swing so the
+    // eye moves to the side the drawn body's nose turns to (the renderer draws a
+    // yaw `a` as a local +z going to right*sin(a)), i.e. the drift's inside.
+    V3 rear = fwd;
+    if (swing != 0) {
+        const V3 right = norm(cross(up, fwd));
+        rear = fwd * std::cos(swing) - right * std::sin(swing);
+    }
     const float blendRate = monster ? MONSTER_CAM_UP : MONSTER_CAM_DOWN;
     monsterBlend += ((monster ? 1.0f : 0.0f) - monsterBlend) * (1 - std::exp(-blendRate * dt));
     aimHeldT = aim ? aimHeldT + dt : 0;
@@ -21,7 +29,7 @@ void ChaseCam::update(const ttp::Pose& pose, float spd, float dt, bool monster, 
     aimT += aiming ? dt / AIM_CAM_IN_S : -dt / AIM_CAM_OUT_S;
     aimT = aimT < 0 ? 0 : aimT > 1 ? 1 : aimT;
     const float aimBlend = aimT * aimT * (3 - 2 * aimT);
-    const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back
+    const V3 want = p + rear * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back
                                 + aimBlend * AIM_CAM_BACK)
                   + up * (height + monsterBlend * rise + aimBlend * AIM_CAM_RISE);
     const V3 wantTgt = p + fwd * (CHASE_LOOK * (1 - aimBlend)) + up * CHASE_TGT_UP;

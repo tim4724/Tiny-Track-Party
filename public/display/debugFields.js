@@ -91,6 +91,17 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
     { key: 'driftrelease', label: 'Drift release', hint: 'blend back to steering after the brake · live',
       ...knob((n) => sim.debugDriftRelease(n), 0.05,
         { min: 0, max: 1.5, format: (n) => n.toFixed(2) + ' s' + (n === 0 ? ' · instant' : '') }) },
+    // Live: a drift's looks, each on or off, in the order of
+    // ttp_display_debug_drift_look — so they can be judged in combination.
+    { section: 'Drift look' },
+    ...[
+      ['drifttyres', 'Hot tyres', 'the tyres glow while drifting'],
+      ['driftrubber', 'Drift rubber', 'darker, wider marks while drifting'],
+      ['driftsparks', 'Sparks', 'off each tyre, on the turn side'],
+      ['driftcam', 'Camera swing', 'the chase cam leans to the inside'],
+    ].map(([key, label, hint], i) => ({ key, label, hint: hint + ' · live',
+      ...knob((n) => scene.display.debugDriftLook(i, n), 1,
+        { min: 0, max: 1, format: (n) => (n ? 'on' : 'off') }) })),
     // Live: the sand dust's look (the Beach Cup's sand strip), in the order of
     // ttp_display_debug_sand_dust. Each puff varies around these.
     { section: 'Sand dust' },

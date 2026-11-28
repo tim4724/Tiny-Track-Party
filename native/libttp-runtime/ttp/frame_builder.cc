@@ -30,7 +30,7 @@ void newField(DisplayState& d) {
 // Drop every motion cue but keep the pose — what "held" means (ttp_display_hold).
 void atRest(TtpCarInput& c) {
     c.spd = c.steer = c.steerYaw = c.brake = c.spin = c.scrub = 0;
-    c.hop = 0;
+    c.hop = c.drift = 0;
     c.boostMul = 1;
 }
 
@@ -219,6 +219,9 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     // both viewCount 1 — and reading it off hudCount would make a HUD count
     // decide a camera's framing.
     if (!raceCams) head->flags |= TTP_FRAME_OVERVIEW;
+    if (d.driftLook & DRIFT_LOOK_TYRES) head->flags |= TTP_FRAME_DRIFT_TYRES;
+    if (d.driftLook & DRIFT_LOOK_RUBBER) head->flags |= TTP_FRAME_DRIFT_RUBBER;
+    if (d.driftLook & DRIFT_LOOK_SPARKS) head->flags |= TTP_FRAME_DRIFT_SPARKS;
 
     auto* outCars = const_cast<TtpCarInput*>(ttp_frame_cars(head));
     const bool fromHeld = d.hold && d.held.size() == cars.size();
@@ -254,6 +257,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // car travels along its heading, the body is drawn turned in.
             o.spin = (float) (c->spin + c->slip);
             if (c->drifting) o.hop = driftHop((float) c->driftT);
+            o.drift = (float) c->driftMix
+                    * (DRIFT_LOOK_FLOOR + (1 - DRIFT_LOOK_FLOOR) * (float) c->slideGain);
             o.scrub = c->onWall ? 1.0f : 0.0f;
             o.sand = c->onSand ? 1.0f : 0.0f;
             // The sim's own body, so the kick rectangle grows with the monster
@@ -424,10 +429,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                 // car by well under this, so no driven frame ever trips it.
                 const V3 gap = cam.pos - v3(rig.pos);
                 if (cam.init && dot(gap, gap) > CHASE_CUT_DIST * CHASE_CUT_DIST) cam.init = false;
+                const float swing = !still && (d.driftLook & DRIFT_LOOK_CAMERA)
+                        ? DRIFT_CAM_SWING * (float) c->slip : 0.0f;
                 cam.update(rig,
                            still ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
                            outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack,
-                           !still && c->trailing);
+                           !still && c->trailing, swing);
             }
             TtpViewInput& v = outViews[i];
             v.car = subject;

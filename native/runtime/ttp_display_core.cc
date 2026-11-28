@@ -956,6 +956,16 @@ double ttp_display_debug_sand_dust(int knob, double value) {
     return TtpRenderer::sandDustAuthored(knob);
 }
 
+double ttp_display_debug_drift_look(int look, double on) {
+    if (look < 0 || look > 3) return 0;
+    const uint32_t bit = 1u << look;
+    if (g_disp) {
+        const bool want = on < 0 ? (ttp::rt::DRIFT_LOOK_AUTHORED & bit) != 0 : on > 0;
+        g_disp->driftLook = want ? (g_disp->driftLook | bit) : (g_disp->driftLook & ~bit);
+    }
+    return (ttp::rt::DRIFT_LOOK_AUTHORED & bit) ? 1 : 0;
+}
+
 const char* ttp_display_debug_live_dressing(void) {
     static std::string buf;
     ttp::Value o = ttp::Value::Obj();

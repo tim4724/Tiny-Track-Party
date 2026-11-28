@@ -18,6 +18,7 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <tuple>
 
 #include "corpus_diff.h"
 #include "ttp/game.h"
@@ -93,6 +94,21 @@ int main(int argc, char** argv) {
                  protocol::STEER_EXPO, simExpo);
   } else {
     passed++;
+  }
+
+  // ---- the sim's slide leans ARE the manifest's -----------------------------
+  // The phone runs the slide's rule for its rumble (controller/driftFeel.js).
+  for (const auto& [name, sim, manifest] :
+       {std::tuple<const char*, double, double>{"DRIFT_START", DRIFT_START, protocol::STEER_DRIFT_START},
+        std::tuple<const char*, double, double>{"DRIFT_END", DRIFT_END, protocol::STEER_DRIFT_END}}) {
+    cases++;
+    if (sim != manifest) {
+      std::fprintf(stderr,
+                   "FAIL %s  libttp-sim game.h has drifted from the protocol manifest\n"
+                   "  expected %.17g\n  actual   %.17g\n", name, manifest, sim);
+    } else {
+      passed++;
+    }
   }
 
   std::printf("protocol corpus: %d/%d cases passed\n", passed, cases);

@@ -106,6 +106,12 @@ typedef struct TtpCarInput {
     float trackS, trackLat;
     /* The drift's hop (frame_builder's driftHop), in world units off the seat. */
     float hop;
+    /* How much of a drift's look is in force, 0..1: the sim's Car::driftMix
+     * times what the slide saves (Car::slideGain, over frame_builder's
+     * DRIFT_LOOK_FLOOR). What the TTP_FRAME_DRIFT_* looks scale by, on every
+     * car but the rubber's, which is laid by a car a view follows alone
+     * (renderSkids). */
+    float drift;
     /* OFF THE DECK: the sim's height above it along its up (world units, on a
      * kicker ramp or in a flight) and the body's pitch against the deck (rad,
      * + = nose up). Applied on top of the deck seat, so the seat fit, the
@@ -221,6 +227,13 @@ typedef struct TtpCellHudInput {
  * No version bump: the bit is additive and the layout is unchanged, so a renderer
  * built without it letterboxes as before rather than rejecting the frame. */
 #define TTP_FRAME_OVERVIEW 2u
+/* Which of a drift's looks are on (ttp_display_debug_drift_look), each scaled
+ * by TtpCarInput::drift: the tyres glow hot, the rubber lays darker and wider
+ * (a player's car only), sparks fly off each tyre's turn side. The fourth look, the chase camera's swing to
+ * the inside, is the frame builder's own and never crosses. */
+#define TTP_FRAME_DRIFT_TYRES 4u
+#define TTP_FRAME_DRIFT_RUBBER 8u
+#define TTP_FRAME_DRIFT_SPARKS 16u
 
 /* Chrome colours for the overlay, as 0xRRGGBB. These are `--ink` and
  * `--surface` from public/shared/theme.css, which is the authored source for
@@ -261,7 +274,7 @@ typedef struct TtpFrameInput {
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 14u
+#define TTP_FRAME_INPUT_VERSION 15u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);

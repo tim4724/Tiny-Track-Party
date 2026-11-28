@@ -1022,6 +1022,12 @@ TTP_ABI double ttp_display_debug_monster_back(double units);
  * the two spring knobs, the live value), or 0 with no display. */
 TTP_ABI double ttp_display_debug_sand_dust(int knob, double value);
 
+/* DEBUG: one of a drift's looks on (1) or off (0), by its bit in ttp::rt::DriftLook
+ * (0 hot tyres, 1 darker rubber, 2 sparks, 3 the camera's swing). A negative
+ * value restores the authored state. Answers the AUTHORED state, with or without
+ * a display, so a toggle reads its default by resetting. */
+TTP_ABI double ttp_display_debug_drift_look(int look, double on);
+
 #ifdef __cplusplus
 }
 #endif

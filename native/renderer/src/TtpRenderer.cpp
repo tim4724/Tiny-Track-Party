@@ -2201,8 +2201,10 @@ void TtpRenderer::destroyMergedGroups(std::vector<MergedGroup>& groups) {
             if (p.vb) mEngine->destroy(p.vb);
             if (p.ib) mEngine->destroy(p.ib);
         }
-        // After the renderable — the buffer must outlive it.
+        // After the renderable — the buffer must outlive it, and so must the
+        // instances a wheel group owns.
         if (g.ibuf) mEngine->destroy(g.ibuf);
+        for (MaterialInstance* mi : g.ownMis) mEngine->destroy(mi);
         // The originals come back: a REBUILD decides afresh what to merge, and
         // whatever it leaves unmerged has to draw again.
         for (utils::Entity e : g.sources) {
@@ -2387,6 +2389,7 @@ void TtpRenderer::tagFeatures() {
     // The sand a car kicks up: left untagged it drew through every ablation,
     // and its puffs are dealt afresh on every draw.
     tagEntities(&mSandEntity, 1, kFeatEffects);
+    tagEntities(&mSparkEntity, 1, kFeatEffects);
 }
 
 // The road shader's channels, switched by the uniforms that already gate them.
@@ -2639,6 +2642,9 @@ void TtpRenderer::resetRace() {
     mBoxPrevAvail.clear();
     for (Burst& b : mBursts) b = {};
     resetSandState();
+    mSparks.clear();
+    mSparkDue.clear();
+    mTyreHeat.clear();
     mDeckDecals.clear();
     mDeckDecalsLast.clear();
 }
@@ -2704,6 +2710,7 @@ void TtpRenderer::releaseStatic() {
     if (mSandIb) { mEngine->destroy(mSandIb); mSandIb = nullptr; }
     resetSandState();
     mSandDrawn = false;
+    releaseSparkDraws();
     destroyMesh(mRoad);
     if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
     {

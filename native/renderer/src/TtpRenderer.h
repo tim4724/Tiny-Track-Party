@@ -1971,6 +1971,33 @@ private:
     void buildSandDraws(const TrackBin& tb);
     void renderSandSpray(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
     void resetSandState();             // what a race left in the air: puffs and per-tyre memory
+
+    // A drift's looks (TTP_FRAME_DRIFT_*). HOT TYRES: each car's wheel groups
+    // glow by its heat, which builds over a drift at TtpCarInput::drift's rate
+    // and cools after it. SPARKS: short streaks off each tyre's turn-side face, in fixed
+    // slots of one blended draw rewritten once a frame through a ring of vertex
+    // buffers (the sand's rule); a scene with no drift draws none of them.
+    std::vector<float> mTyreHeat;      // per slot, 0..1
+    void renderDriftTyres(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
+    struct Spark {
+        // `carVel` is its car's at the throw: the streak is drawn along the
+        // spark's motion AWAY from the car, which is what the chase eye sees.
+        filament::math::float3 pos, vel, carVel;
+        float age, life;
+        int32_t car;                   // faces the camera that follows it
+    };
+    static constexpr uint32_t kSparks = 256;
+    utils::Entity mSparkEntity;
+    filament::IndexBuffer* mSparkIb = nullptr;
+    std::vector<filament::VertexBuffer*> mSparkVbRing;
+    uint32_t mSparkRingAt = 0;
+    bool mSparkDrawn = false;
+    std::vector<Spark> mSparks;
+    std::vector<float> mSparkDue;      // per tyre: sparks owed
+    uint32_t mSparkSeed = 7;
+    void buildSparkDraws();
+    void renderSparks(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
+    void releaseSparkDraws();
     std::vector<filament::math::float3> mCarShadowPos;     // this frame's rows
     std::vector<filament::math::half4> mCarShadowC0;        // ...and their baked light
     std::vector<filament::math::float4> mCarShadowUv;       // ...atlas (u, v), peak alpha
@@ -2674,6 +2701,12 @@ private:
         bool dynamic = false;                    // mirror world transforms per frame
         uint8_t feat = 0;                        // kFeat* bit for tagFeatures
         int setRow = -1;                         // a set piece's layout row (TTP_DEBUG_SET_ID)
+        // A car's WHEEL group owns its material instances (copies of the
+        // asset's, which the body shares), so its drift glow is its own
+        // (renderDriftTyres). `car` is its slot; `glowSet` the glow last written.
+        int car = -1;
+        std::vector<filament::MaterialInstance*> ownMis;
+        float glowSet = 0;
         std::vector<uint32_t> idSaved;           // its shipped colours while painted
     };
     std::vector<MergedGroup> mMergedCars;   // rebuilt whenever the roster moves

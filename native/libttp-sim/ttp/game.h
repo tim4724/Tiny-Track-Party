@@ -102,12 +102,18 @@ struct Car {
   bool onSand = false;
   // The slide (Game::update): the brake with a steer at speed.
   //   drifting    — sliding now (the brake is held)
+  //   driftSpent  — this press's slide ended on a straightened steer: the
+  //                 brake brakes until it comes up
   //   driftMix    — how much of the look is in force: rises in, fades out
   //   slip        — the body's angle off its travel, in heading space: drawn
   //                 and collided at (bodyYaw), never driven
   //   driftT      — seconds since this slide started (cosmetic: the drawn hop)
-  bool drifting = false;
-  double driftMix = 0, slip = 0;
+  //   slideGain   — the speed this slide saves over plain steering at its lean,
+  //                 as a share of full lock's scrub: 1 is the best handler at
+  //                 lock, a light lean or a poor handler near 0. Cosmetic (the
+  //                 drift's look scales by it), held through the release fade
+  bool drifting = false, driftSpent = false;
+  double driftMix = 0, slip = 0, slideGain = 0;
   double driftT = 0;
   // Height above the deck, along its up, and its rate. Non-zero only on a
   // kicker ramp and in the flight off its lip; the pose carries it.
@@ -162,8 +168,7 @@ struct GameTrack {
   std::vector<double> kickers;    // each ramp's FOOT arclength (ttp::Kicker)
 };
 
-// bot: an AiController drives this car. A bot drifts only when its controller
-// allows it (Input::d), so a bot fed recorded inputs replays exactly.
+// bot: an AiController drives this car.
 struct PlayerDesc { Id id; bool hasStats = false; Stats stats; bool bot = false; };
 
 class AiController;  // ai_driver.h
@@ -197,9 +202,12 @@ inline constexpr double AIR_MIN = 0.02;
 // tyre's, and the tyres are off the road (game.cc).
 inline constexpr double AIR_STEER = 0.7;
 // The steer and the fraction of vmax past which the brake slides a grounded
-// car (game.cc). In the header because a bot brakes at them to slide a corner,
-// and only into a slide it can start: below them its brake is a plain one.
+// car, and the steer under which a slide ends (game.cc). In the header because
+// a bot brakes at them to slide a corner, and only into a slide it can start:
+// below them its brake is a plain one. The two leans are protocol.js STEER's
+// (the phone's rumble runs the same rule); partytest/protocol_check pins them.
 inline constexpr double DRIFT_START = 0.5;
+inline constexpr double DRIFT_END = 0.2;
 inline constexpr double DRIFT_SPEED = 0.6;
 inline bool canStartSlide(const Car& c) { return c.v >= DRIFT_SPEED * c.vmax && c.h < AIR_MIN; }
 

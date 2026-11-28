@@ -2180,6 +2180,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     }
     buildCarShadowDraws();
     buildSandDraws(tb);
+    buildSparkDraws();
     // The ring's mean baked light at full visibility, display-encoded, for
     // the car-shadow rows (TtpRenderer.h, mRingLight): the deck-level points
     // of the cross-section.

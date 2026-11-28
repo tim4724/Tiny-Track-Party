@@ -357,6 +357,11 @@ jbyteArray n_ttp_display_debug_decals(JNIEnv* env, jclass) {
     return toBytes(env, ttp_display_debug_decals());
 }
 
+jdouble n_ttp_display_debug_drift_look(JNIEnv* env, jclass, jint a0, jdouble a1) {
+    (void) env;
+    return (jdouble) ttp_display_debug_drift_look((int) a0, (double) a1);
+}
+
 void n_ttp_display_debug_features(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_debug_features((unsigned int) a0);
@@ -1538,6 +1543,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_chase_rig_json", "(DDDDDD)[B", (void*) n_ttp_display_chase_rig_json },
     { "ttp_display_debug_chase_pitch", "(D)D", (void*) n_ttp_display_debug_chase_pitch },
     { "ttp_display_debug_decals", "()[B", (void*) n_ttp_display_debug_decals },
+    { "ttp_display_debug_drift_look", "(ID)D", (void*) n_ttp_display_debug_drift_look },
     { "ttp_display_debug_features", "(I)V", (void*) n_ttp_display_debug_features },
     { "ttp_display_debug_hide_cars", "(I)V", (void*) n_ttp_display_debug_hide_cars },
     { "ttp_display_debug_live_dressing", "()[B", (void*) n_ttp_display_debug_live_dressing },
