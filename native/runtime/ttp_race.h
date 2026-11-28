@@ -152,17 +152,24 @@ TTP_ABI const char* ttp_race_effect_ops_json(void);
 TTP_ABI const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
                                             const char* botCapJson);
 
-/* Where the empty lobby's preview goes next. `shownMs` is how long the lobby
- * has had `trackId` on screen; the interval and the empty-lobby rule are
- * race_flow.h's demoRotates. When it rotates, the next circuit is a draw from
- * the room's shuffle bag — the unlocked catalogue, no repeats until every
- * track has shown — never the one already showing. The shell performs it as a
- * preview swap (no pick is stored, nothing is remembered) and restarts its
- * count on the new track. Any polling cadence gives the same answer; the
- * shells ask once a second to keep a JSON crossing off the frame path.
- *   -> {"trackId": "<id>" | null (stay)} */
+/* Where the lobby preview goes next.
+ *   shownMs       how long the lobby has had `trackId` on screen. The empty
+ *                 lobby's interval and seated/pick hold are race_flow.h's
+ *                 demoRotates; a due empty lobby draws from the room bag.
+ *   leaderLap     the attract race's leader display lap (0 when the demo is
+ *                 down). A PICKED card of two or more circuits advances when
+ *                 this is >= 2, and that advance does not draw.
+ *   previewIndex  which card entry is on screen. Needed when the card names
+ *                 one circuit twice (an endless refill); the shell stores the
+ *                 index this call returns and hands it back.
+ * The shell performs a non-null trackId as a preview swap. It does not change
+ * the room pick, so Start still launches race 1. A stay is idempotent for the
+ * same arguments; an advance is too, until the shell restarts the attract
+ * race and the lap falls back under 2. The shells ask once a second.
+ *   -> {"index": n, "trackId": "<id>" | null (stay)} */
 TTP_ABI const char* ttp_race_demo_next_json(int roomHandle, const char* trackId,
-                                            double shownMs);
+                                            double shownMs, double leaderLap,
+                                            int previewIndex);
 
 /* ---- start / launch ------------------------------------------------------ */
 

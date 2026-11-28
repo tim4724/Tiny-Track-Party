@@ -96,7 +96,14 @@ final class GameCoordinator: ObservableObject {
     /// rather than read back from the display, because the pick exists before a
     /// scene does (the lobby names a track, then stages it).
     var trackId: String = ""
-    /// How long the lobby has shown `trackId` (`rotatePreview`).
+    /// The circuit the LOBBY PICTURE is showing. The race still launches
+    /// `trackId` — race 1 of the pick. Empty falls back to `trackId`, which
+    /// is how a harness that assigns `trackId` directly keeps its scene.
+    var previewTrackId: String = ""
+    /// Which entry of the preview card is on screen. Handed back to the
+    /// advance so a card that names one circuit twice stays in order.
+    var previewIndex: Int = 0
+    /// How long the lobby has shown the preview circuit (`rotatePreview`).
     var previewShownMs: Double = 0
     /// Laps per race — the manifest's `TOTAL_LAPS`, assigned at boot. The `3`
     /// is only the value before `boot()` runs, never what a race launches with.

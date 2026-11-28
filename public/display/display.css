@@ -116,7 +116,6 @@ html {
      is the column widths above, not this padding. */
   padding: var(--safe-y) var(--safe-x) var(--safe-y-b);
 }
-
 /* Left rail — the join ticket with the scan hint hanging under it. The rail
    spans the band and CENTRES the pair rather than stretching the ticket: the
    QR is what sets the card's height, and a card grown past its content is just
@@ -246,11 +245,11 @@ html {
   padding: 0.35em 0.85em 0.4em;
 }
 /* the picked circuits as mini schematics — a 2×2 grid for a cup's four races
-   (numbered), one full-width map for an exact pick. The random family spoils
-   nothing: a counted card is raceCount grey "?" boxes, endless a single grey
-   ∞ box, and the World Tour one cup-tinted "?" per cup on a 3-wide grid (the
-   ladder itself). The --five/--many variants are BOX-COUNT layouts, not mode
-   hooks — a bigger cup roster degrades to the denser grid by itself. */
+   (numbered), one full-width map for an exact pick. Random and the World Tour
+   stay undrawn ("?" / ∞, and one cup-tinted chip per tour rung; random is the
+   neutral grey). The --five/--many variants are BOX-COUNT
+   layouts, not mode hooks — a bigger cup roster degrades to the denser grid
+   by itself. */
 .cup-maps { width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
 .cup-maps--one { grid-template-columns: 1fr; }
 .cup-maps--one .track-map { max-width: 72%; margin: 0 auto; }

@@ -105,6 +105,9 @@ final class PartyNet {
     /// The `track-change` effect: the stored pick resolved a (possibly new)
     /// preview circuit. The coordinator stages it and refreshes the race card.
     var onTrackChange: ((String) -> Void)?
+    /// The last controller left the lobby: redraw the race card, now empty.
+    /// The pick itself was dropped by `clear-pick`.
+    var onRenderLobbyPick: (() -> Void)?
 
     // MARK: - What the coordinator answers
 
@@ -679,6 +682,12 @@ final class PartyNet {
         case "track-change":
             if let id = e["trackId"] as? String { onTrackChange?(id) }
 
+        case "clear-pick":
+            ttp_net_clear_pick(roomHandle)
+
+        case "render-lobby-pick":
+            onRenderLobbyPick?()
+
         // NO clear-standings arm. The board is room-retained, so the statechange
         // walk drops it with a store inside the wasm and its own `publish`
         // carries the change — there is no mirror here to null out.
@@ -709,8 +718,8 @@ final class PartyNet {
         "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
         "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
         "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-        "game-message", "race-abandoned", "track-change", "set-link",
-        "detach-socket", "shutdown",
+        "game-message", "race-abandoned", "track-change", "clear-pick",
+        "render-lobby-pick", "set-link", "detach-socket", "shutdown",
     ]
 
     private func announceRoomReady() {

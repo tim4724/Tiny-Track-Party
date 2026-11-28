@@ -1,9 +1,10 @@
 // ttp_live.h — INTERNAL gathers shared by the runtime shims, not an ABI.
 // Sibling of ttp_room.h / ttp_session.h: the shell names handles, C++ reads
-// what is behind them. These three exist because the same gather feeds more
-// than one shim file (ttp_ui.cc and ttp_race.cc), and a second spelling of a
+// what is behind them. These exist because the same gather feeds more than
+// one shim file (ttp_ui.cc and ttp_race.cc), and a second spelling of a
 // gather is exactly the drift the seams exist to stop. Implemented in
-// ttp_ui.cc, which already owns every reader they compose.
+// ttp_ui.cc, which already owns every reader they compose, except the bag
+// (ttp_net.cc) and the lobby preview order (ttp_race.cc).
 #ifndef TTP_LIVE_H
 #define TTP_LIVE_H
 
@@ -54,5 +55,27 @@ std::string ttp_live_bag_draw(int roomHandle);
 // The same bag rng RESTRICTED to one cup's tracks (the World Tour's draws) —
 // advances the seed, leaves the global deck alone. Same "" refusals.
 std::string ttp_live_bag_draw_cup(int roomHandle, const std::string& cupId);
+
+// The next `n` global draws, computed on a copy of the bag. The room's bag
+// is unchanged — a preview that consumed draws would race Start for them.
+// Stops early on the same "" refusal bagDraw returns.
+std::vector<std::string> ttp_live_peek_draws(int roomHandle, int n);
+
+// One cup-restricted draw per cup id, in the order given, on a copy. Stops
+// on the first "" (an unknown cup, an unseeded bag). The room's bag is
+// unchanged.
+std::vector<std::string> ttp_live_peek_cups(int roomHandle,
+                                            const std::vector<std::string>& cups);
+
+// The no-repeat walk still in this shuffle: the deck from the cursor on, or,
+// when the deck is spent, the whole deck one refill would deal. Never a
+// second refill, and never stored. A fresh {seed} bag is the spent case.
+std::vector<std::string> ttp_live_peek_walk(int roomHandle);
+
+// The circuits the lobby preview tours, in the order Start will race them.
+// Empty when the pick names no track. A cup is its authored list; a fixed
+// random or a tour is race 1 plus the peeks Start would draw (capped the
+// same way); endless is race 1 plus one peek_walk. Does not draw.
+std::vector<std::string> ttp_live_preview_order(int roomHandle);
 
 #endif  // TTP_LIVE_H

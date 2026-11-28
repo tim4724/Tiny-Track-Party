@@ -52,6 +52,7 @@ export async function init() {
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
+    cupSlotRoom: c('ttp_ui_cup_slot_room_json', 'string', ['number']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
     itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number']),
     welcomeItem: c('ttp_ui_welcome_item_live_json', 'string', ['number', 'string']),
@@ -166,12 +167,19 @@ export function seatGrid(seats) { return JSON.parse(fn.seatGrid(J(seats))); }
 // RANDOM mode's run length (0 = endless); absent reads as endless, so a shell
 // that never sets it gets what `random` meant before run lengths existed.
 export function cupSlot({ mode, cupId, trackId, randomRaces }) {
-  return JSON.parse(fn.cupSlot(J({
+  const body = {
     mode: mode == null ? null : mode,
     cupId: cupId == null ? null : cupId,
     trackId: trackId == null ? null : trackId,
     randomRaces: randomRaces == null ? null : randomRaces
-  })));
+  };
+  return JSON.parse(fn.cupSlot(J(body)));
+}
+
+// The live lobby's card, off the room's stored pick. Random and the tour
+// stay undrawn; the picture is what cycles those circuits.
+export function cupSlotRoom(roomHandle) {
+  return JSON.parse(fn.cupSlotRoom(roomHandle | 0));
 }
 
 // ---- dropped-seat reconnect cards ------------------------------------------

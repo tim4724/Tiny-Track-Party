@@ -323,6 +323,37 @@ bool demoRotates(double shownMs, bool anySeated, bool hasPick) {
   return shownMs >= DEMO_ROTATE_MS && !anySeated && !hasPick;
 }
 
+PreviewStep previewCardNext(const std::vector<std::string>& card,
+                            const std::string& current, double leaderLap,
+                            int previewIndex) {
+  PreviewStep out;
+  out.index = previewIndex >= 0 ? previewIndex : 0;
+  if (card.empty() || current.empty()) return out;
+  int resolved = -1;
+  if (previewIndex >= 0 && static_cast<size_t>(previewIndex) < card.size() &&
+      card[static_cast<size_t>(previewIndex)] == current) {
+    resolved = previewIndex;
+  } else {
+    for (size_t i = 0; i < card.size(); ++i) {
+      if (card[i] == current) { resolved = static_cast<int>(i); break; }
+    }
+  }
+  if (resolved < 0) {
+    if (leaderLap >= 2.0 && card.size() >= 2) {
+      out.trackId = card[0];
+      out.index = 0;
+    }
+    return out;
+  }
+  out.index = resolved;
+  if (leaderLap >= 2.0 && card.size() >= 2) {
+    const int next = (resolved + 1) % static_cast<int>(card.size());
+    out.trackId = card[static_cast<size_t>(next)];
+    out.index = next;
+  }
+  return out;
+}
+
 std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trackId) {
   std::string out = trackId + "|";
   for (size_t i = 0; i < field.size(); i++) {

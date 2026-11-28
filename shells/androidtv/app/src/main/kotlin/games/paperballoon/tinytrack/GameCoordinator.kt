@@ -149,7 +149,11 @@ class GameCoordinator(
      */
     var trackId = ""
         private set
-    /** How long the lobby has shown [trackId] ([rotatePreview]). */
+    /** The circuit the lobby picture is showing. The race still launches [trackId]. */
+    private var previewTrackId = ""
+    /** Which entry of the preview card is on screen. */
+    private var previewIndex = 0
+    /** How long the lobby has shown the preview circuit ([rotatePreview]). */
     private var previewShownMs = 0.0
 
     /** Laps per race — the manifest's TOTAL_LAPS, assigned at boot. */
@@ -276,7 +280,6 @@ class GameCoordinator(
         // persists the blob and decides nothing about it — nothing stored loads a
         // fresh couch.
         Ttp.ttp_ui_progress_load(TtpJson.arg(prefs.getString(PROGRESS_KEY, null)), 0)
-        val catalogue = TtpJson.obj(Ttp.ttp_ui_catalogue_json())
 
         // The seat card's thumbnail lookup table. From the manifest, held once.
         state.carModels = proto.carModels
@@ -386,6 +389,9 @@ class GameCoordinator(
      */
     fun releaseScene() {
         trackId = ""
+        previewTrackId = ""
+        previewIndex = 0
+        previewShownMs = 0.0
         display.release()
         refreshBackdrop()
     }
@@ -977,6 +983,7 @@ class GameCoordinator(
             setTrack(id)
             refreshLobby()
         }
+        net.onRenderLobbyPick = { refreshCupSlot() }
 
         // What PartyNet needs FROM the game, as closures rather than a back
         // reference, so the transport half stays unable to reach the race half.
@@ -989,7 +996,7 @@ class GameCoordinator(
         net.onRelayError = { why -> state.fail("relay: $why") }
 
         lobbyDemo.room = { net.roomHandle }
-        lobbyDemo.trackId = { trackId }
+        lobbyDemo.trackId = { previewTrackId.ifEmpty { trackId } }
         // THE ROSTER, THEN THE BIND. `onField` puts the attract grid into the scene
         // the renderer draws from; without it the demo races invisibly.
         lobbyDemo.onField = { field -> setDemoSceneCars(field) }
@@ -1260,8 +1267,10 @@ class GameCoordinator(
     // -- the lobby ------------------------------------------------------------
 
     /**
-     * The empty lobby tours the catalogue (`ttp_race_demo_next_json`); the web's
-     * `rotatePreview` has the why.
+     * The empty lobby tours the catalogue, and a picked card tours the races it
+     * will actually run (`ttp_race_demo_next_json`). The web's `rotatePreview`
+     * has the why. A picked swap does not move [trackId]: Start still launches
+     * race 1.
      */
     private fun rotatePreview(dt: Double) {
         if (state.screen != GameState.Screen.LOBBY || !lobbyDemo.active) { previewShownMs = 0.0; return }
@@ -1269,10 +1278,22 @@ class GameCoordinator(
         previewShownMs += dt * 1000
         if (Math.floor(previewShownMs / 1000) == before) return
         val next = TtpJson.obj(Ttp.ttp_race_demo_next_json(
-            net.roomHandle, TtpJson.arg(trackId), previewShownMs))
-        val id = TtpJson.optStr(next, "trackId") ?: return
-        setTrack(id)
-        refreshLobby()
+            net.roomHandle, TtpJson.arg(previewTrackId.ifEmpty { trackId }),
+            previewShownMs, lobbyDemo.leaderLap(), previewIndex))
+        if (next.has("index") && !next.isNull("index")) previewIndex = next.optInt("index")
+        val id = TtpJson.optStr(next, "trackId")
+        if (id == null) return
+        if (TtpJson.optStr(net.pick, "trackId") != null) showPreview(id, previewIndex)
+        else { setTrack(id); refreshLobby() }
+    }
+
+    /** Move the lobby picture along a picked card. The launch track stays. */
+    private fun showPreview(id: String, index: Int) {
+        previewTrackId = id
+        previewIndex = index
+        previewShownMs = 0.0
+        lobbyDemo.refresh(force = true)
+        refreshCupSlot()
     }
 
     /**
@@ -1420,9 +1441,10 @@ class GameCoordinator(
      * all rather than an empty one.
      */
     fun refreshCupSlot() {
-        val pick = net.pick
+        // The live card is the stored pick. Random and the tour stay undrawn.
+        // The pure slot stays the gallery's.
         state.cupSlot = GameState.CupSlot.from(
-            TtpJson.obj(Ttp.ttp_ui_cup_slot_json(TtpJson.arg(pick.toString()))))
+            TtpJson.obj(Ttp.ttp_ui_cup_slot_room_json(net.roomHandle)))
     }
 
     private fun setDemoSceneCars(field: JSONArray) {
@@ -1604,6 +1626,16 @@ class GameCoordinator(
         )
     }
 
+    /**
+     * The circuit a scene build should mesh. The lobby pictures [previewTrackId];
+     * a launch has already shown the race screen, so the rebuild that follows
+     * uses [trackId] (race 1). Read before the build: [setDemoSceneCars] runs
+     * while the demo handle is still 0, so "demo active" is too late.
+     */
+    private fun sceneTrackId(): String =
+        if (state.screen == GameState.Screen.LOBBY && previewTrackId.isNotEmpty()) previewTrackId
+        else trackId
+
     fun rebuildScene() {
         // The cells are the cars that own a split-screen view, in roster order —
         // which IS cell order, and is the only place that mapping exists.
@@ -1613,7 +1645,8 @@ class GameCoordinator(
         // unlike the web's promise and the tvOS Task. What is still worth
         // carrying is whether it SUCCEEDED — a refused build leaves the previous
         // scene up, and warm frames of that scene say nothing about this race.
-        sceneBuildOk = display.build(trackId, rosterSlots(), assets)
+        val building = sceneTrackId()
+        sceneBuildOk = display.build(building, rosterSlots(), assets)
         if (sceneBuildOk) {
             // The boost icon's chevrons are the BIOME's accent, chosen for contrast
             // with this track's deck rather than to match the scenery, so it can
@@ -1625,11 +1658,11 @@ class GameCoordinator(
     }
 
     /**
-     * Swap the circuit the lobby previews and the next race builds.
+     * Swap the circuit the next race builds, and aim the lobby picture at it.
      *
-     * **A NO-OP WHEN THE TRACK DID NOT MOVE**, which is not an optimisation: even
-     * on the standing track a rebuild is a staging pass plus the whole field, run
-     * on the main thread with the UI frozen for it, and it shows nothing new.
+     * The picture can already be somewhere else on a picked card. A return whose
+     * launch id never changed still snaps that picture back, so the early return
+     * is "neither id moved".
      *
      * AND IT DOES NOT BUILD IN THE LOBBY, because the attract demo is about to.
      * Building here first meant every pick paid for TWO scene builds back to
@@ -1637,17 +1670,25 @@ class GameCoordinator(
      * hangs the lobby" was while each was a full track mesh and shadow bake.
      */
     fun setTrack(id: String) {
-        if (id == trackId) return
+        val moved = id != trackId
         trackId = id
+        val previewMoved = id != previewTrackId
+        previewTrackId = id
+        previewIndex = 0
         previewShownMs = 0.0
+        if (!moved && !previewMoved) return
         // The pick is what lifts the paper off the lobby (see refreshBackdrop):
         // before it there is no scene to show, after it there is.
-        refreshBackdrop()
+        if (moved) refreshBackdrop()
         if (state.screen != GameState.Screen.RACE && !lobbyDemo.willRebuild(id)) rebuildScene()
     }
 
-    /** The track is placed by the demo when it is about to build anyway (see [setTrack]). */
+    /** The track is placed by the demo when it is about to build anyway (see [setTrack]).
+     *  A cup return may not emit a track-change — the launch id never left race 1. */
     fun fadeToLobby(shouldPlace: Boolean) {
+        previewTrackId = trackId
+        previewIndex = 0
+        previewShownMs = 0.0
         sceneCars = emptyList()
         if (!shouldPlace) display.release() else if (!lobbyDemo.willRebuild(trackId)) rebuildScene()
         lobbyDemo.refresh()

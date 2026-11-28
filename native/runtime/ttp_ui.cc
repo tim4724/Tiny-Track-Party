@@ -623,6 +623,14 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
   return put(g_bufSlot, o);
 }
 
+const char* ttp_ui_cup_slot_room_json(int roomHandle) {
+  // The stored pick only. Random and the tour stay undrawn ("?", neutral grey
+  // for random): the lobby picture cycles the peeked order, the card does not
+  // name it. A cup's chips already carry their authored circuits.
+  const std::string json = canonical_stringify(ttp_room_pick_value(roomHandle));
+  return ttp_ui_cup_slot_json(json.c_str());
+}
+
 // ---- dropped-seat reconnect cards --------------------------------------------
 
 const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const char* seatIdsJson) {

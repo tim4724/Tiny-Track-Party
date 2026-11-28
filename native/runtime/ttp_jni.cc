@@ -1007,9 +1007,9 @@ jbyteArray n_ttp_race_demo_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1
     return toBytes(env, ttp_race_demo_live_json((int) a0, s1.get(), s2.get()));
 }
 
-jbyteArray n_ttp_race_demo_next_json(JNIEnv* env, jclass, jint a0, jbyteArray a1, jdouble a2) {
+jbyteArray n_ttp_race_demo_next_json(JNIEnv* env, jclass, jint a0, jbyteArray a1, jdouble a2, jdouble a3, jint a4) {
     CStr s1(env, a1);
-    return toBytes(env, ttp_race_demo_next_json((int) a0, s1.get(), (double) a2));
+    return toBytes(env, ttp_race_demo_next_json((int) a0, s1.get(), (double) a2, (double) a3, (int) a4));
 }
 
 jbyteArray n_ttp_race_effect_ops_json(JNIEnv* env, jclass) {
@@ -1355,6 +1355,11 @@ jbyteArray n_ttp_ui_cup_slot_json(JNIEnv* env, jclass, jbyteArray a0) {
     return toBytes(env, ttp_ui_cup_slot_json(s0.get()));
 }
 
+jbyteArray n_ttp_ui_cup_slot_room_json(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return toBytes(env, ttp_ui_cup_slot_room_json((int) a0));
+}
+
 jint n_ttp_ui_cup_tint_rgb(JNIEnv* env, jclass, jbyteArray a0, jdouble a1) {
     CStr s0(env, a0);
     return (jint) ttp_ui_cup_tint_rgb(s0.get(), (double) a1);
@@ -1646,7 +1651,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_configure", "([B)I", (void*) n_ttp_race_configure },
     { "ttp_race_countdown_ready", "(IIID)I", (void*) n_ttp_race_countdown_ready },
     { "ttp_race_demo_live_json", "(I[B[B)[B", (void*) n_ttp_race_demo_live_json },
-    { "ttp_race_demo_next_json", "(I[BD)[B", (void*) n_ttp_race_demo_next_json },
+    { "ttp_race_demo_next_json", "(I[BDDI)[B", (void*) n_ttp_race_demo_next_json },
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },
     { "ttp_race_events_live_json", "(IIIIDD)[B", (void*) n_ttp_race_events_live_json },
@@ -1713,6 +1718,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_cover", "([BI)[B", (void*) n_ttp_ui_cover },
     { "ttp_ui_cup_field_tint_pct", "()I", (void*) n_ttp_ui_cup_field_tint_pct },
     { "ttp_ui_cup_slot_json", "([B)[B", (void*) n_ttp_ui_cup_slot_json },
+    { "ttp_ui_cup_slot_room_json", "(I)[B", (void*) n_ttp_ui_cup_slot_room_json },
     { "ttp_ui_cup_tint_rgb", "([BD)I", (void*) n_ttp_ui_cup_tint_rgb },
     { "ttp_ui_freeze_plan_json", "(III)[B", (void*) n_ttp_ui_freeze_plan_json },
     { "ttp_ui_intermission_secs", "(DD)D", (void*) n_ttp_ui_intermission_secs },

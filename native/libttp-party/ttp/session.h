@@ -283,6 +283,14 @@ struct StateChangePlan {
 };
 StateChangePlan state_change_plan(RoomState to);
 
+// The lobby's pick belongs to the people in it. When the last controller has
+// left — a peer_left that frees the final seat, or a return to the lobby that
+// frees every seat the race had reserved — the card goes and the catalogue
+// tour resumes. A race never asks: a dropped seat stays reserved until then.
+inline bool lobby_pick_clears(bool inLobby, bool rosterEmpty, bool hasPick) {
+  return inLobby && rosterEmpty && hasPick;
+}
+
 // Host promotion. A promoted host has no ready toggle (their footer button is
 // "Start race"), so a ready flag left over from before the promotion could never
 // be cleared — and it would keep their car pick locked forever, since SET_CAR

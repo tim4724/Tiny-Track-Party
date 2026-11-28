@@ -1079,6 +1079,80 @@ void roomShellSurface() {
 // lateJoiners answers for — is exactly a CONNECTED seat with no car. A dropped,
 // car-less ghost must therefore never appear as a "joining" row.
 // ---------------------------------------------------------------------------
+// The lobby card is the people in the room choosing. The last controller
+// leaving drops it — straight away in the lobby, and on the way back from a
+// race whose seats were only reserved. One controller staying keeps it.
+void lobbyEmptiesDropThePick() {
+  check(ns::lobby_pick_clears(true, true, true) &&
+            !ns::lobby_pick_clears(false, true, true) &&
+            !ns::lobby_pick_clears(true, false, true) &&
+            !ns::lobby_pick_clears(true, true, false),
+        "lobby_pick_clears: only an empty lobby that still has a pick");
+
+  const auto opsOf = [](const Value& w) {
+    std::string out;
+    const Value* eff = w.find("effects");
+    if (!eff || eff->type != Value::ARR) return out;
+    for (const Value& e : eff->arr) {
+      if (!out.empty()) out += ",";
+      out += json::str_field(e, "op");
+    }
+    return out;
+  };
+  const auto has = [](const std::string& ops, const char* op) {
+    return ops.find(op) != std::string::npos;
+  };
+
+  const int h = ttp_room_create("{}");
+  if (h <= 0) { fail("lobby-empty: ttp_room_create returned no handle"); return; }
+  ttp_net_on_protocol_json(h, "created", "{\"room\":\"EMPT\",\"instance\":\"m\"}", 0);
+  ttp_room_events_json(h);
+  ttp_net_init_pick(h, "tidepool", 1, 7);
+  ttp_net_on_protocol_json(h, "peer_joined", "{\"index\":1}", 0);
+  ttp_net_on_protocol_json(h, "peer_joined", "{\"index\":2}", 0);
+  ttp_room_events_json(h);
+
+  const Value one = parseOrNull(
+      ttp_net_on_protocol_json(h, "peer_left", "{\"index\":2}", 0), "lobby leave one");
+  const std::string oneOps = opsOf(one);
+  check(!has(oneOps, "clear-pick"),
+        "one controller leaving keeps the pick (" + oneOps + ")");
+
+  const Value last = parseOrNull(
+      ttp_net_on_protocol_json(h, "peer_left", "{\"index\":1}", 0), "lobby leave last");
+  const std::string lastOps = opsOf(last);
+  check(has(lastOps, "clear-pick") && has(lastOps, "render-lobby-pick") &&
+            lastOps.find("clear-pick") < lastOps.find("render-lobby-pick"),
+        "the last controller leaving drops the card (" + lastOps + ")");
+  // The walk sequences; the shell performs the store.
+  check(std::string(ttp_net_pick_json(h)).find("\"trackId\":\"tidepool\"") != std::string::npos,
+        "the pick is still stored until the shell performs clear-pick");
+  ttp_net_clear_pick(h);
+  check(std::string(ttp_net_pick_json(h)).find("\"trackId\":null") != std::string::npos,
+        "clear-pick leaves no track");
+
+  // Mid-race the seat is reserved, so the roster is not empty and the pick stays.
+  ttp_net_init_pick(h, "tidepool", 1, 7);
+  ttp_net_on_protocol_json(h, "peer_joined", "{\"index\":1}", 0);
+  ttp_room_events_json(h);
+  check(ttp_room_transition_to(h, "countdown") == 1 && ttp_room_transition_to(h, "playing") == 1,
+        "premise: the room is in a race");
+  const Value mid = parseOrNull(
+      ttp_net_on_protocol_json(h, "peer_left", "{\"index\":1}", 0), "mid-race leave");
+  check(!has(opsOf(mid), "clear-pick"),
+        "a disconnect mid-race reserves the seat and keeps the pick");
+
+  // Back in the lobby that reserved seat is freed, and with it the card.
+  ttp_room_transition_to(h, "lobby");
+  const Value back = parseOrNull(ttp_net_state_change_apply_json(h, "lobby", 0), "back to lobby");
+  const std::string backOps = opsOf(back);
+  check(has(backOps, "clear-pick") && has(backOps, "render-lobby-pick"),
+        "a lobby whose last reserved seat was freed drops the card (" + backOps + ")");
+
+  ttp_room_dispose(h);
+  std::printf("  an empty lobby drops its pick\n");
+}
+
 void abandonedRacePolicy() {
   // graceMs is the subject; the expiry timeout is pushed far out so this
   // section isolates the ABANDONED-RACE deadline from the per-seat expiry
@@ -3813,6 +3887,19 @@ void netWalksMatchMultiCallPath() {
             "netwalk bag: the cup draw stays inside its cup");
       check(ttp_live_bag_draw_cup(d, "nowhere").empty(),
             "netwalk bag: an unknown cup draws nothing");
+      // A peek is the draws that follow, and it does not spend the bag.
+      const std::string bagBefore = canonical_stringify(ttp_room_bag_value(a));
+      const std::vector<std::string> peeked = ttp_live_peek_draws(a, 4);
+      const std::vector<std::string> walked = ttp_live_peek_walk(a);
+      check(canonical_stringify(ttp_room_bag_value(a)) == bagBefore,
+            "netwalk bag: a peek leaves the bag byte-identical");
+      std::vector<std::string> drawn;
+      for (int i = 0; i < 4; i++) drawn.push_back(ttp_live_bag_draw(a));
+      check(drawn == peeked, "netwalk bag: four peeks are the next four draws");
+      bool head = walked.size() <= drawn.size();
+      for (size_t i = 0; head && i < walked.size(); ++i) head = walked[i] == drawn[i];
+      check(head && !walked.empty(),
+            "netwalk bag: the walk is the overlapping head of those draws");
       ttp_room_dispose(a);
       ttp_room_dispose(b);
       ttp_room_dispose(c);
@@ -3820,12 +3907,29 @@ void netWalksMatchMultiCallPath() {
       ttp_room_dispose(e);
     }
 
+    // The picked card's step, with no room: a duplicate id is the index's job.
+    {
+      const std::vector<std::string> card{"a", "b", "a", "c"};
+      const race::PreviewStep hold = race::previewCardNext(card, "a", 1, 0);
+      check(hold.trackId.empty() && hold.index == 0, "preview card: lap 1 stays");
+      const race::PreviewStep on = race::previewCardNext(card, "a", 2, 0);
+      check(on.trackId == "b" && on.index == 1, "preview card: lap 2 steps to the next");
+      const race::PreviewStep dup = race::previewCardNext(card, "a", 2, 2);
+      check(dup.trackId == "c" && dup.index == 3,
+            "preview card: the index picks which duplicate advances");
+      const race::PreviewStep snap = race::previewCardNext(card, "z", 2, 0);
+      check(snap.trackId == "a" && snap.index == 0,
+            "preview card: an unknown id snaps to the first once a lap is due");
+      const race::PreviewStep one = race::previewCardNext({"a"}, "a", 2, 0);
+      check(one.trackId.empty() && one.index == 0, "preview card: one circuit does not cycle");
+    }
+
     // The empty lobby's preview rotation: race::demoRotates over the live
     // room, the next circuit off the same bag, never the one showing.
     {
       const double due = race::DEMO_ROTATE_MS;
       auto next = [](int r, const char* t, double ms) {
-        return at(parseOrNull(ttp_race_demo_next_json(r, t, ms), "demo_next"), "trackId");
+        return at(parseOrNull(ttp_race_demo_next_json(r, t, ms, 0, 0), "demo_next"), "trackId");
       };
       const int f = ttp_room_create("{}");
       ttp_net_init_pick(f, nullptr, 1, 13579);
@@ -5781,6 +5885,38 @@ void raceLiveWalks() {
     check(slot == wantSlot, "tour: the race card spells the per-cup chips\n  want " + wantSlot +
                                 "\n  got  " + slot);
 
+    // The LIVE card peeks the order Start will race, and the peek does not
+    // spend the bag. Ada is seated; a picked tour still advances on the lap.
+    const std::string tourBag = canonical_stringify(ttp_room_bag_value(troom));
+    const std::vector<std::string> order = ttp_live_preview_order(troom);
+    const std::string roomSlot = ttp_ui_cup_slot_room_json(troom);
+    check(canonical_stringify(ttp_room_bag_value(troom)) == tourBag,
+          "tour: peeking the preview order leaves the bag byte-identical");
+    const Value live = parseOrNull(roomSlot.c_str(), "tour room slot");
+    const Value liveMaps = at(live, "maps");
+    check(order.size() == 2 && order[0] == race1 && order[1] == "summit",
+          "tour: the preview order is race 1 then alpine");
+    check(liveMaps.arr.size() == 2 && at(liveMaps.arr[0], "trackId").type == Value::NUL &&
+              at(liveMaps.arr[1], "trackId").type == Value::NUL,
+          "tour: the live card stays undrawn");
+    auto demoAt = [&](const char* id, double lap, int index) {
+      return parseOrNull(ttp_race_demo_next_json(troom, id, 0, lap, index), "tour demo_next");
+    };
+    const Value stayLap = demoAt(race1.c_str(), 1, 0);
+    check(at(stayLap, "trackId").type == Value::NUL && json::num_field(stayLap, "index") == 0,
+          "tour: lap 1 of race 1 stays, seated or not");
+    const Value advance = demoAt(race1.c_str(), 2, 0);
+    check(json::str_field(advance, "trackId") == "summit" && json::num_field(advance, "index") == 1,
+          "tour: lap 2 advances to alpine");
+    const Value again = demoAt(race1.c_str(), 2, 0);
+    check(json::str_field(again, "trackId") == "summit" && json::num_field(again, "index") == 1,
+          "tour: the same lap and index answer the same next circuit");
+    const Value held = demoAt("summit", 1, 1);
+    check(at(held, "trackId").type == Value::NUL && json::num_field(held, "index") == 1,
+          "tour: lap 1 on the new circuit stays");
+    check(canonical_stringify(ttp_room_bag_value(troom)) == tourBag,
+          "tour: the preview advance drew nothing");
+
     // Start: the later races' draws are cup-restricted, and alpine has exactly
     // one track, so race 2 is an equality.
     const Value got = parseOrNull(ttp_race_start_live_json(troom, 1, 11, 3, nullptr, nullptr),
@@ -6131,6 +6267,7 @@ int main(int argc, char** argv) {
   boundaryExports();
   roomShellSurface();
   abandonedRacePolicy();
+  lobbyEmptiesDropThePick();
   seatTakeover();
   framingCorpusThroughAbi(argv[2]);
   fastlaneThroughAbi();

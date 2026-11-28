@@ -137,8 +137,19 @@ extension GameCoordinator {
         }
     }
 
+    /// The circuit a scene build should mesh. The lobby pictures
+    /// `previewTrackId`; a launch has already shown the race screen, so the
+    /// rebuild that follows uses `trackId` (race 1) without a separate snap.
+    func sceneTrackId() -> String {
+        if state.screen == .lobby, !previewTrackId.isEmpty { return previewTrackId }
+        return trackId
+    }
+
     func rebuildScene() {
         let roster = sceneRoster()
+        // Captured HERE, not inside the task: a preview swap that lands while
+        // this build is in flight belongs to the next call, not this one.
+        let building = sceneTrackId()
         // The cells are the cars that own a split-screen view, in roster order —
         // which IS cell order, and is the only place that mapping exists.
         display.setCells(sceneCars.filter(\.cell).map(\.id))
@@ -151,7 +162,7 @@ extension GameCoordinator {
         Task { @MainActor in
             defer { sceneBuildPending = false }
             do {
-                try await SceneStaging.build(trackId: trackId,
+                try await SceneStaging.build(trackId: building,
                                              biome: nil,
                                              roster: roster,
                                              showcase: false,
@@ -177,14 +188,12 @@ extension GameCoordinator {
         }
     }
 
-    /// Swap the circuit the lobby previews and the next race builds.
+    /// Swap the circuit the next race builds, and aim the lobby picture at it.
     ///
-    /// **A NO-OP WHEN THE TRACK DID NOT MOVE**, which is not an optimisation:
-    /// even on the standing track a rebuild is a staging pass plus the whole
-    /// field, run on the main thread with the UI frozen for it. Two cups whose
-    /// race 1 is the same circuit, or a re-tap of the pick already showing,
-    /// would each pay for it and show nothing new. `display/Net.js`'s `setTrack` has had the same
-    /// early return all along.
+    /// The picture can already be somewhere else on a picked card (the tour
+    /// cycles without moving `trackId`). A return whose launch id never
+    /// changed still has to snap that picture back, so the early return is
+    /// "neither id moved", not "the launch id did not".
     ///
     /// AND IT DOES NOT BUILD IN THE LOBBY, because the attract demo is about to.
     /// `refreshLobby` -> `lobbyDemo.refresh()` re-grids onto the new track and
@@ -194,15 +203,16 @@ extension GameCoordinator {
     /// is what "switching cups hangs the lobby" was while each was a full track
     /// mesh and shadow bake.
     func setTrack(_ id: String) {
-        guard id != trackId else { return }
+        let moved = id != trackId
         trackId = id
+        let previewMoved = id != previewTrackId
+        previewTrackId = id
+        previewIndex = 0
         previewShownMs = 0
-        // No publish: the lobby tour's swap is a preview, and every other
-        // caller is the track-change effect, whose walk published the stored
-        // pick one op earlier.
+        if !moved && !previewMoved { return }
         // The pick is what lifts the paper off the lobby (see refreshBackdrop):
         // before it there is no scene to show, after it there is.
-        refreshBackdrop()
+        if moved { refreshBackdrop() }
         // The lobby's build belongs to the demo; a race's belongs to the
         // launch's `reset-scene-cars`. What is left here is the boot seed and
         // the screenshot harness, neither of which has a demo running.
@@ -210,7 +220,12 @@ extension GameCoordinator {
     }
 
     /// The track is placed by the demo when it is about to build anyway (see `setTrack`).
+    /// A cup return may not emit a track-change — the launch id never left
+    /// race 1 — so the picture is snapped here too.
     func fadeToLobby(placeTrack shouldPlace: Bool) {
+        previewTrackId = trackId
+        previewIndex = 0
+        previewShownMs = 0
         sceneCars = []
         if !shouldPlace { display.release() } else if !lobbyDemo.willRebuild(for: trackId) { rebuildScene() }
         lobbyDemo.refresh()

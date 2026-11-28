@@ -170,8 +170,9 @@ test('a track swap does not build the scene twice', () => {
   if (src === null) return;
   const i = src.indexOf('func setTrack');
   const body = src.slice(i, src.indexOf('\n    }', i));
-  assert.match(body, /guard id != trackId else \{ return \}/,
-    'two cups can share a race-1 circuit, and a re-tap costs a full rebuild');
+  assert.match(body, /if !moved && !previewMoved \{ return \}/,
+    'two cups can share a race-1 circuit, and a re-tap of the circuit already '
+    + 'on screen costs a full rebuild');
   assert.match(body, /lobbyDemo\.willRebuild\(for: id\)/,
     'the attract demo rebuilds with its own roster a moment later; building here '
     + 'first pays for two track meshes and two shadow bakes back to back');

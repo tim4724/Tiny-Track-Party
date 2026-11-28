@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 262 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 263 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -191,7 +191,7 @@ object Ttp {
     external fun ttp_race_configure(json: ByteArray?): Int
     external fun ttp_race_countdown_ready(sessionHandle: Int, sceneBuilt: Int, measuring: Int, sinceLaunchMs: Double): Int
     external fun ttp_race_demo_live_json(roomHandle: Int, trackId: ByteArray?, botCapJson: ByteArray?): ByteArray?
-    external fun ttp_race_demo_next_json(roomHandle: Int, trackId: ByteArray?, shownMs: Double): ByteArray?
+    external fun ttp_race_demo_next_json(roomHandle: Int, trackId: ByteArray?, shownMs: Double, leaderLap: Double, previewIndex: Int): ByteArray?
     external fun ttp_race_effect_ops_json(): ByteArray?
     external fun ttp_race_end_party_json(): ByteArray?
     external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
@@ -258,6 +258,7 @@ object Ttp {
     external fun ttp_ui_cover(screen: ByteArray?, scenePainted: Int): ByteArray?
     external fun ttp_ui_cup_field_tint_pct(): Int
     external fun ttp_ui_cup_slot_json(pickJson: ByteArray?): ByteArray?
+    external fun ttp_ui_cup_slot_room_json(roomHandle: Int): ByteArray?
     external fun ttp_ui_cup_tint_rgb(cupIdOrNull: ByteArray?, pct: Double): Int
     external fun ttp_ui_freeze_plan_json(paused: Int, autoPaused: Int, sessionPaused: Int): ByteArray?
     external fun ttp_ui_intermission_secs(deadlineMs: Double, nowMs: Double): Double

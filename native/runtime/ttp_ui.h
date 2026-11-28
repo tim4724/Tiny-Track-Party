@@ -325,11 +325,16 @@ TTP_ABI const char* ttp_ui_seat_grid_json(const char* seatsJson);
  * (`n` = 1..N: a cup, the tour, a counted random run) — that numbering is the
  * menu at a glance and belongs to the model; an exact track and an endless run
  * carry none, and neither does the tour's locked teaser. A chip with a null
- * trackId is an UNDRAWN race ("?" placeholder): every chip of the tour and of
- * random, the already-drawn first race included, so neither card spoils
- * anything. The tour's carry `cup` so each placeholder wears that cup's colour;
- * random's carry no cup and take the neutral wash. */
+ * trackId is an UNDRAWN race ("?" placeholder). Every chip of the tour and of
+ * random stays undrawn, the already-drawn first race included. The tour's
+ * carry `cup` so each chip wears that cup's colour; random's carry no cup and
+ * take the neutral wash. */
 TTP_ABI const char* ttp_ui_cup_slot_json(const char* pickJson);
+
+/* The same card off the LIVE room's stored pick. Random and the tour are not
+ * filled from the preview order — the picture cycles that, the card keeps its
+ * "?" chips. A pick with no track leaves the slot empty. */
+TTP_ABI const char* ttp_ui_cup_slot_room_json(int roomHandle);
 
 /* ---- dropped-seat reconnect cards ---------------------------------------- */
 

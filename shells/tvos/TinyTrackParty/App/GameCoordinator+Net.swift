@@ -111,6 +111,7 @@ extension GameCoordinator {
             self?.setTrack(id)
             self?.refreshLobby()
         }
+        net.onRenderLobbyPick = { [weak self] in self?.refreshCupSlot() }
 
         // What PartyNet needs FROM the game, as closures rather than a back
         // reference, so the transport half stays unable to reach the race half.
@@ -126,7 +127,10 @@ extension GameCoordinator {
 
         // The lobby's attract race drives the picked track behind the boards.
         lobbyDemo.room = { [weak self] in self?.net.roomHandle ?? 0 }
-        lobbyDemo.trackId = { [weak self] in self?.trackId ?? "" }
+        lobbyDemo.trackId = { [weak self] in
+            guard let self else { return "" }
+            return self.previewTrackId.isEmpty ? self.trackId : self.previewTrackId
+        }
         // THE ROSTER, THEN THE BIND. `onField` puts the attract grid into the
         // scene the renderer draws from; without it the demo raced invisibly.
         // `cell: false` throughout — the lobby keeps its single overview camera.

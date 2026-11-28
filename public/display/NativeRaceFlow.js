@@ -41,7 +41,7 @@ export async function init() {
     configure: c('ttp_race_configure', 'number', ['string']),
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
-    demoNext: c('ttp_race_demo_next_json', 'string', ['number', 'string', 'number']),
+    demoNext: c('ttp_race_demo_next_json', 'string', ['number', 'string', 'number', 'number', 'number']),
     benchField: c('ttp_race_bench_field_json', 'string', ['string', 'number', 'number']),
     previewCupRace: c('ttp_race_preview_cup_race_json', 'string', ['string']),
     start: c('ttp_race_start_live_json', 'string',
@@ -93,10 +93,12 @@ export function demoLive(roomHandle, trackId, botCap) {
   return P(fn.demoLive(roomHandle, trackId || '', id(botCap)));
 }
 
-// Where the empty lobby's preview goes next, after `shownMs` on `trackId`:
-// a track id, or null to stay.
-export function demoNext(roomHandle, trackId, shownMs) {
-  return P(fn.demoNext(roomHandle, trackId || '', shownMs)).trackId;
+// Where the lobby picture goes next: the empty lobby after `shownMs`, or a
+// picked card once the leader's lap is done. `{ trackId, index }`; a null
+// trackId means stay. `previewIndex` keeps a card that names one circuit
+// twice in order.
+export function demoNext(roomHandle, trackId, shownMs, leaderLap, previewIndex) {
+  return P(fn.demoNext(roomHandle, trackId || '', shownMs, leaderLap || 0, previewIndex | 0));
 }
 
 // The BENCH field, without a room: `players` autopiloted player seats at the

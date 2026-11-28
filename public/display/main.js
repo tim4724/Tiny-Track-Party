@@ -12,7 +12,7 @@ import { buildQRMatrix } from '../shared/qr.js';
 import { Stage, HUD_TICK_MS } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
+import { renderSeats, renderLobbyPick, renderCupCard, renderCupShelf } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
 // The native stack, stood up once in a fixed order (configure before read, world
@@ -59,6 +59,9 @@ const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') }
 // get no history entries (gallery lives in iframes; solo has no welcome).
 let currentScreen = null;
 let previewShownMs = 0;         // how long the lobby has shown its preview circuit (rotatePreview)
+let previewTrackId = null;      // the lobby PICTURE. Start still launches selectedTrackId.
+let previewIndex = 0;           // which entry of the preview card is on screen
+let launching = false;          // a start is waiting on the race-1 scene; don't tour under it
 let updateSoundHint = () => {}; // rebound below once the audio pill is wired
 let suppressPopstate = false;   // the history.back() below is ours — its popstate must not act
 let popstateNavigating = false; // this show() IS a popstate retreat — don't pop again (set/cleared by the handler)
@@ -219,6 +222,7 @@ if (!selectedTrackId && !_isTestMode && !_isDebugSolo) {
   try { last = localStorage.getItem(LAST_TRACK_KEY); } catch (_) {}
   selectedTrackId = (last && built.has(last)) ? last : TRACK_LIST[0].id;
 }
+previewTrackId = selectedTrackId;
 
 // The couch's star record: the shell only ferries the blob between storage and
 // the engine — every derivation (stars, the Playroom lock) is the wasm's. Test
@@ -310,31 +314,62 @@ const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
   }));
 });
 
-// Swap the lobby preview + race track to the host's pick. Lobby only — Net
-// validates host + room state before calling this; `track` is read by startRace.
+// Aim the launch track, and the lobby picture, at `id`.
+//
+// The picture can already be further along a picked card. A return whose
+// launch id never changed still snaps that picture back, so the early return
+// is "neither id moved". Outside the lobby this only re-aims `track`: the
+// chained start places the circuit itself (prepareNextTrack), and building
+// here as well meshed every chained start twice.
 function selectTrack(id) {
-  if (!built.has(id) || id === selectedTrackId) return;
-  selectedTrackId = id;
+  if (!built.has(id)) return;
+  const moved = id !== selectedTrackId;
+  const previewMoved = id !== previewTrackId;
+  previewTrackId = id;
+  previewIndex = 0;
   previewShownMs = 0;
-  track = built.get(id);
-  track.totalLaps = RACE_LAPS;
-  window.__track = track;
+  if (!moved && !previewMoved) return;
+  if (moved) {
+    selectedTrackId = id;
+    track = built.get(id);
+    track.totalLaps = RACE_LAPS;
+    window.__track = track;
+  }
   if (sceneReady && net.roomState === ROOM_STATE.LOBBY) {
-    // Swap the picked track with a crossfade — see fadeBackdrop. Track→track dissolves one
-    // circuit straight into the next; the very first pick reveals the track over the diorama
-    // (the default background). The build (geometry + demo cars) runs under cover either way.
+    // Swap with a crossfade — see fadeBackdrop. Track→track dissolves one
+    // circuit straight into the next; the very first pick reveals the track
+    // over the diorama. The build runs under cover either way.
     fadeBackdrop(() => {
-      // setTrack is ASYNC (asset provisioning + buildScene), so hand the
-      // crossfade something to wait on — otherwise the still dissolves off a
-      // canvas that still holds the old circuit and the new one pops in a beat
-      // later. refreshLobbyDemo re-grids the attract field onto the new track.
-      const built = scene.setTrack(track);
-      refreshLobbyDemo();
-      return built;
+      // setTrack is ASYNC, so hand the crossfade something to wait on —
+      // otherwise the still dissolves off a canvas that still holds the old
+      // circuit. refreshLobbyDemo restarts the attract field on the new track.
+      const placed = scene.setTrack(built.get(id));
+      refreshLobbyDemo(true);
+      return placed;
     });
-  } else {
+  } else if (moved) {
     updateBackdrop();
   }
+}
+
+// Move the lobby picture along a picked card. The launch track stays, so
+// Start still races race 1 of whatever was picked.
+function showPreview(id, index) {
+  if (launching || !built.has(id)) return;
+  const changed = id !== previewTrackId;
+  previewTrackId = id;
+  previewIndex = index;
+  previewShownMs = 0;
+  renderPick();
+  if (!(sceneReady && net.roomState === ROOM_STATE.LOBBY)) return;
+  // The same circuit twice in one card still restarts the attract race: the
+  // lap has to return to 1, or the next poll steps again.
+  if (!changed) { refreshLobbyDemo(true); return; }
+  fadeBackdrop(() => {
+    const placed = scene.setTrack(built.get(id));
+    refreshLobbyDemo(true);
+    return placed;
+  });
 }
 
 // Whether the 3D backdrop should be showing at all. The live lobby always has a
@@ -391,21 +426,26 @@ function fadeBackdrop(mid) {
 // straight off the room handle (flow.demoLive). The ?bots=<n> debug cap rides
 // each call rather than the configured world: it is a URL hook, not part of
 // the game's shape.
-function refreshLobbyDemo() {
-  if (_isTestMode || !sceneReady || session || !selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY)) {
+function refreshLobbyDemo(force = false) {
+  // A launch is putting race 1 back under the session. A roster render in that
+  // gap must not stand the attract race up again on the circuit being left.
+  if (launching) return;
+  const preview = built.get(previewTrackId);
+  if (_isTestMode || !sceneReady || session || !preview || (net && net.roomState !== ROOM_STATE.LOBBY)) {
     lobbyDemo.stop();
     return;
   }
   // The grid and its signature in one crossing, off the live room.
-  const { field, sig, skill } = flow.demoLive(net.flow.handle, selectedTrackId, _qBots);
-  if (lobbyDemo.active && lobbyDemo.sig === sig) return; // no relevant change
+  const { field, sig, skill } = flow.demoLive(net.flow.handle, preview.id, _qBots);
+  if (!force && lobbyDemo.active && lobbyDemo.sig === sig) return; // no relevant change
 
   // Same track + same field size (the ids are grid slots), so only the picks or
   // drivers changed (a car pick, or a join or leave on a full grid) → swap those
   // cars in place so the demo race keeps running, no re-grid. Anything else (a
   // field changing size, a track switch, first start) is a build — of the field
-  // alone when the track did not change.
-  if (lobbyDemo.active && lobbyDemo.track === track && field.length === lobbyDemo.field.length) {
+  // alone when the track did not change. `force` is a card step: restart even
+  // when the geometry did not move, so the leader's lap returns to 1.
+  if (!force && lobbyDemo.active && lobbyDemo.track === preview && field.length === lobbyDemo.field.length) {
     for (const [i, p] of field.entries()) {
       const prev = lobbyDemo.field[i];
       if (prev.carIndex !== p.carIndex || prev.colorIndex !== p.colorIndex
@@ -416,21 +456,25 @@ function refreshLobbyDemo() {
     lobbyDemo.sig = sig; // record the new signature so the next diff is accurate
     return;
   }
-  lobbyDemo.start(track, field, sig, skill);
+  lobbyDemo.start(preview, field, sig, skill);
 }
 
-// The empty lobby tours the catalogue. This side only counts how long the lobby
-// has SHOWN the current circuit, since it last changed or the lobby came up
-// (the welcome board would pay for builds nobody sees), and asks once a second;
-// when and where to is ttp_race_demo_next_json's. The swap is a preview, so
-// nothing is remembered.
+// The empty lobby tours the catalogue, and a picked card tours the races it
+// will actually run. This side only counts how long the lobby has SHOWN the
+// current circuit and reports the leader's lap; when and where to is
+// ttp_race_demo_next_json's. A picked swap does not move the launch track.
 function rotatePreview(dt) {
+  if (launching) return;
   if (currentScreen !== 'lobby' || !lobbyDemo.active) { previewShownMs = 0; return; }
   const before = Math.floor(previewShownMs / 1000);
   previewShownMs += dt * 1000;
   if (Math.floor(previewShownMs / 1000) === before) return;
-  const next = flow.demoNext(net.flow.handle, selectedTrackId, previewShownMs);
-  if (next) selectTrack(next);
+  const step = flow.demoNext(net.flow.handle, previewTrackId || '', previewShownMs,
+                              lobbyDemo.leaderLap(), previewIndex);
+  if (step && Number.isFinite(step.index)) previewIndex = step.index;
+  if (!step || !step.trackId) return;
+  if (net.pick && net.pick.trackId) showPreview(step.trackId, previewIndex);
+  else selectTrack(step.trackId);
 }
 
 // ---- audio ----
@@ -695,6 +739,9 @@ const net = new DisplayNet({
     if (id && built.has(id)) { try { localStorage.setItem(LAST_TRACK_KEY, id); } catch (_) {} }
     selectTrack(id); renderPick();
   },
+  // The last phone left the lobby: the pick is already cleared, so this
+  // redraw drops the cup card.
+  onRenderLobbyPick: () => renderPick(),
   onRoomReady: ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; the ticket shows one
     // URL line with the trailing code highlighted in the accent colour.
@@ -883,7 +930,12 @@ function renderRoster(rosterSize, hostPeerIndex) {
 // gallery preview so the two cannot drift. The scan hint under the ticket stays
 // up for the whole lobby — joining is possible until the race starts.
 function renderPick() {
-  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog);
+  // The live card is the stored pick. A cup names its circuits; random and
+  // the tour stay "?" — the picture is what cycles those. The gallery uses
+  // the same slot off a pick with no room (renderLobbyPick).
+  const handle = net.flow && net.flow.handle;
+  if (handle) renderCupCard(el('cup-slot'), ui.cupSlotRoom(handle), trackCatalog);
+  else renderLobbyPick(el('cup-slot'), net.pick, trackCatalog);
 }
 
 // The race rail's "Cups" shelf, from the wasm-stamped catalogue. Refreshed
@@ -1033,10 +1085,16 @@ const RACE_PERFORMERS = {
   // an unchanged signature), and the promise goes back to the crossfade so the
   // still holds until the swap lands instead of uncovering the old one.
   'fade-to-lobby': () => {
+    // A cup return may not emit a track-change — the launch id never left
+    // race 1 — so the picture is snapped here too.
+    previewTrackId = selectedTrackId;
+    previewIndex = 0;
+    previewShownMs = 0;
+    renderPick();
     fadeBackdrop(() => {
       for (const c of scene.cars.keys()) scene.removeCar(c);
       const placed = scene.setTrack(track);
-      refreshLobbyDemo();                        // AI back to driving the picked cars
+      refreshLobbyDemo(true);                    // AI back to driving the picked cars
       return placed;
     });
   },
@@ -1111,14 +1169,38 @@ function releaseCountdown() {
   return true;
 }
 
-function startRace() {
+async function startRace() {
+  if (launching) return;
+  // The picture may be further along the card. The session is built from
+  // `track` (race 1), so the scene has to be that circuit before the launch
+  // effects bind it. The await is the only yield; `launching` keeps the tour
+  // from stepping again while the rebuild is in flight.
+  if (previewTrackId !== selectedTrackId) {
+    launching = true;
+    lobbyDemo.stop();
+    previewTrackId = selectedTrackId;
+    previewIndex = 0;
+    previewShownMs = 0;
+    try {
+      await scene.setTrack(track);
+    } catch (err) {
+      launching = false;
+      throw err;
+    }
+    if (session) { launching = false; return; }
+  }
   // ONE walk: the go/no-go (room phase, scene, pick, connected players — all
   // read off the room handle in C++), the bag draws a random pick needs, the
   // cup series stood up behind the room, and the launch effects.
   const d = flow.startRace(net.flow.handle, sceneReady, launchArgs());
-  if (d.action !== 'launch') return;
-  perform(d.effects);
-  armCountdown(d.countdownEffects);
+  if (d.action !== 'launch') { launching = false; return; }
+  launching = true;
+  try {
+    perform(d.effects);
+    armCountdown(d.countdownEffects);
+  } finally {
+    launching = false;
+  }
 }
 
 // The 'create-session' effect, performed. The session is the one thing an effect

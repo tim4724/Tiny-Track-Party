@@ -91,8 +91,8 @@ class PartyNet(
             "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
             "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
             "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-            "game-message", "race-abandoned", "track-change", "set-link",
-            "detach-socket", "shutdown",
+            "game-message", "race-abandoned", "track-change", "clear-pick",
+            "render-lobby-pick", "set-link", "detach-socket", "shutdown",
         )
 
     }
@@ -163,6 +163,9 @@ class PartyNet(
 
     /** The `track-change` effect: the stored pick resolved a (possibly new) preview circuit. */
     var onTrackChange: ((String) -> Unit)? = null
+
+    /** The last controller left the lobby: redraw the race card, now empty. */
+    var onRenderLobbyPick: (() -> Unit)? = null
 
     // -- what the coordinator answers ---------------------------------------
 
@@ -886,6 +889,10 @@ class PartyNet(
             "track-change" -> {
                 TtpJson.optStr(e, "trackId")?.let { onTrackChange?.invoke(it) }
             }
+
+            "clear-pick" -> Ttp.ttp_net_clear_pick(roomHandle)
+
+            "render-lobby-pick" -> onRenderLobbyPick?.invoke()
 
             // NO clear-standings arm. The board is room-retained, so the
             // statechange walk drops it with a store inside the engine and its

@@ -136,6 +136,11 @@ const NET_PERFORMERS = {
   'game-message': (n, e, ctx) => n.onControllerMessage(ctx.from, ctx.data),
   'race-abandoned': (n) => n.onRaceAbandoned(),
   'track-change': (n, e) => n.onTrackChange(e.trackId),
+  // The last controller left the lobby (session.h lobby_pick_clears). The
+  // same two ops endParty emits, in the same order: drop the pick, then
+  // redraw the card, which is what puts the catalogue tour back.
+  'clear-pick': (n) => n.clearPick(),
+  'render-lobby-pick': (n) => { if (n.onRenderLobbyPick) n.onRenderLobbyPick(); },
   // The display's OWN link, for the connection overlay. The payload is the
   // whole view ({state, attempt, max, button}); the game layer draws it and
   // re-asks the auto-pause rule, which reads the link through its own seam.
@@ -207,6 +212,9 @@ export class DisplayNet extends GameNet {
     // should see it — {state: connected|reconnecting|disconnected, attempt,
     // max, button}. "connected" takes the overlay down.
     this.onLinkChange = opts.onLinkChange || (() => {});
+    // The last controller left the lobby. clear-pick already dropped the
+    // stored pick; this redraws the card, which is now empty.
+    this.onRenderLobbyPick = opts.onRenderLobbyPick || (() => {});
 
     // Dropped seats currently offering a reconnect QR. peerIndex -> {peerIndex,
     // name, colorIndex, url}. Held for the whole race (no give-up timer); freed

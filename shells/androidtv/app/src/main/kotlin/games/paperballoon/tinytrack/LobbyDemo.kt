@@ -94,7 +94,25 @@ class LobbyDemo {
     /** Whether an attract race is on screen. */
     val active: Boolean get() = handle != 0
 
-    fun refresh() {
+    /**
+     * The leader's display lap, for the lobby's once-a-second preview poll.
+     * Handle 0 (the gap between stop and the next start) reads as 0, so a poll
+     * in that gap does not advance the card again.
+     */
+    fun leaderLap(): Double {
+        if (handle == 0) return 0.0
+        val cars = TtpJson.obj(Ttp.ttp_snapshot_json(handle)).optJSONArray("cars") ?: return 0.0
+        var lap = 0.0
+        for (i in 0 until cars.length()) {
+            val n = cars.optJSONObject(i)?.optDouble("lap", 0.0) ?: continue
+            if (n > lap) lap = n
+        }
+        return lap
+    }
+
+    /** [force] restarts the sim even when the picture would not change, so a card
+     *  that steps onto the circuit already showing still resets the lap. */
+    fun refresh(force: Boolean = false) {
         val t = trackId()
         if (t.isEmpty()) { stop(); return }
 
@@ -106,14 +124,14 @@ class LobbyDemo {
             room(), TtpJson.arg(t), TtpJson.arg("null")))
         val sig = live.optString("sig")
         // Same picture as the one already running: leave it alone.
-        if (sig == signature && handle != 0) return
+        if (!force && sig == signature && handle != 0) return
 
         val rawField = live.optJSONArray("field") ?: JSONArray()
         val fresh = (0 until rawField.length()).mapNotNull { rawField.optJSONObject(it) }
 
         // Same track + same field size (the ids are grid slots) → swap the picks
         // and drivers in place; anything else is a full teardown and rebuild.
-        if (handle != 0 && t == track && fresh.size == field.size) {
+        if (!force && handle != 0 && t == track && fresh.size == field.size) {
             field = fresh
             signature = sig
             onRedress?.invoke(rawField)

@@ -18,9 +18,10 @@
 //      calls `onField` then `onSession`. tvOS only ever did the second half, so
 //      the attract race ran invisibly through every lobby.
 //
-//   3. THE CUP CARD. `ttp_ui_cup_slot_json` answers the right rail. tvOS called
-//      it from the screenshot harness and from nowhere else, so a host picking a
-//      cup on their phone changed nothing on the television.
+//   3. THE CUP CARD. `ttp_ui_cup_slot_room_json` answers the live right rail.
+//      tvOS called the pure slot from the screenshot harness and from nowhere
+//      else, so a host picking a cup on their phone changed nothing on the
+//      television.
 //
 // THESE ARE SOURCE CHECKS because all three are a shell's to make — there is no
 // ABI to ask "did anyone push a camera mode". What is pinned is that each shell
@@ -141,8 +142,8 @@ test('the tvOS lobby refresh asks for the cup slot', () => {
   assert.ok(i > 0, 'refreshLobby has moved');
   assert.match(src.slice(i, src.indexOf('\n    }', i)), /refreshCupSlot\(\)/,
     'nothing else calls it on the live path, so the right rail stays empty forever');
-  assert.match(src, /ttp_ui_cup_slot_json/,
-    'the card is the MODEL\'s answer — a shell composing one would be a second rule');
+  assert.match(src, /ttp_ui_cup_slot_room_json/,
+    'the live card is the MODEL\'s answer — a shell composing one would be a second rule');
 });
 
 // ---- the harness must not photograph a screen the game cannot produce -----

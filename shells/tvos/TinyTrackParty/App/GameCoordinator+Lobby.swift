@@ -8,17 +8,35 @@ extension GameCoordinator {
 
     // MARK: - The empty lobby's tour
 
-    /// The empty lobby tours the catalogue (`ttp_race_demo_next_json`); the
-    /// web's `rotatePreview` has the why.
+    /// The empty lobby tours the catalogue, and a picked card tours the races
+    /// it will actually run (`ttp_race_demo_next_json`). The web's
+    /// `rotatePreview` has the why. A picked swap does not move `trackId`:
+    /// Start still launches race 1.
     func rotatePreview(_ dt: Double) {
         guard state.screen == .lobby, lobbyDemo.active else { previewShownMs = 0; return }
         let before = (previewShownMs / 1000).rounded(.down)
         previewShownMs += dt * 1000
         guard (previewShownMs / 1000).rounded(.down) != before else { return }
-        let next = TTP.obj(ttp_race_demo_next_json(net.roomHandle, trackId, previewShownMs))
-        guard let id = next["trackId"] as? String else { return }
-        setTrack(id)
-        refreshLobby()
+        let next = TTP.obj(ttp_race_demo_next_json(
+            net.roomHandle, previewTrackId.isEmpty ? trackId : previewTrackId,
+            previewShownMs, lobbyDemo.leaderLap(), Int32(previewIndex)))
+        if let n = next["index"] as? NSNumber { previewIndex = n.intValue }
+        guard let id = next["trackId"] as? String, !id.isEmpty else { return }
+        if let picked = pick["trackId"] as? String, !picked.isEmpty {
+            showPreview(id, index: previewIndex)
+        } else {
+            setTrack(id)
+            refreshLobby()
+        }
+    }
+
+    /// Move the lobby picture along a picked card. The launch track stays.
+    func showPreview(_ id: String, index: Int) {
+        previewTrackId = id
+        previewIndex = index
+        previewShownMs = 0
+        lobbyDemo.refresh(force: true)
+        refreshCupSlot()
     }
 
     // MARK: - The seat grid
@@ -150,10 +168,10 @@ extension GameCoordinator {
     /// picked, which the view renders as no card at all rather than an empty one.
     func refreshCupSlot() {
         // The model answers a bare `null` before a pick, which `TTP.obj` reads
-        // back as an empty dictionary and `CupSlot.init?` refuses. So an absent
-        // card is a real absence rather than a card with nothing in it. The
-        // STORED pick crosses verbatim — it is already the model's own shape.
-        state.cupSlot = GameState.CupSlot(TTP.obj(ttp_ui_cup_slot_json(TTP.json(pick))))
+        // back as an empty dictionary and `CupSlot.init?` refuses. The live
+        // card is the stored pick (`ttp_ui_cup_slot_room_json`). Random and the
+        // tour stay undrawn; the pure slot stays the gallery's.
+        state.cupSlot = GameState.CupSlot(TTP.obj(ttp_ui_cup_slot_room_json(net.roomHandle)))
     }
 
     /// The attract grid, as the scene's roster. `cell: false` throughout: the

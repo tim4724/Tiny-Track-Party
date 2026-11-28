@@ -239,7 +239,8 @@ class GameState {
         }
     }
 
-    /** `ttp_ui_cup_slot_json`. Null before the host has picked anything, and the whole card is hidden then. */
+    /** `ttp_ui_cup_slot_json`. Null before the host has picked anything, and the whole card is hidden then.
+     *  The live lobby fills it from `ttp_ui_cup_slot_room_json`. */
     var cupSlot by mutableStateOf<CupSlot?>(null)
 
     data class CupSlot(
@@ -253,8 +254,8 @@ class GameState {
         data class Map(
             val index: Int,
             /**
-             * Null is an UNDRAWN race — the "?" chip. The tour's and random's chips
-             * all say so (the drawn first race included, so the card spoils nothing).
+             * Null is an undrawn chip: random, the tour, and a locked rung. A cup
+             * chip names its circuit.
              */
             val trackId: String?,
             /**

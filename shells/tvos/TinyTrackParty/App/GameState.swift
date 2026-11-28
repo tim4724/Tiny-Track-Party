@@ -85,7 +85,9 @@ final class GameState: ObservableObject {
     }
 
     /// `ttp_ui_cup_slot_json`. Nil before the host has picked anything, and the
-    /// whole card is hidden then.
+    /// whole card is hidden then. The live lobby fills it from
+    /// `ttp_ui_cup_slot_room_json`. A cup names its circuits; random and the
+    /// tour stay undrawn.
     @Published var cupSlot: CupSlot?
 
     struct CupSlot {
@@ -98,9 +100,8 @@ final class GameState: ObservableObject {
 
         struct Map: Identifiable {
             let index: Int
-            /// Nil is an UNDRAWN race — the "?" chip. The tour's and random's
-            /// chips all say so (the drawn first race included, so the card
-            /// spoils nothing).
+            /// Nil is an undrawn chip: random, the tour, and a locked rung. A cup
+            /// chip names its circuit.
             let trackId: String?
             /// The race's running order on a fixed run (1...N); 0 stands in for
             /// absent — an exact track and an endless run have nothing to number.

@@ -312,10 +312,26 @@ std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trac
 // welcome board never pays a scene build nobody sees.
 inline constexpr double DEMO_ROTATE_MS = 90000;
 
-// Whether the attract preview moves on. Only an empty lobby rotates: once a
-// phone is seated (a dropped seat still counts) the preview holds still for
-// them, and a pick owns the preview outright.
+// Whether the EMPTY lobby's catalogue tour moves on. Once a phone is seated
+// (a dropped seat still counts) that tour holds, and a pick ends it. A picked
+// cup, card or tour is a different walk — previewCardNext — which advances
+// on the leader's lap and does not ask this.
 bool demoRotates(double shownMs, bool anySeated, bool hasPick);
+
+// The next circuit on a picked preview card. `trackId` empty means stay.
+// `previewIndex` disambiguates a card that names the same circuit twice
+// (an endless refill's deck contains the race just shown): it is used when
+// it is in range and names `current`, otherwise the first match. A card of
+// one circuit never advances. A lap of 2 or more on a longer card steps to
+// (index + 1) mod size, even when that id equals `current`. An id that is
+// not on the card snaps to card[0] once the lap is due, and stays otherwise.
+struct PreviewStep {
+  std::string trackId;
+  int index = 0;
+};
+PreviewStep previewCardNext(const std::vector<std::string>& card,
+                            const std::string& current, double leaderLap,
+                            int previewIndex);
 
 // ---- the series behind a start ----------------------------------------------
 

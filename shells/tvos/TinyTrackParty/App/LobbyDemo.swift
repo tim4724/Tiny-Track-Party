@@ -88,7 +88,18 @@ final class LobbyDemo {
     /// Whether an attract race is on screen.
     var active: Bool { handle != 0 }
 
-    func refresh() {
+    /// The leader's display lap, for the lobby's once-a-second preview poll.
+    /// Handle 0 (the gap between stop and the next start) reads as 0, so a
+    /// poll in that gap does not advance the card again.
+    func leaderLap() -> Double {
+        guard handle != 0 else { return 0 }
+        let cars = TTP.obj(ttp_snapshot_json(handle))["cars"] as? [[String: Any]] ?? []
+        return cars.compactMap { ($0["lap"] as? NSNumber)?.doubleValue }.max() ?? 0
+    }
+
+    /// `force` restarts the sim even when the picture would not change, so a
+    /// card that steps onto the circuit already showing still resets the lap.
+    func refresh(force: Bool = false) {
         let track = trackId()
         guard !track.isEmpty else { stop(); return }
 
@@ -99,13 +110,13 @@ final class LobbyDemo {
         let live = TTP.obj(ttp_race_demo_live_json(room(), track, "null"))
         let sig = live["sig"] as? String ?? ""
         // Same picture as the one already running: leave it alone.
-        if sig == signature, handle != 0 { return }
+        if !force, sig == signature, handle != 0 { return }
 
         let fresh = (live["field"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
         // Same track + same field size (the ids are grid slots) → swap the picks
         // and drivers in place (see `onRedress`); anything else is a full
         // teardown and rebuild.
-        if handle != 0, track == self.track, fresh.count == field.count {
+        if !force, handle != 0, track == self.track, fresh.count == field.count {
             field = fresh
             signature = sig
             onRedress?(fresh)

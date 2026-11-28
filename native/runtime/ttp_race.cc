@@ -17,6 +17,7 @@
 #include "ttp_error.h"
 #include "ttp_race.h"
 
+#include <cmath>
 #include <map>
 #include <string>
 #include <vector>
@@ -723,19 +724,80 @@ const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
   return put(g_bufDemo, v);
 }
 
-const char* ttp_race_demo_next_json(int roomHandle, const char* trackId, double shownMs) {
+// A positive whole number. Mirrors the cup card's "fixed length" test;
+// drawsNeeded's extra "exactly 1 draws nothing" is applied by the caller.
+static bool positiveInteger(double n) {
+  return std::isfinite(n) && n > 0.0 && std::trunc(n) == n;
+}
+
+std::vector<std::string> ttp_live_preview_order(int roomHandle) {
+  const Value pick = ttp_room_pick_value(roomHandle);
+  const std::string trackId = json::str_field(pick, "trackId");
+  if (trackId.empty()) return {};
+  const std::string mode = json::str_field(pick, "mode");
+  if (mode == "cup") {
+    const std::string cupId = json::str_field(pick, "cupId");
+    for (const race::Cup& c : g_cups)
+      if (c.id == cupId && !c.tracks.empty()) return c.tracks;
+    return {trackId};
+  }
+  if (mode == "random") {
+    std::vector<std::string> card{trackId};
+    const double randomRaces = json::num_field(pick, "randomRaces");
+    if (positiveInteger(randomRaces)) {
+      // randomRaces == 1 is a positive integer and drawsNeeded answers 0, so
+      // the card is the one race Start will run.
+      for (const std::string& id :
+           ttp_live_peek_draws(roomHandle, race::drawsNeeded("random", randomRaces)))
+        card.push_back(id);
+    } else {
+      for (const std::string& id : ttp_live_peek_walk(roomHandle)) card.push_back(id);
+    }
+    return card;
+  }
+  if (mode == "tour") {
+    // Same walk as ttp_race_start_live_json: skip the lead unlocked cup
+    // (race 1 is already the pick), skip locked cups, cap at drawsNeeded.
+    std::vector<std::string> card{trackId};
+    const int need = race::drawsNeeded("tour", json::num_field(pick, "randomRaces"));
+    std::vector<std::string> cups;
+    bool leadSkipped = false;
+    for (const race::Cup& c : g_cups) {
+      if (!ttp_progress_cup_unlocked(c.id)) continue;
+      if (!leadSkipped) { leadSkipped = true; continue; }
+      cups.push_back(c.id);
+      if (static_cast<int>(cups.size()) >= need) break;
+    }
+    for (const std::string& id : ttp_live_peek_cups(roomHandle, cups)) card.push_back(id);
+    return card;
+  }
+  return {trackId};
+}
+
+const char* ttp_race_demo_next_json(int roomHandle, const char* trackId, double shownMs,
+                                    double leaderLap, int previewIndex) {
   const std::string current = trackId ? trackId : "";
   const bool anySeated = !ttp_live_roster_players(roomHandle, /*connectedOnly=*/false).empty();
   const bool hasPick = !json::str_field(ttp_room_pick_value(roomHandle), "trackId").empty();
   std::string next;
-  if (race::demoRotates(shownMs, anySeated, hasPick)) {
+  const race::PreviewStep step =
+      race::previewCardNext(ttp_live_preview_order(roomHandle), current, leaderLap, previewIndex);
+  int index = step.index;
+  if (!step.trackId.empty()) {
+    // A picked card advances without drawing. The shell restarts the attract
+    // race, which is what brings the leader's lap back under 2; asking again
+    // with the same lap and index answers the same next circuit.
+    next = step.trackId;
+  } else if (race::demoRotates(shownMs, anySeated, hasPick)) {
     next = ttp_live_bag_draw(roomHandle);
     // The bag never repeats across consecutive draws, but the boot preview
     // came from the shell's memory rather than the bag, so one redraw.
     if (next == current) next = ttp_live_bag_draw(roomHandle);
     if (next == current) next.clear();
+    if (!next.empty()) index = 0;
   }
   Value v = Value::Obj();
+  v.set("index", Value::Num(static_cast<double>(index)));
   v.set("trackId", next.empty() ? Value::Null() : Value::Str(next));
   return put(g_bufDemoNext, v);
 }

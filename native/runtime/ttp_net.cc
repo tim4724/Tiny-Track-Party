@@ -78,8 +78,8 @@ const char* const NET_EFFECT_OPS[] = {
     "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
     "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
     "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-    "game-message", "race-abandoned", "track-change", "set-link",
-    "detach-socket", "shutdown"};
+    "game-message", "race-abandoned", "track-change", "clear-pick",
+    "render-lobby-pick", "set-link", "detach-socket", "shutdown"};
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -431,6 +431,16 @@ void dropSeatWalk(RoomFlow* flow, const PeerId& id, Value& effects) {
   effects.push(std::move(e));
 }
 
+// The last controller leaving the lobby drops the pick (session.h's
+// lobby_pick_clears). The shell performs the two ops; this only sequences them,
+// clear before the redraw, so the card the redraw reads is already gone.
+void clearLobbyPickIfEmpty(int roomHandle, RoomFlow* flow, bool inLobby, Value& effects) {
+  const bool hasPick = !json::str_field(ttp_room_pick_value(roomHandle), "trackId").empty();
+  if (!ns::lobby_pick_clears(inLobby, flow->size() == 0, hasPick)) return;
+  pushOp(effects, "clear-pick");
+  pushOp(effects, "render-lobby-pick");
+}
+
 // _expireSeat: free a seat for good — clear its reconnect card and drop the
 // player. The relay closing the room (4001), a resync in the lobby, and the
 // lobby freeing every seat still reserved.
@@ -590,17 +600,40 @@ uint64_t bagNext(uint64_t x) {
   return x;
 }
 
-std::string bagDraw(int roomHandle) {
-  Value bag = ttp_room_bag_value(roomHandle);
-  const Value* seedV = bag.find("seed");
-  if (!seedV || seedV->type != Value::NUM) return "";
-  uint64_t rng = (uint64_t)seedV->num;
+// One step of the bag, computed and NOT stored. `store` is false when the
+// step refused (unseeded, or a refill that found nothing): `bag` is then the
+// input unchanged and `id` is empty. A successful step's `bag` is the object
+// bagDraw used to write, byte for byte — the peeks simulate a run by feeding
+// each step's bag into the next and never calling ttp_room_store_bag.
+struct BagStep {
+  std::string id;
+  Value bag;
+  bool store = false;
+};
+
+std::vector<std::string> readDeck(const Value& bag) {
   std::vector<std::string> deck;
   if (const Value* d = bag.find("deck"))
     if (d->type == Value::ARR)
       for (const Value& e : d->arr) if (e.type == Value::STR) deck.push_back(e.str);
+  return deck;
+}
+
+size_t readCursor(const Value& bag) {
   const Value* curV = bag.find("cursor");
-  size_t cursor = (curV && curV->type == Value::NUM && curV->num >= 0) ? (size_t)curV->num : 0;
+  return (curV && curV->type == Value::NUM && curV->num >= 0) ? (size_t)curV->num : 0;
+}
+
+BagStep stepGlobal(Value bag) {
+  BagStep s;
+  const Value* seedV = bag.find("seed");
+  if (!seedV || seedV->type != Value::NUM) {
+    s.bag = std::move(bag);
+    return s;
+  }
+  uint64_t rng = (uint64_t)seedV->num;
+  std::vector<std::string> deck = readDeck(bag);
+  size_t cursor = readCursor(bag);
   if (cursor >= deck.size()) {
     deck.clear();
     // The refill is the ONE place the deck is populated, so filtering the lock
@@ -622,17 +655,27 @@ std::string bagDraw(int roomHandle) {
     }
     cursor = 0;
   }
-  if (deck.empty()) return "";
-  const std::string out = deck[cursor++];
+  if (deck.empty()) {
+    s.bag = std::move(bag);
+    return s;
+  }
+  s.id = deck[cursor++];
   Value nb = Value::Obj();
   // The advanced rng becomes the next seed; 32 bits keeps the double exact.
   nb.set("seed", Value::Num((double)(bagNext(rng) & 0xFFFFFFFFull)));
   Value dv = Value::Arr();
-  for (const std::string& s : deck) dv.push(Value::Str(s));
+  for (const std::string& id : deck) dv.push(Value::Str(id));
   nb.set("deck", std::move(dv));
   nb.set("cursor", Value::Num((double)cursor));
-  ttp_room_store_bag(roomHandle, std::move(nb));
-  return out;
+  s.bag = std::move(nb);
+  s.store = true;
+  return s;
+}
+
+std::string bagDraw(int roomHandle) {
+  BagStep s = stepGlobal(ttp_room_bag_value(roomHandle));
+  if (s.store) ttp_room_store_bag(roomHandle, std::move(s.bag));
+  return s.id;
 }
 
 // The chooser's UNLOCKED cup ids, first-appearance order — which IS difficulty
@@ -661,10 +704,17 @@ std::vector<std::string> chooserCups() {
 // bagDraw but leaves the deck/cursor alone — the whole-catalogue
 // no-repeat-walk is the global draw's rule, and a four-track cup has no walk
 // worth keeping. Same refusal as bagDraw: an unseeded bag draws nothing.
-std::string bagDrawCup(int roomHandle, const std::string& cupId) {
-  Value bag = ttp_room_bag_value(roomHandle);
+// Rebuilt rather than mutated: deck is copied only when it was an array and
+// cursor only when it was a number, so a cup draw does not invent keys the
+// stored bag did not have. Value::set replaces, which is why the seed can be
+// written on the new object without a stale twin.
+BagStep stepCup(Value bag, const std::string& cupId) {
+  BagStep s;
   const Value* seedV = bag.find("seed");
-  if (!seedV || seedV->type != Value::NUM) return "";
+  if (!seedV || seedV->type != Value::NUM) {
+    s.bag = std::move(bag);
+    return s;
+  }
   std::vector<std::string> pool;
   if (const Value* tracks = g_chooser.find("tracks"))
     if (tracks->type == Value::ARR)
@@ -675,11 +725,12 @@ std::string bagDrawCup(int roomHandle, const std::string& cupId) {
         if (const Value* id = t.find("id"))
           if (id->type == Value::STR) pool.push_back(id->str);
       }
-  if (pool.empty()) return "";
+  if (pool.empty()) {
+    s.bag = std::move(bag);
+    return s;
+  }
   const uint64_t rng = bagNext((uint64_t)seedV->num);
-  const std::string out = pool[rng % pool.size()];
-  // Rebuilt rather than set(): Value::set APPENDS, so re-setting "seed" would
-  // duplicate the key and find() would keep answering the OLD seed.
+  s.id = pool[rng % pool.size()];
   Value nb = Value::Obj();
   nb.set("seed", Value::Num((double)(bagNext(rng) & 0xFFFFFFFFull)));
   if (const Value* d = bag.find("deck"))
@@ -690,8 +741,15 @@ std::string bagDrawCup(int roomHandle, const std::string& cupId) {
     }
   if (const Value* curV = bag.find("cursor"))
     if (curV->type == Value::NUM) nb.set("cursor", Value::Num(curV->num));
-  ttp_room_store_bag(roomHandle, std::move(nb));
-  return out;
+  s.bag = std::move(nb);
+  s.store = true;
+  return s;
+}
+
+std::string bagDrawCup(int roomHandle, const std::string& cupId) {
+  BagStep s = stepCup(ttp_room_bag_value(roomHandle), cupId);
+  if (s.store) ttp_room_store_bag(roomHandle, std::move(s.bag));
+  return s.id;
 }
 
 // The catalogue is in CUPS order, so a cup's first entry is its race 1.
@@ -918,6 +976,7 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
       if (ns::presence_action(ns::room_state_of(flow->stateName())) ==
           ns::PresenceAction::FREE) {
         flow->removePlayer(id);
+        clearLobbyPickIfEmpty(roomHandle, flow, true, effects);
       } else {
         dropSeatWalk(flow, id, effects);
       }
@@ -1356,6 +1415,7 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
       if (flow->isDisconnected(id)) ids.push_back(id);
     }
     for (const PeerId& id : ids) expireSeatWalk(flow, id, effects);
+    clearLobbyPickIfEmpty(roomHandle, flow, true, effects);
   }
   // A fresh race and the lobby both start with no results board. EXECUTED here
   // rather than spelled: the board lives behind the room (ttp_room.h), so
@@ -1371,4 +1431,45 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
 extern "C++" std::string ttp_live_bag_draw(int roomHandle) { return bagDraw(roomHandle); }
 extern "C++" std::string ttp_live_bag_draw_cup(int roomHandle, const std::string& cupId) {
   return bagDrawCup(roomHandle, cupId);
+}
+
+extern "C++" std::vector<std::string> ttp_live_peek_draws(int roomHandle, int n) {
+  std::vector<std::string> out;
+  if (n <= 0) return out;
+  Value bag = ttp_room_bag_value(roomHandle);
+  for (int i = 0; i < n; ++i) {
+    BagStep s = stepGlobal(std::move(bag));
+    if (!s.store) break;
+    out.push_back(s.id);
+    bag = std::move(s.bag);
+  }
+  return out;
+}
+
+extern "C++" std::vector<std::string> ttp_live_peek_cups(int roomHandle,
+                                                        const std::vector<std::string>& cups) {
+  std::vector<std::string> out;
+  Value bag = ttp_room_bag_value(roomHandle);
+  for (const std::string& cup : cups) {
+    BagStep s = stepCup(std::move(bag), cup);
+    if (!s.store) break;
+    out.push_back(s.id);
+    bag = std::move(s.bag);
+  }
+  return out;
+}
+
+extern "C++" std::vector<std::string> ttp_live_peek_walk(int roomHandle) {
+  const Value bag = ttp_room_bag_value(roomHandle);
+  const std::vector<std::string> deck = readDeck(bag);
+  const size_t cursor = readCursor(bag);
+  // Cards still in this shuffle are the next draws, in order. Stop there:
+  // the lobby tour loops this list, and a second refill is a later race.
+  if (cursor < deck.size()) return {deck.begin() + cursor, deck.end()};
+  // Spent (a fresh {seed} bag is this case: cursor 0, no deck). One refill's
+  // whole deck is the walk — the step draws its first card, so the deck
+  // still holds that card at index 0.
+  BagStep s = stepGlobal(bag);
+  if (!s.store) return {};
+  return readDeck(s.bag);
 }

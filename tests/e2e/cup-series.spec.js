@@ -261,11 +261,10 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await alice.locator('.mode-opt', { hasText: 'Endless Run' }).click();
   await page.waitForFunction(() => window.__net.mode === 'random' && window.__net.randomRaces === 0, null, { timeout: 10000 });
   const first = await page.evaluate(() => window.__net.trackId);
-  // An endless card promises nothing at all: one grey box carrying ∞ — no
-  // track layout, no boxes it can't count, no extra badge.
-  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(1);
-  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveText('∞');
+  // An endless card has one undrawn chip (∞). The picture cycles the bag;
+  // the card does not name the draws, and it does not grow a strip.
   await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
+  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(1);
 
   await startRace(alice, []);
   await waitForRacing(page);
@@ -300,7 +299,7 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
 // and it ENDS. It is one tile of the picker's grid, beside the tour and the
 // endless run — and EVERY random-family tap deals fresh track(s), a re-tap of
 // the same tile included.
-test('every random tap deals a fresh draw; the fixed card stays secret', async ({ page, browser }) => {
+test('every random tap deals a fresh draw, and the card shows that order', async ({ page, browser }) => {
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
@@ -312,9 +311,10 @@ test('every random tap deals a fresh draw; the fixed card stays secret', async (
   const drawn = await trackNow();
   expect(drawn).not.toBe(null);
   await expect(page.locator('.cup-races')).toHaveText('4 races');
-  // The card spoils nothing — four grey "?" boxes, the drawn race included.
-  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
+  // The card stays four grey "?" chips. The picture cycles the draws;
+  // race 1 is still what Start launches.
   await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
+  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
 
   // A change of run deals a fresh draw (the bag never repeats back-to-back).
   await alice.locator('.mode-opt', { hasText: 'Endless Run' }).click();
@@ -343,8 +343,8 @@ test('every random tap deals a fresh draw; the fixed card stays secret', async (
 });
 
 // The World Tour: one drawn track from every cup, raced in the cups' own
-// (difficulty) order — beach first, so race 1 is a beach draw. The card
-// spoils none of it: five per-cup "?" boxes, the drawn race included.
+// (difficulty) order — beach first, so race 1 is a beach draw. The card shows
+// those circuits, and the locked Playroom stays a padlock.
 test('World Tour draws one track per cup and races them in cup order', async ({ page, browser }) => {
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
@@ -365,14 +365,12 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const first = await page.evaluate(() => window.__net.trackId);
   expect(BEACH).toContain(first); // race 1 is drawn from the FIRST cup
 
-  // The race card: the WHOLE ladder — four cup-tinted "?" boxes plus the
-  // locked Playroom's padlock teaser, nothing spoiled (the drawn beach race
-  // included). A fresh couch has the Playroom locked, so the teaser counts no
-  // race; it becomes a fifth "?" with the unlock (the progression ctests own
-  // that rule).
+  // The race card: the WHOLE ladder — four undrawn chips in cup order plus
+  // the locked Playroom's padlock. A fresh couch has the Playroom locked, so
+  // the teaser counts no race; the progression ctests own the unlock.
+  await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
   await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
   await expect(page.locator('.cup-maps .cup-maps__tile--locked')).toHaveCount(1);
-  await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
   await expect(page.locator('.cup-races')).toHaveText('4 races');
   await expect(page.locator('.cup-sticker')).toHaveText('World Tour');
 

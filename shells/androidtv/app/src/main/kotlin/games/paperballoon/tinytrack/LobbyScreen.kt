@@ -506,7 +506,9 @@ private fun MapGrid(slot: GameState.CupSlot, cols: Int) {
     ) {
         for (row in slot.maps.chunked(cols)) {
             Row(horizontalArrangement = Arrangement.spacedBy(MAP_GAP)) {
-                for (m in row) Box(Modifier.weight(1f)) { MapTile(m, tint) }
+                for (m in row) Box(Modifier.weight(1f)) {
+                    MapTile(m, tint)
+                }
                 // Pad the last row so a ragged tail keeps the grid's column width
                 // rather than stretching its tiles across it.
                 repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }

@@ -105,6 +105,19 @@ export class LobbyDemo {
     this.scene.updateCar(id, { colorIndex, carIndex, name, player });
   }
 
+  // The leader's display lap. 0 while the attract race is down, including the
+  // gap between stop() and the next start, so a poll in that gap does not
+  // advance the card again.
+  leaderLap() {
+    if (!this.active || !this.engine) return 0;
+    const snap = this.engine.getSnapshot();
+    let lap = 0;
+    for (const c of (snap && snap.cars) || []) {
+      if (typeof c.lap === 'number' && c.lap > lap) lap = c.lap;
+    }
+    return lap;
+  }
+
   // One frame-loop tick (driven by Stage.onFrame; dt in seconds). A no-op until
   // start() has run, so the display can call it unconditionally each frame.
   // No "done yet?" poll: with ENDLESS_LAPS the race can't end, so stepping is

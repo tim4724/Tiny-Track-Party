@@ -85,19 +85,18 @@ function buildSeat(p) {
 }
 
 // Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
-// live lobby and the gallery preview for the same no-drift reason, both through
-// renderLobbyPick below. Two states:
+// live lobby (renderCupCard) and the gallery preview (renderLobbyPick). Two states:
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
 //   picked   : { name, races?, maps?, cupId? }
 //              → the race card: red cup sticker over the picked circuits as mini
 //              schematics (maps = [{ svg?, n?, q?, glyph?, cup?, locked? }] — 4
 //              numbered minis for a cup, 1 for an exact track, the tour's five
-//              per-cup chips, a random run's "?" boxes; `n` badges a chip with
-//              its running order; cupId biome-tints their fields exactly like
-//              the phone picker, a chip's own `cup` outranks it; a q chip shows
+//              per-cup chips, a random run's boxes; `n` badges a chip with its
+//              running order; cupId biome-tints their fields exactly like the
+//              phone picker, a chip's own `cup` outranks it; a q chip shows
 //              `glyph` or "?"; a locked chip is the tour's teaser for a locked
-//              cup — padlock on sunken paper, counted by no races pill), and
-//              the races pill
+//              cup — padlock on sunken paper, counted by no races pill). The
+//              random and the tour leave them undrawn. And the races pill.
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
@@ -166,19 +165,32 @@ export function renderCupSlot(slotEl, state) {
 // `trackCatalog` supplies the baked mini-maps by id.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
 const NAME_COPY = { random: 'Random', tour: 'World Tour' };
-// The card carries no stars: the Cups shelf right under it shows every cup's.
-export function renderLobbyPick(slotEl, pick, trackCatalog) {
-  if (!slotEl) return;
+
+function paintCupCard(slotEl, m, trackCatalog) {
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
-  const m = cupSlot(pick);
   renderCupSlot(slotEl, m && {
     name: NAME_COPY[m.nameKey] || m.name || '?',
     races: RACES_COPY[m.racesKey](m.raceCount),
-    // An undrawn chip is a "?" box; endless random's lone one carries ∞.
-    maps: m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId && !x.locked,
-      glyph: m.racesKey === 'endless' ? '∞' : undefined, n: x.n, cup: x.cup, locked: x.locked })),
+    // An undrawn chip is a "?" box; endless random's lone undrawn one carries ∞.
+    maps: m.maps.map((x) => ({
+      svg: x.trackId ? svgOf(x.trackId) : null,
+      q: !x.trackId && !x.locked,
+      glyph: m.racesKey === 'endless' ? '∞' : undefined,
+      n: x.n, cup: x.cup, locked: x.locked, trackId: x.trackId
+    })),
     cupId: m.cupId   // biome-tints the mini fields, like the phone picker
   });
+}
+// The live lobby's card, already resolved (`cupSlotRoom`).
+export function renderCupCard(slotEl, slot, trackCatalog) {
+  if (!slotEl) return;
+  paintCupCard(slotEl, slot, trackCatalog);
+}
+// The gallery's card. Random and the tour stay undrawn here too. The card
+// carries no stars: the Cups shelf shows every cup's.
+export function renderLobbyPick(slotEl, pick, trackCatalog) {
+  if (!slotEl) return;
+  paintCupCard(slotEl, cupSlot(pick), trackCatalog);
 }
 
 // The "Cups" shelf at the bottom of the lobby's race rail — one row per cup

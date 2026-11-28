@@ -252,6 +252,14 @@ TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
  *                                            from/data — nothing re-crosses)
  *   race-abandoned                           the onRaceAbandoned callback
  *   track-change {trackId}                   the onTrackChange callback
+ *   clear-pick                               drop the stored pick. Same op the
+ *                                            race walk's endParty emits; the
+ *                                            net walk emits it when
+ *                                            lobby_pick_clears (the last
+ *                                            controller left the lobby).
+ *   render-lobby-pick                        re-read the race card. Follows
+ *                                            clear-pick, so the card is gone
+ *                                            and the catalogue tour resumes.
  *   set-link {state,attempt,max,button}      the display's OWN link, for the
  *                                            connection overlay: "connected"
  *                                            (no overlay) | "reconnecting"
