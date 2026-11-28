@@ -102,6 +102,7 @@ struct CarShadowTuning {
 #include <math/vec3.h>
 #include <utils/Entity.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -575,9 +576,10 @@ private:
         // (blobs, streaks, rockets, bursts) leave the scene when they go idle
         // rather than parking underground — see setMeshInScene.
         bool inScene = false;
-        // SPATIAL chunk ranges, in triangles, from tileMajor(): buildMesh
-        // draws each range as its own renderable with its own box, instead of
-        // cutting `chunkTris` off the triangle ORDER. Empty = by order.
+        // Chunk ranges, in triangles: SPATIAL ones from tileMajor(), or the
+        // road's ring chunks (buildRoadMesh). buildMesh draws each range as
+        // its own renderable with its own box, instead of cutting `chunkTris`
+        // off the triangle ORDER. Empty = by order.
         std::vector<uint32_t> tileStarts;
         // The vertex layout buildMesh chose: slot 0 is the shared Vertex, then
         // qtangents (lit), UV0 and the baked CUSTOM0, each in a slot of its own
@@ -1805,8 +1807,9 @@ private:
     uint32_t mUndrawnFrames = 0;
     static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
     // One mip level refiltered and uploaded under rects in level l-1 texels,
-    // which come back in level l texels.
-    void filterSkidLevel(int l, std::vector<SkidRect>& rects);
+    // which come back in level l texels; filtered under `inked` alone when given.
+    void filterSkidLevel(int l, std::vector<SkidRect>& rects,
+            std::vector<SkidRect>* inked = nullptr);
     // Mip levels refreshed on every stamping frame; the rest ride the
     // throttled deep pass (refreshSkidMips has the two cadences).
     static constexpr int kSkidNearLevels = 3;
@@ -1945,14 +1948,19 @@ private:
         uint32_t rgb, seed;
         int32_t car;
     };
-    static constexpr uint32_t kSandPuffs = 512, kSandPuffSegs = 8;
-    static constexpr uint32_t kSandPuffVerts = 1 + 2 * kSandPuffSegs;  // centre, mid ring, rim
+    // A puff's sides, and the pool by detail tier: { full, lite }. Lite draws
+    // from half the pool and none from a car far from every camera
+    // (renderSandSpray).
+    static constexpr uint32_t kSandPuffSegs = 6, kSandPuffs[2] = { 512, 256 };
+    static constexpr uint32_t kSandPuffVerts = 1 + 2 * kSandPuffSegs;   // centre, mid ring, rim
     static constexpr uint32_t kSandPuffIdx = kSandPuffSegs * 9;
     utils::Entity mSandEntity;
     filament::IndexBuffer* mSandIb = nullptr;
     std::vector<filament::VertexBuffer*> mSandVbRing;
     uint32_t mSandRingAt = 0;
+    bool mSandLite = false;            // the tier the buffers were built for (buildSandDraws)
     bool mSandDrawn = false;           // the draw's current geometry holds anything
+    uint32_t mSandTurn = 0;            // lite: the car that raises its dust first this frame
     filament::math::float3 mSandEnc{};  // the sand's colour, encoded albedo: the dust's starting point
     std::vector<SandPuff> mSandPuffs;
     std::vector<float> mSandDue;       // per rear tyre: puffs owed
@@ -3018,7 +3026,7 @@ public:
         kDustBite,      // more dust while the sand takes speed off
         kDustKnobs
     };
-    static constexpr float kSandDustAuthored[kDustKnobs] = {
+    static constexpr std::array<float, kDustKnobs> kSandDustAuthored = {
         60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.85f, 0.8f, 0.3f, 0.04f, 3.0f, 0.5f, 0.7f, 0.8f };
     static float sandDustAuthored(int knob) {
         return knob >= 0 && knob < kDustKnobs ? kSandDustAuthored[knob] : 0.0f;
@@ -3035,7 +3043,7 @@ public:
     // spring over a strip's step (mStripSpring), set live with no rebuild.
     enum { kStripStep = kDustKnobs, kStripRutInk, kStripDust, kStripSlope, kStripSink,
         kStripColor, kStripRut, kStripEdge, kStripDustMul,
-        kStripSpringK = kStripDustMul + 7, kStripSpringD, kStripKnobsEnd };
+        kStripSpringK = kStripDustMul + ttp::rt::kRoadDustMuls, kStripSpringD, kStripKnobsEnd };
 private:
     float mStripDebug[kStripKnobsEnd - kDustKnobs] = {};
     bool mStripSet[kStripKnobsEnd - kDustKnobs] = {};
@@ -3044,8 +3052,7 @@ private:
     // Bouncy on purpose (about 0.4 of critical): the body rocks a couple
     // of times after a wheel drops onto a strip or climbs off it.
     float mStripSpring[2] = { 420.0f, 16.0f };
-    float mSandDust[kDustKnobs] = {
-        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.85f, 0.8f, 0.3f, 0.04f, 3.0f, 0.5f, 0.7f, 0.8f };
+    std::array<float, kDustKnobs> mSandDust = kSandDustAuthored;
     // The track's own dust on top of the knobs (theme.road.dust: its rate, life,
     // start, end, rise, whiteness and opacity as multiples), so each cup's cloud
     // comes off one table. buildSandDraws sets it.

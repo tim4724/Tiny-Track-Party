@@ -1672,19 +1672,6 @@ const char* ttp_track_build_json(const char* descriptorJson, int laps, uint32_t 
   return out.c_str();
 }
 
-// The built track's samples as a Centerline, for the interpolating queries.
-static Centerline centerline_of(const RaceTrack& rt) {
-  std::vector<Sample> cs;
-  cs.reserve(rt.samples.size());
-  for (const OutSample& s : rt.samples) {
-    Sample c;
-    c.pos = s.pos; c.tangent = s.tangent; c.up = s.up; c.lateral = s.lateral;
-    c.width = s.width; c.sandL = s.sandL; c.sandR = s.sandR; c.s = s.s;
-    cs.push_back(c);
-  }
-  return Centerline(std::move(cs), rt.length);
-}
-
 // Resolve an "id or descriptor" argument into a built track and its Centerline,
 // MEMOIZED on the argument string. A leading '{' is the only thing that
 // distinguishes the two, and no track id can start with one.
@@ -1735,7 +1722,7 @@ static const TrackCache* track_by_id_or_descriptor(const char* arg) {
     rt = build_race_track(*def, 3, 1u);
   }
   cache.rt = std::move(rt);
-  cache.cl = std::make_unique<Centerline>(centerline_of(cache.rt));
+  cache.cl = make_centerline(cache.rt);
   key = arg;
   valid = true;
   return &cache;

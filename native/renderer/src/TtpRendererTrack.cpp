@@ -2023,7 +2023,22 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // rest, so it costs a frame nothing.
     constexpr int kUnderside = kPts - 1;
     std::vector<uint32_t> underside;
+    // A step strip stands zero tall wherever its side has no step (a cup
+    // without one, a track without a strip, a causeway): from ring i to the
+    // next it is then a quad of no area, and neither ribbon draws it. Its
+    // corners are laid all the same, so every laid slot keeps its place.
+    const auto noFace = [&](uint32_t i, int s) {
+        if (STRIPS[s].kind != K_STEP) return false;
+        const int side = s == kStripStepL ? -1 : 1;
+        return tb.stepOf(frames[i], side) == 0.0f && tb.stepOf(frames[(i + 1) % N], side) == 0.0f;
+    };
+    // The road is drawn in chunks of this many rings (below, at buildMesh).
+    // A ring's triangle count varies with noFace, so each chunk's first
+    // triangle is noted as its first ring is laid.
+    constexpr uint32_t kRoadChunkRings = 26;
+    mRoad.tileStarts.clear();
     for (uint32_t i = 0; i < N; i++) {
+        if (i % kRoadChunkRings == 0) mRoad.tileStarts.push_back((uint32_t) (mRoad.idx.size() / 3));
         const uint32_t ni = (i + 1) % N;
         const int game = piece[i];
         float3 colL = street[i] > 0 ? KERB_STREET : game >= 0 ? GAME[game][1] : bandCol(kerbL, i);
@@ -2140,6 +2155,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             // by. Keep the order: same winding, same provoking vertex per
             // triangle, so the rasterizer sees exactly what the soup drew.
             if (s >= kFine) continue;   // a far top: the far ribbon's alone
+            if (noFace(i, s)) continue;
             const uint32_t quad[6] = { corner[0], corner[1], corner[2],
                                        corner[0], corner[2], corner[3] };
             mRoad.idx.insert(mRoad.idx.end(), quad, quad + 6);
@@ -2196,10 +2212,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // 26 rings 14.2-14.5, 13 rings 14.7 and +0.7 ms of frame thread (every
     // chunk is a renderable and a decal fold). Draws are cheap under Vulkan;
     // the fold is not free.
-    constexpr uint32_t kRoadChunkRings = 26;
-    constexpr uint32_t trisPerRing = kFine * 2;
-    constexpr uint32_t kRoadChunkTris = kRoadChunkRings * trisPerRing;
-    if (!buildMesh(mRoad, true, roadInstance(), 4, kRoadChunkTris)) return false;
+    if (!buildMesh(mRoad, true, roadInstance(), 4)) return false;   // by mRoad.tileStarts
 
     // THE FAR RIBBON: a second index buffer over the SAME vertices, per chunk.
     // Along each strip, a run of rings painted one colour is drawn as ONE quad
@@ -2251,18 +2264,34 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const uint32_t off = (uint32_t) mRoadFarIdx.size();
             // Each strip's run boundaries first: the rings where its runs
             // start, plus the chunk's end.
-            for (int f = 0; f < kFarStrips; f++) {
+            // The step strips go last. Where one has no face (noFace) it
+            // draws nothing and the strips either side of it meet each
+            // other, so there its runs end wherever either of theirs does:
+            // each then takes the other's rings as its extra vertices, as if
+            // the step were not between them. A faced run stops at a bare
+            // stretch, so no run is half of each.
+            for (int pass = 0; pass < 2; pass++) for (int f = 0; f < kFarStrips; f++) {
                 const int s = kFar[f];
                 const Strip& st = STRIPS[s];
+                if ((st.kind == K_STEP) != (pass == 1)) continue;
+                const std::vector<uint32_t>& ba = bounds[(f + kFarStrips - 1) % kFarStrips];
+                const std::vector<uint32_t>& bb = bounds[(f + 1) % kFarStrips];
+                const auto besideEnds = [&](uint32_t r) {
+                    return std::binary_search(ba.begin(), ba.end(), r) || std::binary_search(bb.begin(), bb.end(), r);
+                };
                 bounds[f].clear();
                 uint32_t i = r0;
                 while (i < r1) {
                     bounds[f].push_back(i);
                     uint32_t j = i;
-                    while (j + 1 < r1 && j + 1 - i < kDeckLodSpan
-                            && quadKey[(size_t) (j + 1) * kLaid + s] == quadKey[(size_t) i * kLaid + s]
-                            && chordOk(i, j + 2, st)) {
-                        j++;
+                    if (noFace(i, s)) {
+                        while (j + 1 < r1 && noFace(j + 1, s) && !besideEnds(j + 1)) j++;
+                    } else {
+                        while (j + 1 < r1 && j + 1 - i < kDeckLodSpan && !noFace(j + 1, s)
+                                && quadKey[(size_t) (j + 1) * kLaid + s] == quadKey[(size_t) i * kLaid + s]
+                                && chordOk(i, j + 2, st)) {
+                            j++;
+                        }
                     }
                     i = j + 1;
                 }
@@ -2284,6 +2313,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 const std::vector<uint32_t>& own = bounds[f];
                 for (size_t k = 0; k + 1 < own.size(); k++) {
                     const uint32_t i = own[k], j = own[k + 1];
+                    if (noFace(i, s)) continue;
                     ra.assign(1, i);
                     rb.assign(1, i);
                     for (uint32_t r : ba) if (r > i && r < j) ra.push_back(r);
@@ -2316,24 +2346,24 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 mRoadFarIdx.data(), mRoadFarIdx.size() * sizeof(uint32_t), nullptr));
     }
 
-    // Per-chunk material instances. Each ring contributes kFine strips of 2
-    // triangles, so a chunk's triangle range maps straight back to an arclength
-    // range, and uploadDeckDecals can hand each chunk only what overlaps it.
+    // Per-chunk material instances. Chunk k is rings k * kRoadChunkRings on,
+    // so it maps straight back to an arclength range, and uploadDeckDecals
+    // can hand each chunk only what overlaps it.
     mRoadChunks.clear();
     if (mRoadMaterial) {
         auto& rcm = mEngine->getRenderableManager();
         const size_t triCount = mRoad.idx.size() / 3;
-        const size_t perChunk = std::min<size_t>(kRoadChunkTris, triCount);
-        size_t k = 0;
-        for (size_t t0 = 0; t0 < triCount; t0 += perChunk, k++) {
-            const size_t n = std::min(perChunk, triCount - t0);
+        for (size_t k = 0; k < mRoad.tileStarts.size(); k++) {
+            const size_t t0 = mRoad.tileStarts[k];
+            const size_t n = (k + 1 < mRoad.tileStarts.size() ? mRoad.tileStarts[k + 1] : triCount) - t0;
+            const uint32_t ring0 = (uint32_t) k * kRoadChunkRings, ringEnd = std::min(N, ring0 + kRoadChunkRings);
             const utils::Entity e = (k == 0) ? mRoad.entity
                     : (k - 1 < mRoad.chunks.size() ? mRoad.chunks[k - 1] : utils::Entity{});
             if (e.isNull()) break;
             auto ri = rcm.getInstance(e);
             if (!ri) continue;
-            const float sMin = (float) (t0 / trisPerRing) / N * L;
-            const float sMax = (float) ((t0 + n) / trisPerRing + 1) / N * L;
+            const float sMin = (float) ring0 / N * L;
+            const float sMax = (float) (ringEnd + 1) / N * L;
             RoadChunk chunk{};
             if (k < farRange.size() && farRange[k].second) {
                 LodRange r;
@@ -2346,8 +2376,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 r.farOff = farRange[k].first;
                 r.farCnt = farRange[k].second;
                 r.err = kDeckLodTol;
-                r.ring0 = (int) (t0 / trisPerRing);
-                r.ring1 = (int) ((t0 + n) / trisPerRing) + 1;
+                r.ring0 = (int) ring0;
+                r.ring1 = (int) ringEnd + 1;
                 r.lo = float3{ 1e30f };
                 r.hi = float3{ -1e30f };
                 for (size_t q = t0 * 3; q < (t0 + n) * 3; q++) {
@@ -3103,11 +3133,11 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     if (const float* v = knob(kStripColor)) tb.pal[7] = (uint32_t) *v;
     if (const float* v = knob(kStripRut)) tb.sandRut = (uint32_t) *v;
     if (const float* v = knob(kStripEdge)) tb.sandEdge = (uint32_t) *v;
-    for (int k = 0; k < 7; k++) if (const float* v = knob(kStripDustMul + k)) tb.dustMul[k] = *v;
+    for (int k = 0; k < ttp::rt::kRoadDustMuls; k++) if (const float* v = knob(kStripDustMul + k)) tb.dustMul[k] = *v;
     const float built[] = { tb.sandStep, tb.sandRutInk, tb.sandDust ? 1.0f : 0.0f, tb.sandSlope, tb.sandSink,
         (float) tb.pal[7], (float) tb.sandRut, (float) tb.sandEdge };
     std::copy(std::begin(built), std::end(built), mStripBuilt);
-    std::copy(tb.dustMul, tb.dustMul + 7, mStripBuilt + (kStripDustMul - kDustKnobs));
+    std::copy(std::begin(tb.dustMul), std::end(tb.dustMul), mStripBuilt + (kStripDustMul - kDustKnobs));
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     // THE WORLD KEEPS ITS DISTANCE FROM THE KERB. A set piece and a free

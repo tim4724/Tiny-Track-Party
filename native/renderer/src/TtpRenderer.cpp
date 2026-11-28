@@ -1229,7 +1229,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.sandSink = th.road.sandSink;
     out.sandEdge = th.road.sandEdge;
     out.sandSlope = th.road.sandSlope;
-    for (int k = 0; k < 7; k++) out.dustMul[k] = th.road.dust[k];
+    for (int k = 0; k < ttp::rt::kRoadDustMuls; k++) out.dustMul[k] = th.road.dust[k];
     out.kerbW = th.road.kerbW;
     out.kerbH = th.road.kerbH;
     out.kerbBank = th.road.kerbBank;

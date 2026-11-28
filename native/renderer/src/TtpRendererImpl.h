@@ -345,7 +345,7 @@ struct TtpRenderer::TrackBin {
     bool sandDust = true;        // theme.road.sandDust
     float sandRutInk = 2.2f;     // theme.road.rutInk
     float sandStep = 0;          // theme.road.sandStep (stepOf)
-    float dustMul[7] = { 1, 1, 1, 1, 1, 1, 1 };   // theme.road.dust
+    float dustMul[ttp::rt::kRoadDustMuls] = { 1, 1, 1, 1, 1, 1, 1 };   // theme.road.dust
     float sandSlope = 0;         // theme.road.sandSlope: the strip's outer edge over its inner
     uint32_t sandEdge = 0;      // theme.road.sandEdge: the band at the road's edge (0 = the edge line)
     float sandSink = 0;         // theme.road.sandSink: how far a tyre sinks into it (deckPoint)

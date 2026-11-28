@@ -99,6 +99,8 @@ constexpr float kGallerySetFoot = 6.5f;
 // existed. A biome only overrides what it changes, so these literals are what
 // the Backyard cup still renders with — do not drift them.
 
+inline constexpr int kRoadDustMuls = 7;   // RoadPalette::dust
+
 struct RoadPalette {
   uint32_t asphalt = 0x5a6078;   // Kenney blue-grey plastic deck
   uint32_t line = 0xc4c4d9;      // painted edge-line / dash
@@ -122,7 +124,7 @@ struct RoadPalette {
   // opacity, as multiples. A
   // whiteness of 2 is off-white, 0 the strip's own colour, under 0 darker, to
   // black at -2.
-  float dust[7] = { 1, 1, 1, 1, 1, 1, 1 };
+  float dust[kRoadDustMuls] = { 1, 1, 1, 1, 1, 1, 1 };
   uint32_t sandEdge = 0;       // the damp or packed band between asphalt and strip; 0 keeps the edge line
   float sandSink = 0;          // world units a tyre sinks into it (loose snow); drawn only
   float sandStep = 0;        // world units the strip stands over (+) or under (-) the asphalt; drawn only

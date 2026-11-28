@@ -384,6 +384,14 @@ opacity so lines do not ghost through it.
   top-left-rule into `mSkidPix` (additive, saturating) and the dirty rects upload
   on EVERY frame that commits a stamp, before `beginFrame`. A throttle lagged the
   trail's head behind the tyre and bought nothing (`renderSkids`).
+- **A frame's stamps upload as about ONE box, and only the copy may be priced
+  by it.** The boxes charge an upload per event, so the dirty rects merge
+  (`kUploadEventTexels`) into a box round every car that stamped: many times
+  the texels inked, and wider the further the field strings out along the lap.
+  CPU work over the layer runs under the stamps' own rects from before the
+  merge, as the near levels' filter does (`uploadSkidRects`); filtered over
+  the box, it grew with the field's spread and changed no texel (the frame
+  map, 2026-11-28).
 - **The ribbon is anchored at the wheel's contact patch, with NO lead along the
   body axis.** Permanent additive ink cannot be drawn ahead and rewritten, so the
   head lags by up to `SKID_SEG_MIN`, under the tyre. A body-axis lead lands the
@@ -1213,6 +1221,10 @@ its code:
 - **A coarser sky dome** (16 rings, 24 spokes): never culled, so every cell
   paid all of the full one; the gradient between rings strays a few code values.
 - **Octagonal ground-shadow discs**: the rim fades to nothing.
+- **A lighter strip dust** (`kSandPuffs`, `renderSandSpray`): half the
+  pool, the cars taking turns to raise first so a full pool starves none,
+  and none from a car far from every camera. Full's pool and reach are the
+  user's hand tuning: change lite's and leave them.
 - **Unbanded ground rock** (`setRockParams`): `vground.mat`'s strata are off,
   so a rock facet is the plain `rockA`, still shaded by its own normal. The
   banding is the expensive part of a rock pixel on the box, and a canyon's

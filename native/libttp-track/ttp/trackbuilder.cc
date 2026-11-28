@@ -149,15 +149,29 @@ SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>&
   // the other, or all of it beside a strand off the ground (a loop's mouth, a
   // ramp), which carries no strip but still has its asphalt and kerb there. A
   // strand passing over or under (a bridge) is another level.
+  // Each sample against every other is the ring squared, so a sample further
+  // off than any pair reaches (`far`, with a unit to spare) takes with it the
+  // samples after it that the road cannot have brought back within reach: it
+  // runs at most `stride` a sample. Only pairs out of reach are passed over,
+  // which leaves every share what the whole walk makes it. (A ring all at one
+  // point has a `stride` of 0 and no pair that far, so nothing divides by it.)
+  double widest = 0, stride = 0;
+  for (int i = 0; i < n; i++) widest = js_max(widest, widths[i]);
+  for (int i = 1; i < n; i++) stride = js_max(stride, cum[i] - cum[i - 1]);
+  const double far = widest + 2 * full + STRAND_GAP + 1;
   for (int i = 0; i < n; i++) {
     if (raised[i]) continue;
     const double hx = -tangents[i].z, hz = tangents[i].x, hl = ttp_fd_hypot(hx, hz);
     if (!(hl > 0)) continue;
     for (int j = 0; j < n; j++) {
+      const double dx = worldPts[j].x - worldPts[i].x, dz = worldPts[j].z - worldPts[i].z;
+      if (dx * dx + dz * dz >= far * far) {
+        j += (int) js_min((double) n, (std::sqrt(dx * dx + dz * dz) - far) / stride);
+        continue;
+      }
       double ds = std::fabs(cum[j] - cum[i]);
       if (js_min(ds, ring - ds) < STRAND_ARC) continue;
       if (std::fabs(worldPts[j].y - worldPts[i].y) > STRAND_LEVEL) continue;
-      const double dx = worldPts[j].x - worldPts[i].x, dz = worldPts[j].z - worldPts[i].z;
       const double reach = widths[i] / 2 + widths[j] / 2 + 2 * full + STRAND_GAP;
       if (dx * dx + dz * dz >= reach * reach) continue;
       const double d = ttp_fd_hypot(dx, dz);
@@ -227,6 +241,21 @@ SandSides sandWidths(const std::vector<Vec3>& worldPts, const std::vector<Vec3>&
   return out;
 }
 
+// edge_fold (trackbuilder.h) between the frames at its window's two ends,
+// along the tangent at its middle.
+EdgeFold foldBetween(const Frame& a, const Frame& b, const Vec3& along, double past) {
+  const auto at = [](const Frame& g, double lat) { return g.pos.clone().addScaledVector(g.lateral, lat); };
+  const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(along);
+  EdgeFold fold = { { 0.0, 0.0 } };
+  if (!(centre > 1e-9)) return fold;
+  for (int side = 0; side < 2; side++) {
+    const double sg = side ? 1.0 : -1.0;
+    const double edge = at(b, sg * (b.width / 2 + past)).sub(at(a, sg * (a.width / 2 + past))).dot(along);
+    fold.side[side] = 1 - edge / centre;
+  }
+  return fold;
+}
+
 // The ribbon as drawn, before it is final: where the kerb's far edge (the
 // widest kerb any biome draws, KERB_MAX) would fall behind the asphalt's centre
 // line by more than KERB_FOLD_MAX of its advance over KERB_FOLD_WINDOW, or the
@@ -252,18 +281,27 @@ bool narrowFolds(const std::vector<Vec3>& pts, const std::vector<Vec3>& tangents
   }
   const double length = s + pts[n - 1].distanceTo(pts[0]);
   Centerline cl(cs, length);
-  // The kerb's far edge over a bend, and the driven surface's edge at any scale.
-  struct Rule { double window, past, limit; };
-  const Rule rules[] = { { KERB_FOLD_WINDOW, KERB_MAX, KERB_FOLD_MAX }, { SURFACE_FOLD_WINDOW, 0.0, SURFACE_FOLD_MAX } };
+  // A fold has nothing to take from where neither sample about it carries a
+  // strip on either side, so it is not measured there.
+  const auto bare = [&](int i) { return !(sandAt.at[0][i] > 0) && !(sandAt.at[1][i] > 0); };
   bool any = false;
-  for (const Rule& rule : rules)
+  int lo = 0;   // the last sample at or before t
   for (double t = 0; t < length; t += FOLD_STEP) {
-    const EdgeFold folds = edge_fold(cl, t, rule.window, rule.past);
+    while (lo < n - 1 && cs[lo + 1].s <= t) lo++;
+    if (bare(lo) && bare((lo + 1) % n)) continue;
+    // Both windows' ends about the one middle, in the order they lie along
+    // the road: the centre line's lookup walks on from where the last landed.
+    const Frame ka = cl.sampleAt(t - KERB_FOLD_WINDOW / 2), sa = cl.sampleAt(t - SURFACE_FOLD_WINDOW / 2),
+                f = cl.sampleAt(t),
+                sb = cl.sampleAt(t + SURFACE_FOLD_WINDOW / 2), kb = cl.sampleAt(t + KERB_FOLD_WINDOW / 2);
+    // The kerb's far edge over a bend, and the driven surface's edge at any scale.
+    const struct { EdgeFold folds; double past, limit; } rules[] = {
+      { foldBetween(ka, kb, f.tangent, KERB_MAX), KERB_MAX, KERB_FOLD_MAX },
+      { foldBetween(sa, sb, f.tangent, 0.0), 0.0, SURFACE_FOLD_MAX } };
+    for (const auto& rule : rules)
     for (int side = 0; side < 2; side++) {
-      const double fold = folds.side[side];
+      const double fold = rule.folds.side[side];
       if (fold <= rule.limit) continue;
-      int lo = 0, hi = n - 1;   // the last sample at or before t
-      while (lo < hi) { const int m = (lo + hi + 1) / 2; if (cs[m].s <= t) lo = m; else hi = m - 1; }
       for (int k = lo; k <= lo + 1; k++) {
         const int i = k % n;
         const double strip = sandAt.at[side][i];
@@ -884,17 +922,8 @@ void resolveFurniture(RaceTrack& b, const TrackDef& def) {
 }  // namespace
 
 EdgeFold edge_fold(Centerline& cl, double s, double window, double past) {
-  const auto at = [](const Frame& g, double lat) { return g.pos.clone().addScaledVector(g.lateral, lat); };
-  const Frame a = cl.sampleAt(s - window / 2), b = cl.sampleAt(s + window / 2), f = cl.sampleAt(s);
-  const double centre = at(b, b.asphaltMid()).sub(at(a, a.asphaltMid())).dot(f.tangent);
-  EdgeFold fold = { { 0.0, 0.0 } };
-  if (!(centre > 1e-9)) return fold;
-  for (int side = 0; side < 2; side++) {
-    const double sg = side ? 1.0 : -1.0;
-    const double edge = at(b, sg * (b.width / 2 + past)).sub(at(a, sg * (a.width / 2 + past))).dot(f.tangent);
-    fold.side[side] = 1 - edge / centre;
-  }
-  return fold;
+  const Frame a = cl.sampleAt(s - window / 2), f = cl.sampleAt(s), b = cl.sampleAt(s + window / 2);
+  return foldBetween(a, b, f.tangent, past);
 }
 
 PostHit post_at_sample(const OutSample& sm, const Post& post) {

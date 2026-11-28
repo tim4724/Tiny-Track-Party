@@ -3,8 +3,8 @@
 // view, each holding a lane of its own (the strip showcase, ttp_runtime.cc), and
 // the strip tuner's controls under it (display/stripTuner.js). The page's hash
 // carries the cars, where they drive (as monster trucks or not), the dust's
-// spread, the camera, the hidden cups and every changed value, so a reload
-// keeps the session.
+// spread, the camera, the detail tier, the hidden cups and every changed
+// value, so a reload keeps the session.
 import { BIOMES, stripControls, stripQuery } from '/display/stripTuner.js';
 
 const saved = new URLSearchParams(location.hash.slice(1));
@@ -18,6 +18,9 @@ let cam = saved.get('cam') || 'chase';
 // knob, the same in every biome); empty keeps the authored value.
 let spread = saved.get('spread') || '';
 const DRIFT = 7;   // its index in ttp_display_debug_sand_dust
+// The detail tier the displays draw (?detail=): the lite tier's dust is its
+// own (TtpRenderer.h, kSandPuffs). Empty keeps the tier they draw unasked.
+let detail = saved.get('detail') || '';
 // Snow's and Playroom's strips throw no dust (theme.cc), so they start hidden;
 // the tuner's dust switch turns theirs on.
 const hidden = new Set(saved.has('hide') ? saved.get('hide').split(',').filter(Boolean) : ['snow', 'playroom']);
@@ -28,6 +31,7 @@ const save = () => {
   const h = new URLSearchParams({ cars, mode, cam, hide: [...hidden].join(',') });
   if (spread) h.set('spread', spread);
   if (monster) h.set('monster', '1');
+  if (detail) h.set('detail', detail);
   for (const [biome, q] of values) if (q) h.set(biome, q);
   history.replaceState(null, '', '#' + h);
 };
@@ -35,7 +39,7 @@ const save = () => {
 // One player (the camera's car) and the rest CPU fill, on the race scenario.
 const src = (biome) => '/?' + new URLSearchParams({ test: '1', scenario: 'racing', track: 'strip', biome,
   players: '1', bots: String(cars - 1), seed: '1', showcase: kind(), laps: '999', hud: '0' })
-  + (values.get(biome) ? '&' + values.get(biome) : '');
+  + (detail ? '&detail=' + detail : '') + (values.get(biome) ? '&' + values.get(biome) : '');
 
 // The camera: the first car's chase cell, or the lobby's, which draws no cells
 // and cuts between the race's battles and chases (Stage._syncCells, CAM.COVERAGE).
@@ -85,6 +89,7 @@ for (const [biome, label] of BIOMES) {
       win.__showcase(kind());
       aim(win);
       throwOut(win);
+      paintDetail(win.__scene.detail);
       win.document.getElementById('corner-btns').style.display = 'none';
     }, 200);
   });
@@ -110,12 +115,14 @@ for (const [biome, label] of BIOMES) {
   lay();
 }
 
-// A row of buttons that picks one value; `pick` hears the new one.
+// A row of buttons that picks one value; `pick` hears the new one. Answers
+// its painter, which lights the button of the value it is given.
 function choice(attr, get, pick) {
   const buttons = [...document.querySelectorAll(`[data-${attr}]`)];
-  const paint = () => buttons.forEach((b) => b.classList.toggle('on', b.dataset[attr] === get()));
+  const paint = (now = get()) => buttons.forEach((b) => b.classList.toggle('on', b.dataset[attr] === now));
   for (const b of buttons) b.addEventListener('click', () => { pick(b.dataset[attr]); paint(); save(); });
   paint();
+  return paint;
 }
 // Where the cars drive: the strip showcase's three modes, switched live.
 choice('mode', () => mode, (m) => {
@@ -144,6 +151,13 @@ choice('cam', () => cam, (c) => {
 choice('cars', () => cars, (n) => {
   if (n === cars) return;
   cars = n;
+  for (const [biome, frame] of frames) if (frame.src) frame.src = src(biome);
+});
+// The tier: another world, so every display that has loaded builds again.
+// With none asked for, the button lit is the tier a display says it draws.
+const paintDetail = choice('detail', () => detail, (d) => {
+  if (d === detail) return;
+  detail = d;
   for (const [biome, frame] of frames) if (frame.src) frame.src = src(biome);
 });
 save();

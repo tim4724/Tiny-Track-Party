@@ -50,6 +50,9 @@ lobby's 1080, fail it in 2 s and hold 720 with 0.2 skips/s (83 of 97 clean
 seconds). The 720 rung is 40-60% idle for every count, so the next lever on
 the box is the ladder (Open), not the frame.
 
+Re-read on the road strip's tracks on 2026-11-28: "The road strip per cup"
+has the table per player count.
+
 Before the package, pinned on `0d2e5286` the same day, 4P/720 read 14.2-14.9
 ms heavy and 1P/1080 17.2-18.7 (1.9-2.8 skips/s): the built roster
 (`44ed7176`) and the kerb bevel (`95b5edea`) had grown the frame from the
@@ -164,6 +167,7 @@ comments beside the code.
 | 2026-10-22 | the fragment package: no scene material writes `emissive` (Filament's addEmissive exposure maths left every unlit fragment), display-colour varyings mediump, the fog composite and the deck's chunk-local arclength folded per vertex, the deck's vis tap on a bare .xy varying | against the ring arm, alternated installs, pretzel: 1P/1080 heavy p50 18.0-18.8 -> 11.4-11.9 (-6.6 ms), skipped frames per 75 s 606 -> 54, clean seconds 53-54 -> 68-69; 4P/720 heavy 14.5-14.6 -> 11.9-12.1 (-2.6), skips 46 -> 17, clean 60-62 -> 67-68. Far beyond the deck's flat ceiling (-1.8 / -0.2 below), so most of it is the emissive and mediump halves on EVERY material: the folds alone had read -0.76 at 1P/1080 and null at 4P/720 |
 | 2026-10-23 | every car's contact shadow in ONE draw: the car's frame per vertex, the model stamps as tiles of one atlas, one instance with no per-frame uniform write (all backends; the pixels are the same, judged on GL, Vulkan and the web with `TTP_DEBUG_SHADOW_SOLID`) | GL, four cores, 4P/720 pinned, three alternated installs against `191648db`: Filament's backend thread 574-593 -> 541-569 ms of CPU a second (~-0.5 ms a frame, no overlap on either track), pretzel skips 33 / 63 / 43 -> 38 / 28 / 45, tangle 58 / 53 / 28 -> 34 / 16 / 39, clean seconds 54-61 -> 59-66 |
 | 2026-11-08 | rubber mip levels 1-3 refreshed every stamping frame, the rest on the throttled pass (`kSkidNearLevels`): rivals' trails ahead had stepped ~4x a second | tidepool 4P, rotated rounds on one probe install, mip copies/frame 1.0 -> 3.5: Vulkan 1080 heavy 19.05 -> 19.44 (eight arms spread 18.5-19.5; the whole chain, 10.8 copies, read 18.50), Vulkan 720 clean 45/45 both rounds (whole chain 44/45); GL fallback 540 clean 40-41 -> 33-37 (whole chain 7-15: its ring doubles every copy); levels 1-2, or a capped 4-level chain, read the same on GL |
+| 2026-11-28 | the rubber's near-mip filter under the stamps' own rects, the copies still the merged box (`uploadSkidRects`); with it the dust's outline from a table and no quads for a step strip of no height | against `05a8a86b`, lite: `beginFrame` on the Streamer's six shipping arms 0.98-1.40 -> 0.65-0.79 ms and their frame-thread cpu -0.30 to -0.60 ms, all outside noise; on the stick `beginFrame` -0.2 to -0.3 ms; no fps and no GPU on either box ("The road strip per cup") |
 
 ## The resolution rule, replaced (2026-10-18)
 
@@ -677,6 +681,207 @@ google/filament#10692 is worth to this path.
 **The persisted pipeline cache was off.** Warm launches on the Streamer, four each:
 race-ready 3.9 -> 3.2 s, `FEngine::loop` CPU by then 2.45 -> 0.87 s.
 
+## The road strip per cup, 2026-11-27/28
+
+Three builds: `636cfeec` (the merge-base), `05a8a86b` (the branch: a strip per
+cup beside the asphalt that slows a car, raises dust and takes ruts, with a bot
+field spread to suit) and `05a8a86b` plus **the levers** below (versionName
+`1.0-05a8a86b-dirty`). Lite tier; the Streamer on Vulkan, the stick on GL
+against its 30 fps target (`--hz 30`). Pinned races are 75 s with `--timeline`,
+adaptive ones 100 s; installs alternate (A B B A), the first race after each
+dropped; n=2 per build unless noted. A delta carries its noise band in
+brackets, the larger repeat spread of the two arms. Seven identical gulch
+4P/1080 races of one session spanned 18.79-20.02 ms heavy and 425-535 skips,
+so on the saturated arm nothing under about half a millisecond is resolved
+without pairs.
+
+**The branch holds 60 fps on the Streamer and 30 on the stick wherever the
+merge-base does.**
+
+| arm | `636cfeec` | `05a8a86b` |
+|---|---|---|
+| Streamer 4P/720, the shipping rung (sidewinder, wash, glacier) | 60.0 fps, 0-2 skips a race | 59.9-60.0, 0-1 after the opening (one wash race lost 7 in seconds 2-3) |
+| Streamer 2P/1080 (sidewinder) | 60.0, 0-2 skips | 60.0, 1-3 |
+| Streamer 1P/1080 (sidewinder, wash, cove, driftwood, glacier) | 59.0-59.8 fps, 19-70 skips a race | 59.3-59.8, 16-50 |
+| Streamer 4P/1080, saturated, heavy ms in that track order | 19.33, 19.05, 20.45, 21.58, 21.59 | +0.51 (0.58), +0.41 (0.19), -0.93 (0.34), -0.79 (0.83), -0.50 (0.71) |
+| stick 4P/540 uncapped, fps in that order | 44.7, 48.0, 46.6, 40.0, 44.1 | +1.18 (0.33), +0.43 (0.76), -0.39 (0.55), +2.30 (1.13), +0.43 (0.83) |
+| stick 4P/720 `--hz 30` | sidewinder, wash, cove, glacier hold, 0-12 skips a race | hold, 0-6; driftwood misses on both (Open) |
+| stick 2P/1080 `--hz 30` (sidewinder, driftwood) | 0 skips | 0-1 |
+
+Why some tracks read cheaper on the branch (cove, driftwood and glacier on the
+Streamer, sidewinder and driftwood on the stick) was not tested; the host
+counts point at the strung-out field, fewer cars in a cell.
+
+**What it costs: the dust's fill on the saturated arm, and frame-thread CPU
+everywhere, in two phases.**
+
+- **The dust's whole GPU price** is 0.1-0.9 ms of the Streamer's 4P/1080 heavy
+  band over three sessions, at or inside the noise each time: EFFECTS hidden
+  on `05a8a86b` (an upper bound, it hides the item effects too), sidewinder
+  0.44 (0.42), with 0.86 ms of GPU p50 (0.56), 89 skips a race (56) and 1.2
+  fps (0.8); dust off in the levers build, gulch 0.61 (1.23) and sidewinder
+  0.92 (0.54), then 0.31 (0.66) and 0.10 (0.35) a session later. Paired by
+  block in that last session, off is +0.7 fps and -52 skips a race in 6 pairs
+  of 6. Nothing at a shipping rung (4P/720 heavy, branch minus merge-base:
+  -0.02 (0.37), +0.05 (0.82), +0.07 (0.33)). On the stick at 4P/540 uncapped
+  it is 0.97 (0.55) and 0.74 (0.45) ms of heavy band on gulch and sidewinder,
+  which is +1.24 and +0.62 fps against a band of 1.4, and +0.53 fps of 42
+  (0.89) on driftwood.
+- **`skids`, the dust's per-frame rebuild:** +0.07 to +0.20 ms on the
+  Streamer's four dust tracks (bands 0.01-0.04), nothing on glacier. With the
+  dust off the phase reads 0.19-0.20 ms against 0.33-0.34, the level of the
+  tracks that raise none.
+- **`beginFrame`, the rubber flush:** +0.14 to +0.65 ms on nine of the
+  Streamer's ten 1080 arms (sidewinder 4P reads none); cove the worst, 0.72
+  -> 1.33 at 1P and 1.37 at 4P.
+- Frame-thread cpu at 1P/1080 on the Streamer: +0.68 sidewinder, +0.69 cove,
+  +0.66 driftwood, +0.31 wash, +0.14 glacier (inside noise). On the stick
+  +0.12 to +0.97 ms a frame, outside noise in 13 of 14 paired arms (`skids`
+  +0.2-0.5, `beginFrame` +0.1-0.8). It costs no frame on either: the thread
+  stays at or under 5.8 ms at 4P on the Streamer and at 7-9 ms of a 21-33 ms
+  frame on the stick.
+
+**Why `beginFrame` grew: the rubber flush is priced by the AREA of one merged
+box, and the strip strings the field out.** Host probe on the boxes' 4096x512
+layer, 4800 frames of the bench race per arm. All eight cars stamp nearly
+every frame (17-21 stamps on both builds), `mergeUploadRects` unions them into
+about one level-0 copy, and that copy and the three near levels were memcpy'd
+AND box-filtered over the whole box: 50-120k texels for the 1,100-1,700 the
+stamps ink. `636cfeec` -> `05a8a86b`:
+
+| 1P | flurry | ribbon | gulch | gauntlet |
+|---|---|---|---|---|
+| the field's arc along the lap, mean units | 31.3 -> 70.9 | 31.8 -> 74.8 | 51.9 -> 66.7 | 39.9 -> 41.4 |
+| widest level-0 copy, mean columns | 232 -> 576 | 255 -> 549 | 435 -> 563 | 247 -> 262 |
+| texels copied a frame, all levels, k | 73.7 -> 167.7 | 78.7 -> 183.0 | 128.6 -> 169.5 | 65.3 -> 57.0 |
+| host time in the flush, us a frame | 43.5 -> 77.1 | 43.6 -> 89.0 | 60.1 -> 74.8 | 37.5 -> 33.8 |
+
+Not events (4.87 -> 4.99 a frame on flurry 1P) and not the ruts: with the
+strip's forced groove off the level-0 texels read 113.5k against 116.3k, and
+grooves are 0.7-3.2 of a frame's stamps. The strip's wider lat span makes the
+layer's rows coarser, which is why gauntlet got cheaper. Across 16 Streamer
+arms `beginFrame` p50 = 0.424 ms + 0.0077 x the host's flush in us (r 0.84),
+the intercept being the rubber-off floor of 0.40 ms, and the phase climbs
+through a race as the field spreads (0.4 ms on the grid, 1.3-2.2 late on the
+branch).
+
+**The levers**, against `05a8a86b` (two sessions, the second on a rebuild
+with review fixes; n=2 per build and arm):
+
+| lever | host | Streamer | stick |
+|---|---|---|---|
+| the near levels filtered under the stamps' own rects, from before the merge; every copy unchanged (events and copied texels identical in 38,400 probed frames) | flush 77.1 -> 39.5 us on flurry 1P, under the merge-base's on every arm | `beginFrame` cove 4P/720 1.35 -> 0.79, cove 1P/1080 1.40 -> 0.78, gulch 1P/1080 1.09 -> 0.66, driftwood 0.98-1.19 -> 0.65-0.69 on three arms: 0.59-0.79 ms on every arm read (the merge-base's cove read 0.72 in its own session) | -0.2 to -0.3 ms on seven arms, outside noise on five; the driver thread's share does not move (-0.5 points (2.3), +1.5 (4.8) at 2P/1080 uncapped); the two-texture ring draws the marks right, with no alternation over 14 near-consecutive frames |
+| the dust's outline angles from a table (vertex bytes identical, proven on wasm) | the dust's share of an undrawn gulch 4P frame 39.1 -> 31.1 us | not seen in `skids`: -0.02 to -0.04 ms (0.04-0.07) | |
+| no quads for a step strip of no height | skyline's road back at the merge-base's index count (fine 98214 -> 89286) | skyline 4P/1080 heavy +0.34 (0.68), GPU p50 -0.18 (0.52): null | fps -0.60 (1.05): null (heavy +0.69 (0.45), unexplained) |
+| the track builder's fold walk and strand loop, output bit-identical | all 20 tracks 122.1 -> 51.9 ms (merge-base 7.67); through the wasm 7.85 -> 4.88 ms a build on tidepool, 21.56 -> 10.66 on avalanche | a scene build's cost, not a frame's; not timed on a box | |
+| together | | frame-thread cpu -0.30 to -0.60 ms on six shipping arms, all outside noise; fps and skips as before | -0.10 to -0.54 ms at 4P `--hz 30`, -0.27 and -0.49 at 2P/1080 uncapped; fps as before |
+
+The GPU has no consistent direction between the two builds: cove 4P/720 reads
+0.19 ms of heavy band cheaper, driftwood 1P/1080 0.88 dearer at n=2, and a
+third race on that arm read `05a8a86b`'s level (three races span 13.15-14.54
+ms). A lower merge budget was counted on the host only (65536 texels: +0.6-0.9
+events a frame for 33-44% fewer texels) and not taken: events are what these
+drivers charge, so it needs a box A/B.
+
+**The dust's puff is six-sided in both tiers; the lite tier draws it from a
+pool of 256, with a far cut** (the user's call, 2026-11-28, from
+`/gallery-dust.html`; `kSandPuffSegs`, `kSandPuffs`, `renderSandSpray`). A
+puff is 13 vertices for the 17 it had: one shape in both tiers because the
+user could not tell them apart, not for a price (the full tier was not
+raced with it). Lite's pool is 256 for 512 with the cars taking turns to
+raise first, so a full pool starves none, and a car's dust falls to none
+20-35 u from the nearest camera. Why this one: nothing past the six-sided
+puff resolved on the GPU (below), the pool takes the dust's geometry in a
+cell from 8,704 vertices to 3,328 at the cap, and the user accepted the
+thinner haze when the pack is on the strip. Full's pool and reach were
+tuned by hand and stay.
+
+The variants priced, on builds that carried them as debug knobs. **Eight**:
+the dust in both tiers when these were read. **Six**: the six-sided puff and
+the far cut. **Six/256**: six with the pool at 256, lite's dust now.
+**Shared**: six/256 with at most 96 puffs a car. **Denser**: shared at 0.6 of
+the rate, each puff more opaque. **One-ring**: shared with 7-vertex puffs.
+Streamer 4P/1080 on the levers build, where eight reads 53.1 fps / 19.22 ms
+heavy / 509 skips a race on gulch and 51.8 / 20.09 / 601 on sidewinder;
+variant minus the eight race of its block, three interleaved blocks a track,
+mean (sd) and the pairs agreeing in sign:
+
+| variant | fps | heavy ms | `skids` ms | skips a race | an earlier session's heavy, n=3, gulch / sidewinder (bands 1.23 / 0.54) |
+|---|---|---|---|---|---|
+| six | +0.8 (0.2), 6 of 6 | -0.21 (0.15), 6 of 6 | -0.03 (0.04), 5 of 6 | -59 (16), 6 of 6 | |
+| six/256 | +0.8 (0.6), 5 of 6 | -0.32 (0.27), 5 of 6 | -0.03 (0.02), 5 of 6 | -59 (40), 5 of 6 | shared: -0.29 / -0.38 |
+| denser | +1.0 (0.4), 6 of 6 | -0.33 (0.34), 5 of 6 | -0.08 (0.03), 6 of 6 | -68 (31), 6 of 6 | -0.60 / -0.82 |
+| one-ring | | | | | -0.40 / -0.63 |
+| no dust | +0.7 (0.3), 6 of 6 | -0.21 (0.29), 5 of 6 | -0.15 (0.02), 6 of 6 | -52 (27), 6 of 6 | -0.61 / -0.92 |
+
+Every variant recovers about what no dust does, a frame per second and a
+tenth of the skips on an arm that is no shipped rung; the box cannot rank
+them on the GPU, and one-ring's coarser puff buys nothing over denser. Only
+the `skids` half is resolved, and of the lighter variants only denser takes a
+share of it in every pair. At the shipping rungs denser against eight changed
+nothing (n=1 each): 4P/720 60.0 fps with 0-1 skips either way, 3P/1080
+59.8-59.9 with 8-17 skips against 59.7-59.8 with 19-20.
+
+**Lite's dust as the tier builds it, against eight** (2026-11-28, the two
+builds interleaved, n=2 each, no Studio mirror on the box; the stick's
+six/256 build still drew eight-sided puffs in full, which lite does not
+draw). Streamer 4P/1080: sidewinder +1.0 fps (0.8), GPU p50 -0.73 ms (0.60),
+-80 skips a race (73); gulch nothing on fps or GPU p50. `skids` -0.04 to
+-0.08 ms on all seven arms, outside the band on six: the one resolved gain.
+At the shipping rungs (4P/720 on sidewinder and driftwood, 3P/1080 on both,
+1P/1080 on gulch) the two builds read alike, 60.0 / 59.5-59.9 / 59.6-59.8
+fps. As shipped (adaptive, 100 s, n=1): 4P at 720 inside 5 s, then 59.9-60.0
+and no second under 58; 2P 59.9 at 1080; 1P and 3P 59.7 at 1080 with 4-6
+seconds under 58 and about 0.3 skips/s, as with eight. Stick, 4P/540
+uncapped: sidewinder +1.24 fps of 45 (1.01), driftwood and gulch inside
+noise, the worst second 2-4 fps higher on all three; its `--hz 30` arms
+read as with eight, driftwood 4P/720 still missing (Open). No abort in 41
+launches on the Streamer; the fence's double closes stay in the 4P/1080 arm,
+about three a launch on either build.
+
+**The stick cannot resolve any of them.** 4P/540 uncapped, n=3, heavy band
+against eight on gulch / sidewinder: shared -0.38 (0.50) / -0.51 (0.50),
+denser -0.02 (0.78) / -0.50 (0.97), one-ring -0.71 (0.61) / -0.30 (0.61), no
+dust -0.97 (0.55) / -0.74 (0.45), while eight alone spans 1.26 fps over seven
+gulch races and 1.72 over five on sidewinder. On driftwood, its worst track:
+six +0.05 fps of 42 (1.21), six/256 -0.40 (0.83), no dust +0.53 (0.89). Each
+change alone (the puff's form, the pool, the far cut, the rate; n=1 or 2) is
+inside the heavy band's noise on both boxes; on the Streamer only the puff's
+form showed alone (six-sided -82 skips a race against a band of 42, one-ring
+no better).
+
+By stills in the browser six differs from eight on 0.01-0.38% of the pixels on
+sidewinder and tidepool and on 4.29% with large puffs right behind the camera
+car on ribbon (the same lumps, their outlines a little different); the half
+pool thins the haze behind the cars ahead, and one-ring is plainly worse (a
+faint cone). No variant changes a target verdict, so the choice was the look.
+
+**The levers build as raced** (adaptive, the eight-sided dust, 100 s, n=1 or 2):
+
+| players | Streamer | stick, `--hz 30` |
+|---|---|---|
+| 1 | 1080 all race on gulch, driftwood and glacier: 59.7-59.8 fps, 0.18-0.27 skips/s, worst second 55-56. Gauntlet steps to 720 after 5 counted seconds, then 59.9 and 0.13 | 1080, 1 skip in 101 s (gulch, driftwood) |
+| 2 | 1080, 60.0 fps, 0.01-0.04 skips/s (gulch, driftwood) | 1080, 0 skips but for 5 in one driftwood run's last second |
+| 3 | 1080 and never steps: gulch 59.9, 0.15 skips/s; driftwood 59.6, 0.42, worst second 52 | gulch 1080, 0 skips; driftwood on the rule's threshold: 1080 all race with 12 skips, or 720 after 15 s and 1 skip in the 85 s there |
+| 4 | 720 inside 4 counted seconds on gulch, driftwood, gauntlet and glacier, then 59.9-60.0 and 0.00-0.04 skips/s | 720 on all four tracks; gulch, flurry and glacier hold there (0-4 skips a race), driftwood does not (Open) |
+
+The bench's fresh process opens most 4P races at 1080 (up to 4 counted
+seconds on the Streamer, 3-9 s under target on the stick); a session was not
+compared. The Streamer's GL fallback on the levers build (gulch 1P/1080, one
+race with two screencaps inside it): 59.6 fps, 29 skips, and the road, strip,
+ruts and skid marks drawn right.
+
+Metal on the Apple TV 4K (full tier, native 2160, adaptive; gulch and cove at
+1P and 4P, n=5-13 per build): `05a8a86b` and the levers read alike, 59.9-60.0
+fps at 4P and 59.2-59.8 at 1P (11-34 late presents per 45 s on either build),
+never off 2160 in 2,635 counted seconds, GPU and late presents inside noise.
+The levers give back 0.05-0.16 ms of frame-thread CPU, resolved on cove 1P
+only (2.26 -> 2.10 ms, band 0.09): about a quarter of the 0.6 ms the branch
+added to gulch 1P there.
+
+Not read: the far cut in motion on a TV, the merge-base beside the levers
+build in one session, 540 on the Streamer, the full tier on either box.
+
 ## Open
 
 **An intermediate rung for one and three players** (the user's call: the
@@ -703,6 +908,12 @@ been photographed on this box (the look probe: pins 1.0, 0.833333, 0.75,
 extra failed rung on a session's first 4P race unless the instant-fail jump
 steps two rungs. A 900 rung is `kScaleLadder` plus the ctest's rung counts.
 
+Re-read on the road strip's tracks (2026-11-28, "The road strip per cup"
+has the readings), and the same on every build: pinned, 1P/1080 is 59.0-59.8
+fps with 16-79 skips a race on `636cfeec` and `05a8a86b` over five tracks,
+and adaptive the rule now leaves one and three players at 1080 for the whole
+100 s. So the rung's case is the whole race again.
+
 **The dressing at 3P/1080** (2026-10-23, `191648db`, Vulkan, four cores,
 pretzel pinned, 75 s, alternated arms on one install; each arm is two rounds
 against eight base races). After the package the
@@ -725,6 +936,36 @@ skips 22-29 -> 45-62; most likely the deck filling what the pack covered,
 not verified by a trace), and at 4P/720 -2.6 / -2.75 ms on a base
 that already skips 1-3 times a race. A realistic sheet cut (the lean flowers,
 null at 4P/720 on 2026-10-21) has not been priced at 3P/1080.
+
+**Driftwood, four players at 720, on the Fire TV Stick** (2026-11-28, lite,
+`--hz 30`). The one arm of the strip bench that misses the stick's 30 fps,
+and it misses on every build: pinned 720, skips per 75 s race 24 / 31 on
+`636cfeec`, 14 / 23 and 17 / 18 on `05a8a86b`, 18 / 16 and 19 / 14 on the
+levers, worst second 24-27, 5-12 seconds under 29 fps, where five other
+tracks hold the same arm with 0-12. Its 540 floor holds (0-4 skips a race,
+worst second 28-29, on the branch and on the levers). At 720 the rule sits on
+its threshold: adaptive, the merge-base fell to 540 after 30 s, the branch
+held 720 for 97 s (0.2 skips/s, 10 seconds under 29 fps), and the levers
+build fell to 540 in three runs of four. A lighter dust only moves which
+side a race lands on (one-ring held 720 in both of its runs) and does not make
+720 hold (17 / 14 skips pinned against 19 / 14).
+
+**The PowerVR fence double close can abort the app** (2026-11-28, Streamer,
+Vulkan). Two native crashes in 72 launches of the levers build, both mid-race
+at 4P pinned 1080: `fdsan: attempted to close file descriptor N, expected to
+be unowned, actually owned by unique_fd`, through `PVRSRVFenceDestroyI` in
+`/vendor/lib/libsrv_um.so`, once on HWUI's RenderThread inside
+`eglSwapBuffers` and once on `FEngine::loop` inside `vkAcquireNextImageKHR`.
+The driver logs each double close itself (`IMGSRV ... PVRSRVFenceDestroyI:
+Fence close fd=N failed`) and `05a8a86b` has them too: at the saturated arm
+1-8 a race on the levers build (mean 3.5, n=15) and 3 in the branch's one
+race; where vsync holds, 1 double close in 12 pinned races on each build and
+5 in the 12 adaptive ones. A crash needs the fd reused between the two
+closes, so exposure follows saturation, and no crash came in 49 races that
+held vsync. Whether one build crashes more than another is not settled:
+nobody counted double closes before, and no race of the earlier sessions has
+a short readout. `perf-race` exits 0 on a crashed race; its readout is short
+(19 and 11 seconds of 75).
 
 ## Closed — measured, and not worth taking
 
@@ -822,6 +1063,7 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
 | barrier stage masks, a twin texture nothing samples, fewer rows, no mip usage | all NULL (2026-09-03): the COUNT of copies is the cost, which the merge took |
 | the rubber's level-0 upload throttled | NULL (2026-08-26); the throttle is gone, the trail's head sits at the tyre |
 | the car shadow's raster + upload | +0.03 ms GPU (2026-10-12); the layer is gone since the pass |
+| the road strip's rut groove off (a tyre on a strip stamps only as hard as it skids) | NULL on both boxes (2026-11-28, the levers build): `beginFrame` with the groove against without, on the stick at 4P/540 1.2 vs 1.2 ms (flurry) and 1.3 vs 1.2 (gulch, band 0.2), on the Streamer at 1P/1080 0.67 vs 0.70 (gulch) and 0.68 vs 0.68 (flurry). Grooves are 0.7-3.2 of a frame's 17-21 stamps, and the flush is priced by the merged box, not by them ("The road strip per cup") |
 | coalescing a frame's `setImage` copies into one command (fork), deferring the deep rubber mip levels, capping the per-frame kicks | priced, not taken (2026-10-22): the rubber's kicks beyond the constant head kicks are ~0.05-0.07 ms each, serial between 3D kicks, 0.2-0.35 ms a frame on average and 0.5-1.3 on the burst frames; days of layout-tracking fork work whose failure mode is stale ink, on the unverified premise that one multi-region copy is one kick on this driver |
 
 **CPU, driver and platform**
@@ -867,3 +1109,21 @@ never loaded or stored (the `Z Load/Store` counter reads 0).
   whatever the mask said, and the first probe run measured nothing. The
   knobs are polled before the first build now (`GameCoordinator`); an arm's
   picture is the check (the flat deck still showed rubber).
+- **An arm without EFFECTS stopped paying for the dust's rebuild on
+  2026-11-28.** Until the levers, hiding EFFECTS (`0x9F7C`) hid the dust's
+  draw while `renderSandSpray` still rebuilt and uploaded it (`skids` 0.37-0.39
+  ms hidden or shown on `05a8a86b`); since, the hidden arm skips both. The
+  `skids` phase of a hidden arm does not compare across that change.
+- **Two dirty builds of one commit carry one `versionName`.** The stick came
+  to a session holding an earlier `1.0-05a8a86b-dirty` than the one under
+  test; only the sha256 of the installed `base.apk` against the local file
+  tells them apart (the stick has no `sha256sum`: pull the file).
+- **A knob the RENDERER holds is lost with the surface, and `PerfDebug` does
+  not notice.** It latches the last value sent and a new surface builds a new
+  renderer at its defaults. An arm that pins `debug.ttp.features`, `aa`,
+  `dresskeep` or `dresssheets` across a surface re-create measures the
+  shipped arm under the pinned arm's name (2026-11-28, read off the code, not
+  caught on a box).
+- **`perf-race` leaves its numeric knobs at `0`, not empty.** `0` is "not
+  set" for each of them, so the box is clean; a state check that expects
+  empty properties reads it as a leftover.

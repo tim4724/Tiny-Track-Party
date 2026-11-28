@@ -202,47 +202,46 @@ void TtpRenderer::mergeUploadRects(std::vector<SkidRect>& rects) {
 // Push this frame's dirty rects into the texture. Each rect is a tight copy
 // with its own free callback — the CPU buffer is mutated again next frame,
 // and native drivers read uploads asynchronously, so handing them a pointer
-// into mSkidPix would race. Unwrapped x splits at the lap seam here, once
-// per rect. Merged first: see kUploadEventTexels.
+// into mSkidPix would race. Merged first: see kUploadEventTexels.
+//
+// THE MIP FILTER KEEPS THE RECTS FROM BEFORE THAT MERGE. The merge trades
+// bytes for events: a frame's one copy is the box round every car that
+// stamped, a hundred times the texels the stamps inked, and the rest of the
+// box holds what it held. Copying it is the price of the one event; filtering
+// it again is not, and that work grew with how far the field strings out
+// along the lap. What is copied, level by level, is unchanged.
 void TtpRenderer::uploadSkidRects() {
     const int W = (int) mSkidTexW, H = (int) mSkidTexH;
-    mergeUploadRects(mSkidDirty);
-    std::vector<SkidRect> physRects;
-    for (const SkidRect& r : mSkidDirty) {
-        const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
-        if (y0 >= y1) continue;
-        // A rect spanning the whole width (a teleport-length segment cannot
-        // happen, but belt and braces) collapses to one full-width strip.
-        int spans[2][2];
-        int nSpans = 0;
-        if (r.x1 - r.x0 >= W) {
-            spans[nSpans][0] = 0; spans[nSpans][1] = W; nSpans = 1;
-        } else {
+    // Unwrapped x splits at the lap seam here, once per rect, for the copies
+    // and the filter alike, so the two cannot disagree on it.
+    const auto physical = [&](const std::vector<SkidRect>& rects) {
+        std::vector<SkidRect> out;
+        for (const SkidRect& r : rects) {
+            const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
+            if (y0 >= y1 || r.x1 <= r.x0) continue;
+            // A rect spanning the whole width (a teleport-length segment cannot
+            // happen, but belt and braces) collapses to one full-width strip.
+            if (r.x1 - r.x0 >= W) { out.push_back({ 0, y0, W, y1 }); continue; }
             const int wx0 = ((r.x0 % W) + W) % W;
             const int wx1 = wx0 + (r.x1 - r.x0);
             if (wx1 <= W) {
-                spans[nSpans][0] = wx0; spans[nSpans][1] = wx1; nSpans = 1;
+                out.push_back({ wx0, y0, wx1, y1 });
             } else {                       // crosses the seam: two strips
-                spans[0][0] = wx0; spans[0][1] = W;
-                spans[1][0] = 0;   spans[1][1] = wx1 - W;
-                nSpans = 2;
+                out.push_back({ wx0, y0, W, y1 });
+                out.push_back({ 0, y0, wx1 - W, y1 });
             }
         }
-        for (int s = 0; s < nSpans; s++) {
-            const int sx0 = spans[s][0], sx1 = spans[s][1];
-            const int sw = sx1 - sx0, sh = y1 - y0;
-            if (sw <= 0 || sh <= 0) continue;
-            // The same PHYSICAL rect feeds the mip refresh — one wrap-split,
-            // owned here, so the two paths cannot disagree on it.
-            physRects.push_back({ sx0, y0, sx1, y1 });
-            uploadSkidLevel(mSkidTex, 0, sx0, y0, sx1, y1);
-        }
-    }
+        return out;
+    };
+    std::vector<SkidRect> inked = physical(mSkidDirty);
+    mergeUploadRects(mSkidDirty);
+    std::vector<SkidRect> copies = physical(mSkidDirty);
+    for (const SkidRect& r : copies) uploadSkidLevel(mSkidTex, 0, r.x0, r.y0, r.x1, r.y1);
     mSkidDirty.clear();
     // The near mip levels follow level 0 in the same frame; what they leave is
     // the deep pass's work (refreshSkidMips has the two cadences).
-    for (int l = 1; l <= kSkidNearLevels; l++) filterSkidLevel(l, physRects);
-    mSkidMipDirty.insert(mSkidMipDirty.end(), physRects.begin(), physRects.end());
+    for (int l = 1; l <= kSkidNearLevels; l++) filterSkidLevel(l, copies, &inked);
+    mSkidMipDirty.insert(mSkidMipDirty.end(), copies.begin(), copies.end());
 }
 
 // One mip level of the rubber layer: box-filter the dirty rects down from the
@@ -264,34 +263,47 @@ void TtpRenderer::uploadSkidRects() {
 // either, and the marks the stamper lays keep clear of the clamp rows.
 //
 // Rects arrive in level l-1 texels and leave in level l texels; past the last
-// level they leave empty.
-void TtpRenderer::filterSkidLevel(int l, std::vector<SkidRect>& rects) {
+// level they leave empty. `inked` is what changed INSIDE them, where the
+// caller knows (uploadSkidRects): the filter then runs under those alone and
+// the copies stay the merged rects. It is carried down the same way.
+void TtpRenderer::filterSkidLevel(int l, std::vector<SkidRect>& rects,
+        std::vector<SkidRect>* inked) {
     const size_t li = (size_t) l - 1;
-    if (li >= mSkidMips.size()) { rects.clear(); return; }
+    if (li >= mSkidMips.size()) {
+        rects.clear();
+        if (inked) inked->clear();
+        return;
+    }
     const int W0 = (int) mSkidTexW, H0 = (int) mSkidTexH;
     const int sw = std::max(1, W0 >> (l - 1)), sh = std::max(1, H0 >> (l - 1));
     const int dw = std::max(1, W0 >> l), dh = std::max(1, H0 >> l);
     const uint8_t* src = li == 0 ? mSkidPix.data() : mSkidMips[li - 1].data();
     uint8_t* dst = mSkidMips[li].data();
     // Halve every rect, then merge overlaps — O(n²) over a handful.
-    std::vector<SkidRect> next;
-    for (const SkidRect& r : rects) {
-        SkidRect d{ std::max(0, r.x0 >> 1), std::max(0, r.y0 >> 1),
-                    std::min(dw, (r.x1 + 1) >> 1), std::min(dh, (r.y1 + 1) >> 1) };
-        if (d.x0 >= d.x1 || d.y0 >= d.y1) continue;
-        bool merged = false;
-        for (SkidRect& m : next) {
-            if (d.x0 <= m.x1 && m.x0 <= d.x1 && d.y0 <= m.y1 && m.y0 <= d.y1) {
-                m.x0 = std::min(m.x0, d.x0); m.y0 = std::min(m.y0, d.y0);
-                m.x1 = std::max(m.x1, d.x1); m.y1 = std::max(m.y1, d.y1);
-                merged = true;
-                break;
+    const auto halve = [&](const std::vector<SkidRect>& in) {
+        std::vector<SkidRect> out;
+        for (const SkidRect& r : in) {
+            SkidRect d{ std::max(0, r.x0 >> 1), std::max(0, r.y0 >> 1),
+                        std::min(dw, (r.x1 + 1) >> 1), std::min(dh, (r.y1 + 1) >> 1) };
+            if (d.x0 >= d.x1 || d.y0 >= d.y1) continue;
+            bool merged = false;
+            for (SkidRect& m : out) {
+                if (d.x0 <= m.x1 && m.x0 <= d.x1 && d.y0 <= m.y1 && m.y0 <= d.y1) {
+                    m.x0 = std::min(m.x0, d.x0); m.y0 = std::min(m.y0, d.y0);
+                    m.x1 = std::max(m.x1, d.x1); m.y1 = std::max(m.y1, d.y1);
+                    merged = true;
+                    break;
+                }
             }
+            if (!merged) out.push_back(d);
         }
-        if (!merged) next.push_back(d);
-    }
+        return out;
+    };
+    std::vector<SkidRect> next = halve(rects);
     mergeUploadRects(next);
-    for (const SkidRect& d : next) {
+    std::vector<SkidRect> fine;
+    if (inked) fine = halve(*inked);
+    for (const SkidRect& d : inked ? fine : next) {
         for (int y = d.y0; y < d.y1; y++) {
             const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
             const uint8_t* row1 = src + (size_t) std::min(2 * y + 1, sh - 1) * sw;
@@ -312,9 +324,10 @@ void TtpRenderer::filterSkidLevel(int l, std::vector<SkidRect>& rects) {
                         + row1[sx0] + row1[sx1] + 2) >> 2);
             }
         }
-        uploadSkidLevel(mSkidTex, l, d.x0, d.y0, d.x1, d.y1);
     }
+    for (const SkidRect& d : next) uploadSkidLevel(mSkidTex, l, d.x0, d.y0, d.x1, d.y1);
     rects.swap(next);
+    if (inked) inked->swap(fine);
 }
 
 // The mip chain runs at TWO CADENCES, because the tap picks its level by the
