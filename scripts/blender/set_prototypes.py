@@ -2132,7 +2132,7 @@ def reef_shelf():
     for k, ((x, z), pose, coat, size, turn_) in enumerate(spots):
         th = math.atan2(z, R - x)                       # facing the bend's middle: the road
         beach_seal(x, tide_seat(polys, x, z, 0.5) - 0.03, z, th + turn_ + 0.25 * jitter(k, 1, 7.0), 's%d' % k,
-                   pose, coat, size, seal_life(pose, coat, k))
+                   pose, coat, size)
     x, z = tidepool_on_bend(R, spine - 4.6, 0.11)       # the pup, at its mother's flank
     beach_seal(x, tide_seat(polys, x, z, 0.3) - 0.02, z, -0.4, 'pup', 'flat', 'pup', 0.9)
     ring = [(R - (R + 13) * math.cos(t), 6.0 + 0.6 * math.sin(3 * t), (R + 13) * math.sin(t))
@@ -4741,11 +4741,11 @@ SEAL_POSES = {
              None, None),
 }
 
-def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0, life=None):
+def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0):
     """A seal lying on the rock at (x, y, z), its head to +X turned by
-    `yaw` (SEAL_POSES, SEAL_COATS). The head is its own part when `life`
-    names its motion (set_motion.h), pivoting on the neck: lifted now and
-    then, or turned to watch the cars."""
+    `yaw` (SEAL_POSES, SEAL_COATS), one skin tail to nose. It lies still, as
+    a hauled-out seal does: a head turning as its own rigid part read as a
+    wind-up toy, and a stuck-on second piece when it stood still."""
     c, s = math.cos(yaw), math.sin(yaw)
     def at(lx, ly, lz=0.0):
         return (x + (lx * c + lz * s) * k, y + ly * k, z + (-lx * s + lz * c) * k)
@@ -4766,10 +4766,10 @@ def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0, life=None):
                 ring.append((px + nx * h * u, py + ny * h * u, w * math.cos(a)))
             out.append(ring)
         return out
-    def skin_of(spine, name, seed, nose=False):
+    def skin_of(spine, seed):
         """The spine's rings as a smooth skin, capped at both ends, one part
         a colour: the belly pale, the back its coat with darker blotches,
-        a head's nose dark at its tip."""
+        the nose dark at its tip."""
         rs = rings(spine)
         last = len(rs) - 1
         verts = {(i, j): p for i, r in enumerate(rs) for j, p in enumerate(r)}
@@ -4778,7 +4778,7 @@ def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0, life=None):
         groups = {}
         def add(face, i, j):
             u = math.sin(2 * math.pi * (j + 0.5) / N)
-            if nose and i >= last:
+            if i >= last:
                 key = ('dark', 31)
             elif u < -0.55:
                 key = belly
@@ -4811,10 +4811,10 @@ def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0, life=None):
                     o_ = spine[min(1, last)] if f[0] == 'a' else spine[max(0, last - 1)]
                     d = (sp[0] - o_[0], sp[1] - o_[1], 0.0)
                 fs.append(tuple(index[q] for q in (f if sum(n[t] * d[t] for t in range(3)) >= 0 else f[::-1])))
-            me = bpy.data.meshes.new(name)
+            me = bpy.data.meshes.new('seal')
             me.from_pydata([tuple(P(*at(*verts[q]))) for q in keys], [], fs)
             me.update()
-            o = bpy.data.objects.new(name, me)
+            o = bpy.data.objects.new('seal', me)
             bpy.context.scene.collection.objects.link(o)
             for poly_ in me.polygons:
                 poly_.use_smooth = True
@@ -4831,7 +4831,7 @@ def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0, life=None):
         o = loft(path, [(0.45 * wide * k, 0.03 * k), (0.8 * wide * k, 0.024 * k), (wide * k, 0.018 * k)],
                  sw, turn(side[0], side[2]), 4)
         rowed(o, min(31, row + 14))
-    skin_of(body, 'seal', 17.0 + 3.1 * len(tag))
+    skin_of(body[:-1] + head, 17.0 + 3.1 * len(tag))      # the head's first ring in place of the neck's last
     if hind is not None:
         tail = body[0]
         for sd in (-1, 1):                               # splayed behind, lifted off the rock
@@ -4845,29 +4845,12 @@ def beach_seal(x, y, z, yaw, tag, pose='flat', coat='brown', k=1.0, life=None):
                 flipper((root[0], chest[1] - 0.35 * chest[3], root[2]), (0.3, -0.5, sd * 0.8), 0.16, 0.08)
             else:                                        # laid back along its flank
                 flipper(root, (-0.6, -0.2, sd * 0.35), 0.19, 0.075, (0.35 * sd, 0.0, 0.6))
-    def face():
-        skin_of(head, 'seal_head', 29.0 + 3.1 * len(tag), nose=True)
-        sk = head[1]                                      # the skull: the eyes high on its sides, well forward
-        for sd in (-1, 1):
-            e = at(sk[0] + 0.05, sk[1] + 0.5 * sk[3], sd * 0.74 * sk[2])
-            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.032 * k, location=P(*e))
-            bpy.ops.object.shade_smooth()                   # one normal a corner: a bead, not a cut gem
-            rowed(paint(bpy.context.active_object, 'dark'), 31)
-    if life:
-        with animated(life, at(*head[0][:2]), yaw):
-            face()
-    else:
-        face()
-
-def seal_life(pose, coat, k):
-    """What a seal's head does, now and then and out of step with the
-    rest: a raised one turns to watch the cars go by, one lying down lifts
-    its head and lays it down again; a pup sleeps."""
-    if coat == 'pup':
-        return None
-    if pose == 'up':
-        return 'anim_watch:r=24:d=45#seal%d' % k
-    return 'anim_sway:a=z:d=20:p=%.1f:r=0.75#seal%d' % (6.0 + 0.9 * (k % 5), k)
+    sk = head[1]                                         # the skull: the eyes high on its sides, well forward
+    for sd in (-1, 1):
+        e = at(sk[0] + 0.05, sk[1] + 0.5 * sk[3], sd * 0.74 * sk[2])
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.032 * k, location=P(*e))
+        bpy.ops.object.shade_smooth()                    # one normal a corner: a bead, not a cut gem
+        rowed(paint(bpy.context.active_object, 'dark'), 31)
 
 @piece(1.0)
 def seal_rock():
@@ -4903,7 +4886,7 @@ def seal_rock():
              (6.7, 1.4, 0.2, 'arch', 'brown', 1.6), (7.6, 2.8, 0.9, 'flat', 'pup', 0.85),
              (4.2, 6.2, 1.2, 'flat', 'brown', 1.6), (5.2, 7.4, 0.4, 'up', 'grey', 1.45))
     for k, (x, z, yw, pose, coat, size) in enumerate(spots):
-        beach_seal(x, tide_seat(polys, x, z, 0.5) - 0.03, z, yw, 'r%d' % k, pose, coat, size, seal_life(pose, coat, k))
+        beach_seal(x, tide_seat(polys, x, z, 0.5) - 0.03, z, yw, 'r%d' % k, pose, coat, size)
     # one in the water off its seaward foot, its head up, bobbing on the swell
     with animated('anim_bob:h=0.07:p=3.4#swimmer', (-10.5, 0.0, 2.0)):
         beach_seal(-10.5, 0.1, 2.0, math.pi + 0.3, 'swimmer', 'swim', 'grey')
@@ -19654,7 +19637,7 @@ def seal_skerry():
         # (the cow in the saddle between two backs sits on its middle: seated on the lowest of the
         # rock half a unit round her, her hind end lay in the rock)
         seat = tide_height(polys, x, z) if k == 8 else tide_seat(polys, x, z, 0.5)
-        beach_seal(x, seat - 0.03, z, yw, 'k%d' % k, pose, coat, size, seal_life(pose, coat, k))
+        beach_seal(x, seat - 0.03, z, yw, 'k%d' % k, pose, coat, size)
     for k, (x, z, yw) in enumerate(((5.6, -0.8, 0.5), (4.4, 4.4, 2.4))):
         with animated('anim_bob:h=0.07:p=%.1f#swimmer%d' % (3.4 + 0.6 * k, k), (x, 0.0, z)):
             beach_seal(x, 0.1, z, yw, 'swim%d' % k, 'swim', ('grey', 'brown')[k], 1.3)
