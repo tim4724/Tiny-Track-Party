@@ -7,6 +7,7 @@
 // build_race_track(), not logic worth a translation unit.
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <string>
 #include <utility>
@@ -62,7 +63,7 @@ inline std::unique_ptr<Centerline> make_centerline(const RaceTrack& rt) {
   for (const OutSample& s : rt.samples) {
     Sample cs;
     cs.pos = s.pos; cs.tangent = s.tangent; cs.up = s.up; cs.lateral = s.lateral;
-    cs.width = s.width; cs.sand = s.sand; cs.s = s.s;
+    cs.width = s.width; cs.sandL = s.sandL; cs.sandR = s.sandR; cs.s = s.s;
     samples.push_back(cs);
   }
   return std::make_unique<Centerline>(std::move(samples), rt.length);
@@ -83,6 +84,10 @@ inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_
   g.totalLaps = laps;
   g.roadWidth = rt.roadWidth;
   g.sand = rt.sand;
+  // The strip's cost is its cup's; a dev track in no cup keeps the default.
+  for (int i = 0; def->cup && i < TTP_CUP_COUNT; i++) {
+    if (std::strcmp(TTP_CUPS[i].id, def->cup) == 0) g.sandSpeed = TTP_CUPS[i].stripSpeed;
+  }
   g.seed = seed;
   for (const Hazard& h : rt.hazards) g.hazards.push_back(Zone{h.s, h.lat, h.radius});
   for (const Pad& p : rt.pads)

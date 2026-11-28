@@ -60,6 +60,8 @@ struct FurnDef {   // oil / pad / box / pole descriptor
 
 struct BananaDef { double u, lat; };
 
+struct SpanDef { double from, to; };   // a stretch of the lap, in u
+
 // A SET PIECE: one landmark model (scripts/gen-set-prototypes.mjs) the
 // RENDERER places on this track. Not builder input — it rides here for the
 // reason `name` and `cup` do below: the catalogue is where it is authored.
@@ -128,10 +130,12 @@ struct TrackDef {
   const SegDef* segs; int nSegs;
   const WptDef* wpts; int nWpts;
   double width;    // trackWidth = (desc.width) || ROAD_WIDTH
-  double sand;     // sand strip per side, between the asphalt and the kerb; waypoint tracks only
-  // A stretch of the lap (u, from..to) that carries NO sand: a causeway over
-  // water, where the kerbs stand at the asphalt's edge. None when to <= from.
-  double sandOffFrom, sandOffTo;
+  double sand;     // sand strip per side, between the asphalt and the kerb, on road that lies on the ground
+  // Stretches of the lap that carry NO sand, where the kerbs stand at the
+  // asphalt's edge: road off the land that the builder cannot tell from the
+  // geometry (a causeway on piles over water). The world makes room for the
+  // strip everywhere else.
+  const SpanDef* sandOff; int nSandOff;
   double startU;   // desc.startU ?? 0
   const FurnDef* oils; int nOils;
   const FurnDef* pads; int nPads;
@@ -167,6 +171,12 @@ struct CupDef {
   // contact: a colour chosen for a 3D horizon is not legible as a pale wash
   // (public/shared/trackPicker.js records which two cups broke and how).
   uint32_t color;
+  // A car's speed ceiling on the cup's road strip, as a share of what it would
+  // be on the asphalt (GameTrack::sandSpeed).
+  double stripSpeed;
+  // The spread of the cup's bot field: how many times as often as its front
+  // bot the last one runs wide (ttp::aiSeatMistakes).
+  double botMistakes;
 };
 
 // ---- built-track OUTPUT (the augmented race-track object) --------------------
@@ -176,7 +186,11 @@ struct OutSample {
   Vec3 pos, tangent, up, lateral;
   double s = 0.0;
   double width = 0.0;
-  double sand = 0.0;    // per side, inside `width`: narrower through a tight corner
+  // The strip on each side (L: -lateral, R: +lateral), inside `width`: the
+  // inside of a tight corner carries less. `pos` is the middle between the
+  // kerbs, so the asphalt's own centre stands asphaltMid() along `lateral`.
+  double sandL = 0.0, sandR = 0.0;
+  double asphaltMid() const { return (sandL - sandR) / 2; }
   bool pillars = false;
   bool hillable = false;
 };
@@ -252,6 +266,39 @@ struct RaceTrack {
   std::vector<Banana> bananas;
   std::vector<Kicker> kickers;
 };
+
+// The drawn kerb's fold: how far its far edge may fall behind the asphalt's
+// centre line, as a share of that line's advance, and the arclength that is
+// measured over. Over a bend's own length, not a ring's: the spline's
+// curvature wobbles from sample to sample and steps at every knot, which a
+// kerb near its limit draws as a crease a few centimetres deep, and read at
+// that scale a hairpin's inside lost the strip it had room for. The builder
+// narrows a strip to keep under it (sandWidths, narrowFolds) and `track_fold`
+// holds every track to it.
+inline constexpr double KERB_FOLD_MAX = 0.9, KERB_FOLD_WINDOW = 2.0;
+// The same for the road the cars drive, asphalt and strip out to the kerb's
+// foot, at the scale of those wobbles: where its cross-sections meet, a
+// point of it has two places on the road, and the sim's projection picks
+// either (`curb_hang`).
+inline constexpr double SURFACE_FOLD_MAX = 0.9, SURFACE_FOLD_WINDOW = 0.5;
+// The widest kerb any biome draws (the snow bank's), which the builder narrows
+// for: it cannot read the theme. `track_fold` fails a track whose own kerb is
+// wider.
+inline constexpr double KERB_MAX = 0.55;
+
+// The fold itself, per side (0 left, 1 right: -lateral and +lateral), on the
+// drawn rulings: how far the point `past` beyond the sample's edge falls
+// behind the ASPHALT's centre (pos + lateral * asphaltMid) over `window` about
+// arclength s, as 1 - (its advance) / (the centre's). A strip on a corner's
+// outside alone moves the centre line out and leaves the inner kerb where it
+// was, so the centre line is no reference; the asphalt's centre is. The
+// advance is taken along the tangent at s: only curvature in the road's plane
+// stretches an offset, and a loop's pitch does not fold its kerbs. 0 where the
+// centre does not advance. The builder narrows by this and `track_fold` judges
+// by it, one function for the reason post_at_sample gives below.
+class Centerline;   // ttp/centerline.h
+struct EdgeFold { double side[2]; };
+EdgeFold edge_fold(Centerline& cl, double s, double window, double past);
 
 // buildTrack + identity + resolveFurniture, matching record-trace.mjs
 // buildRaceTrack(trackId, {laps, seed}).

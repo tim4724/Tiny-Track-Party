@@ -64,7 +64,9 @@ inline constexpr double AUD_CUT = 64;     // past here: out of the scene -> sile
 // A sustained voice below this level is not running at all: it starts when its
 // level first rises above the floor and dies when it falls back.
 inline constexpr double VOICE_FLOOR = 0.02;
-inline constexpr double SAND_LEVEL = 0.45;     // the sand voice at speed
+// The strip voice at speed with all four wheels on it: under the engine, a
+// texture rather than an event.
+inline constexpr double SAND_LEVEL = 0.2;
 inline constexpr double SCREECH_GAP_MS = 140;  // min spacing so curb contact can't machine-gun
 inline constexpr double LAP_GAP_MS = 350;      // min spacing between lap chimes
 // A wall-grind only counts as a scrub above this speed — below it the car is
@@ -129,7 +131,7 @@ struct Car {
   double spin = 0;
   bool monster = false;
   bool onWall = false;
-  bool onSand = false;
+  double strip = 0;          // the share of its wheels on the road strip (Game::stripShare)
   double drift = 0;          // the sim's Car::driftMix, 0..1 (not on the snapshot)
   double air = 0;            // height off the deck (sim Car::h)
   double airRate = 0;        // and its rate, negative coming down (Car::vh)
@@ -256,6 +258,11 @@ class Decider {
   // everywhere at once, so no distance, and its subject is no car (Id::None).
   void weather(uint32_t ambient, std::vector<Command>& out);
 
+  // The cue a tyre on the track's strip plays: its theme's (theme.road.stripCue,
+  // a literal), held until the next call. The race's end stops every voice, so
+  // a change of track never leaves the last one's running.
+  void strip(const char* cue) { strip_ = cue; }
+
   // ---- race events ----
   // `pos` is the event's source world point, or null: the car's own point for a
   // car event (null = that car is already gone), the rocket's track point for
@@ -307,6 +314,7 @@ class Decider {
   std::string musicFile_;             // last picked song's file ("" = none yet)
   int rosterCount_ = 0;
   uint32_t ambient_ = 0;              // weather(): AMB_NONE until a race names its sky
+  const char* strip_ = "sand";        // strip(): the track's strip cue
 };
 
 // The C++ `Math.random`: the source Decider draws from when none is injected.

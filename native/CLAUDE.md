@@ -145,6 +145,24 @@ included, so a catalogue id's map is a lookup and the phones' chooser list
 
 Node reads geometry through `scripts/native-track.mjs` over the shipped wasm.
 
+**The road strip is per side, and the centre line sits between the kerbs.** A
+sample's `width` runs kerb to kerb about `pos`, with `sandL`/`sandR` inside it,
+so where the two differ the asphalt's own centre stands `asphaltMid()` off the
+centre line. Everything authored from the asphalt reads it: furniture `lat`
+(`resolveFurniture`), set pieces and landforms (the renderer), the racing line
+and every bot lane (`RacingLine::midAt`), the wear planner, the gantry. Anything
+measured ALONG the road the cars drive is taken on the asphalt's centre line,
+not the centre line, which stands on a corner's outside and runs longer there:
+the crest table (`Game`), the racing line's curvature. The strip narrows only
+where it must, by rule (`sandWidths`, `narrowFolds`): the drawn kerb may not
+fold over a bend, and the driven surface may not fold at the scale of the
+spline's sample-to-sample wobble, where the sim's projection would find two
+places for one point. `track_fold` holds every track to both, against the
+asphalt's centre. Any change to those rules moves
+the centre line and the lap's length, so every u-anchored set piece and
+landform slides with it: record the world and solve it back
+(`npm run repin:world`).
+
 ## Building
 
 `native/scripts/build-runtime-web.sh` builds the engine and needs the Filament
@@ -198,5 +216,15 @@ targets are the determinism contract (root rule 5).
 `npm run probe:cars` / `probe:laptime` / `probe:difficulty` drive `probe_cli`. The
 old JS probes ran the AI with no game context and unseeded items, so **readings
 from before the native probe are not comparable.** The probe is a tuning
-instrument, not a gate, but `probe_smoke` keeps it from rotting — it is what
-surfaced the racing-line bug, as lap times that moved between identical sweeps.
+instrument, not a gate, but `probe_smoke` runs its laptime and cost modes to
+keep it from rotting: it is what surfaced the racing-line bug, as lap times
+that moved between identical sweeps.
+
+Those modes put the BOT at the wheel, which reacts on the frame and never
+wavers. `npm run probe:balance` puts human driver models there instead (lag, a
+wandering hand, a short lean, their own brake and item habits) and races them
+through every cup as a live Grand Prix seats them; it is the instrument for car
+balance per skill tier and for "can a casual player reach the top half". Its
+DRIVERS table is a guess until fitted to logged players, and race outcomes are
+far more sensitive to lag than lap times are. No ctest runs this mode; every
+leg only compiles it.

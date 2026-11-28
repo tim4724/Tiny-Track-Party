@@ -86,7 +86,18 @@ int trailPick(const std::vector<CarView>& cars);
 // The banana is the live Banana aim card's, and it is HELD rather than fired:
 // trailPick's car takes it with ITEM down, which trails it and brings up the
 // aim view, and lets go SHOWCASE_BANANA_HOLD_S later, which drops it.
-enum class Showcase { None, Rocket, Monster, Banana };
+enum class Showcase { None, Rocket, Monster, Banana, Strip, StripOn, StripOff };
+
+// The strip showcase's loop: every AI-driven car holds a lane on the road for
+// SHOWCASE_STRIP_ROAD_S, then on the strip beside it for the rest of
+// SHOWCASE_STRIP_CYCLE_S, wherever the road carries one. StripOn ("strip-on")
+// holds the strip all the way round and StripOff ("strip-off") the road, for
+// comparing strips side by side. A field drives in formation, the cars
+// SHOWCASE_STRIP_GAP_M apart along the road and spread across the lane, so
+// one chase view sees each car and its dust (ttp_runtime.cc has the rule).
+inline constexpr double SHOWCASE_STRIP_CYCLE_S = 6.0;
+inline constexpr double SHOWCASE_STRIP_ROAD_S = 3.0;
+inline constexpr double SHOWCASE_STRIP_GAP_M = 2.5;
 
 inline constexpr double SHOWCASE_FIRST_FIRE_S = 0.8;
 inline constexpr double SHOWCASE_ROCKET_GAP_S = 1.3;
@@ -97,10 +108,14 @@ inline constexpr double SHOWCASE_BANANA_GAP_S = 2.0;
 struct ShowcaseState {
   double fireCd = SHOWCASE_FIRST_FIRE_S;
   double releaseCd = -1;  // the held banana's hold still to run; < 0 = none held
+  double stripT = 0;      // the strip showcase's clock
 };
 
-// "rocket" | "monster" | "banana" -> the kind; anything else is None.
+// "rocket" | "monster" | "banana" | "strip" | "strip-on" | "strip-off" -> the
+// kind; anything else is None. A strip kind may end in "+monster"
+// (showcaseMonster): its field drives the strip as monster trucks.
 Showcase parseShowcase(const char* kind);
+bool showcaseMonster(const char* kind);
 
 // Called once per sim step of `dtS`. Returns the index in `cars` of the car to
 // give the item to and fire it from now, or -1. Not for the banana.

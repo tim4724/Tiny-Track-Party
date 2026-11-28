@@ -77,9 +77,12 @@ The results board fades up over that held frame, so the discrepancy is on screen
 
 ## The deck is a ruled surface, and the car sits on it
 
-Every DECK point of the road's cross-section is at `y == 0` in the frame, so at
+Every point of the ASPHALT's cross-section is at `y == 0` in the frame, so at
 each arclength the drivable deck is a straight LINE across and the whole surface
-is that line swept: `P(s, lat) = frameAt(s).pos + frameAt(s).lat * lat`. Across the
+is that line swept: `P(s, lat) = frameAt(s).pos + frameAt(s).lat * lat`. A road
+strip stands a drawn-only step and cross slope off that line
+(`TrackBin::stepOf`, `slopeOf`), which `deckPoint` adds for a wheel on it
+(`stripLift`); the sim's deck stays the ruled line. Across the
 car there is nothing to fit; along it, where the deck twists, consecutive rulings
 are SKEW, so NO rigid pose lands all four wheels. That residual is the WHEELS'
 travel to absorb: the body takes the best-fit plane through the four contacts and
@@ -93,7 +96,9 @@ is the mistake.
   lean noise.
 - **Nothing in the conform is damped.** A filter buys smoothness with lag, and
   lag on a hill drags the car behind its contract position. **If a filter ever
-  looks necessary here again, the probe is what is wrong.**
+  looks necessary here again, the probe is what is wrong.** The one sprung
+  term is the road strip's step under a wheel, which is no part of the smooth
+  surface: the body takes it through a spring, the wheel at once.
 - **`deckFoot`'s step clamp is not a tuning constant.** A lateral offset near a
   tight corner's own radius stalls the offset curve and an unclamped step
   "converges" onto another part of the circuit.
@@ -599,7 +604,8 @@ to do both:
   leg), so no bank walls the road under a bridge. The band holds to the same
   rule its own way: under another strand's deck it is capped per vertex, and
   under its own it never reaches: its first row stops `kBandKerbIn` short of
-  the kerb's inner face, past what a chord between rings sags round a bend.
+  the kerb's inner face, and a ring is kept wherever the chord between two
+  would leave the kerb by `kBandSag`.
   `tests/e2e/terrain-ground.spec.js` reads the cap and the stilts off the
   drawn ground.
 - **The cap, not the lift, sets the GRID's stilt on a short crest.** A grid

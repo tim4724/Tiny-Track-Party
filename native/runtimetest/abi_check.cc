@@ -85,6 +85,7 @@
 #include "ttp/render_scale_controller.h"  // the frame-rate choice the lobby frame offers
 #include "ttp/room_flow.h"
 #include "ttp/session.h"
+#include "ttp/theme.h"  // each biome's strip cue, held to the ABI's cue table
 #include "ttp/ui_model.h"
 #include "ttp_audio.h"
 #include "ttp_live.h"     // the shared live gathers the race + ui walks compose over
@@ -1748,8 +1749,17 @@ void audioThroughAbi() {
   check(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT) != nullptr
         && std::strcmp(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT), "engine_putt") == 0,
         "TTP_CUE_ENGINE_PUTT names the engine loop");
-  check(ttp_audio_cue_id(TTP_CUE_RAIN) != nullptr, "the last code names a cue");
-  check(ttp_audio_cue_id(TTP_CUE_RAIN + 1) == nullptr, "and nothing past it");
+  check(ttp_audio_cue_id(TTP_CUE_SAND_FELT) != nullptr, "the last code names a cue");
+  check(ttp_audio_cue_id(TTP_CUE_SAND_FELT + 1) == nullptr, "and nothing past it");
+  // Every biome's strip cue is in that table. One that is not crosses as code
+  // 0, and the strip is silent for that whole cup on every shell.
+  for (int i = 0; i < ttp::rt::biome_count(); i++) {
+    const char* cue = ttp::rt::resolve_theme(ttp::rt::biome_name(i), "").road.stripCue;
+    bool named = false;
+    for (int code = 1; code <= TTP_CUE_SAND_FELT && !named; code++)
+      named = std::strcmp(ttp_audio_cue_id(code), cue) == 0;
+    check(named, std::string("the ") + ttp::rt::biome_name(i) + " strip's cue is in the cue table");
+  }
   {
     Value s = parseOrNull(ttp_audio_song_json(0), "audio_song_json(0)");
     check(s.type == Value::OBJ && s.find("file") && s.find("gain") && s.find("artist"),
@@ -4817,6 +4827,14 @@ void raceLiveWalks() {
         beachSkill = beachSkill && sk && sk->type == Value::NUM && sk->num == ttp::aiSkillForTier(1);
       }
       check(beachSkill, "a Beach Cup race hands every CPU the tier-1 skill");
+      // ...and each seat its share of the cup's mistake rate, none at the front.
+      bool spread = !bots.arr.empty();
+      for (size_t i = 0; i < bots.arr.size(); i++) {
+        const Value* m = bots.arr[i].find("mistakes");
+        const double want = ttp::aiSeatMistakes(TTP_CUPS[0].botMistakes, (int) i, (int) bots.arr.size());
+        spread = spread && (want > 1 ? m && m->type == Value::NUM && m->num == want : !m);
+      }
+      check(spread, "a Beach Cup race spreads its cup's mistake rate over its CPU seats, front seat clean");
       check(at(*createSession, "forceItem").type == Value::NUL,
             "no ?item override crosses as null, not \"\"");
       check(json::str_field(*createSession, "trackId") == "tidepool",

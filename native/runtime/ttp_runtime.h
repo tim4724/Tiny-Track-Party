@@ -163,8 +163,10 @@ TTP_ABI int ttp_shot_held(int h);
 
 // The item showcase (ttp/shot_hold.h): after each step, the engine gives the
 // item to the car the rule picks and fires it, or for "banana" holds it and
-// lets go. `kind` is "rocket" | "monster" | "banana"; null or anything else
-// turns it off. 1 = set, 0 = unknown handle.
+// lets go; "strip" | "strip-on" | "strip-off" instead steer the AI-driven
+// field onto the road strip and off it, as monster trucks with a "+monster"
+// suffix. `kind` is one of those six; null or anything else turns it off.
+// 1 = set, 0 = unknown handle.
 TTP_ABI int ttp_item_showcase(int h, const char* kind);
 
 // ---- global tunable (affects every session, like Game.js _steerExpo) --------
@@ -175,6 +177,10 @@ TTP_ABI double ttp_get_steer_expo(void);
 // DEBUG: the curb's feel, live (ttp/game.h debugCurb*). Negative restores the
 // authored value; each answers the authored value.
 TTP_ABI double ttp_debug_curb_speed(double frac);
+// DEBUG: the road strip's speed ceiling over every track's own
+// (debugSandSpeed); negative restores each track's own, and it answers the
+// no-cup default.
+TTP_ABI double ttp_debug_strip_speed(double frac);
 TTP_ABI double ttp_debug_curb_turn(double rate);
 TTP_ABI double ttp_debug_curb_turn_max(double rate);
 TTP_ABI double ttp_debug_curb_impact(double k);
@@ -294,7 +300,10 @@ TTP_ABI const char* ttp_track_supports_json(const char* trackIdOrDescriptor);
 // A uniform sweep of interpolated frames along a built track — s = 0, step,
 // 2·step, … while s <= length — as
 //   [ { "s", "pos":{x,y,z}, "tangent":{x,y,z}, "up":{x,y,z},
-//       "lateral":{x,y,z}, "width" }, … ]
+//       "lateral":{x,y,z}, "width", "sandL", "sandR" }, … ]
+// (`width` runs kerb to kerb about `pos`; sandL/sandR are the strip on each
+// side inside it, so the asphalt's centre stands (sandL - sandR) / 2 along
+// `lateral`.)
 // through the builder's own Centerline, so a frame BETWEEN knots is the same
 // cubic the sim and the renderer read.
 //

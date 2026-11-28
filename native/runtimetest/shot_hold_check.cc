@@ -77,6 +77,13 @@ int main() {
   check(sh::parseShowcase(nullptr) == sh::Showcase::None, "null turns the showcase off");
   check(sh::parseShowcase("banana") == sh::Showcase::Banana, "banana showcase parses");
   check(sh::parseShowcase("boost") == sh::Showcase::None, "an unknown item turns it off");
+  check(sh::parseShowcase("strip") == sh::Showcase::Strip && sh::parseShowcase("strip-on") == sh::Showcase::StripOn &&
+        sh::parseShowcase("strip-off") == sh::Showcase::StripOff, "the three strip showcases parse");
+  check(sh::parseShowcase("strip-on+monster") == sh::Showcase::StripOn && sh::showcaseMonster("strip-on+monster"),
+        "a strip showcase can ask for trucks");
+  check(!sh::showcaseMonster("strip-on"), "and has none unless it asks");
+  check(sh::parseShowcase("+monster") == sh::Showcase::None && !sh::showcaseMonster("+monster"),
+        "the suffix alone is no showcase");
   {
     // {totalS, monster, viewer, finished}
     const std::vector<sh::CarView> field = {

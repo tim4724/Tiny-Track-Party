@@ -89,6 +89,10 @@ extern "C" {
 #define TTP_CUE_LAND            18
 #define TTP_CUE_SAND            19
 #define TTP_CUE_RAIN            20 /* the weather's bed: its subject is no car     */
+#define TTP_CUE_SAND_SNOW       21 /* the other cups' strips, voiced as TTP_CUE_SAND is */
+#define TTP_CUE_SAND_GRAVEL     22
+#define TTP_CUE_SAND_DIRT       23
+#define TTP_CUE_SAND_FELT       24
 
 /* TtpAudioCmd.flags */
 #define TTP_AUD_F_GO  1u /* COUNTDOWN: the GO beat rather than a tick           */
@@ -161,6 +165,12 @@ static inline const TtpAudioCmd* ttp_audio_cmds(const TtpAudioBlock* b) {
  * play it does that work in the launch, not on the countdown's first frame.
  * A shell that does not drain here hears it on its next frame. */
 TTP_ABI void ttp_audio_bind(int session);
+
+/* The dev ?biome= override (ttp_display_biome's), for the strip a race is
+ * heard on: its cue follows the picture's strip, so a strip auditioned under
+ * an override sounds as it looks. The sky stays the track's own. Read at the
+ * next bind; "" or an unknown name is the track's own biome. */
+TTP_ABI void ttp_audio_biome(const char* name);
 
 /* One frame of the continuous mix: the shared curb-scrub throttle and every
  * sustained voice (boost wind, tire squeal, brake skid, engine, a jet per

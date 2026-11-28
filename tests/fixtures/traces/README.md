@@ -89,6 +89,14 @@ the fraction at 1.0, which no car can reach, the old recordings replay exactly, 
 only clips moved them: skysnake, the schedule trace and five sweep tracks.
 `hazard_check` asserts both tiers.
 
+On 2026-11-28 the road strip reached every cup but Skyline's own track (a
+slow-down band between asphalt and kerb, full width on ground road, a bot field
+spread per cup), which moves centre lines, lap lengths and every car on them.
+Every trace was re-emitted, with the sweep, the trackbuilder corpus (19 of its
+20 tracks now carry a strip the JS builder could not express, so only Skyline's
+line keeps the cross-implementation claim), the schematic, theme and audio
+corpora. Skysnake still races to all-finished with every event kind it had.
+
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
 event list, with periodic full snapshots.

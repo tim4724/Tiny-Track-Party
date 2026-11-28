@@ -1281,7 +1281,8 @@ private:
     void buildTerrainGrid(const TrackBin& tb);
     // THE VERGE BAND (buildVergeBand): the ground beside the road, as a strip
     // that follows it, rows kBandRow out from the kerb's outer foot on rings
-    // at most kBandStep apart (closer through a turn or over a crest). It
+    // at most kBandStep apart (closer through a turn, over a crest, or where
+    // the kerb would leave the chord between two, kBandSag). It
     // lies over the grid, which cannot meet a road at the road's own height:
     // the deck cap holds every 9 u triangle a deck touches under the deck's
     // LOWEST section across it, and its chords cannot rise within a cell of
@@ -1317,9 +1318,11 @@ private:
     // nothing the grid does not; the band goes under at the first row from
     // which on all do, but never before row kBandMinEnd (the apron's level).
     static constexpr float kBandFlat = 0.2f;
-    // How far short of the kerb's inner face the band's first row stops: the
-    // chords between rings round a bend may not carry it under the deck.
-    static constexpr float kBandKerbIn = 0.17f;
+    // How far short of the kerb's inner face the band's first row stops, and
+    // how far a kerb may stand outside the chord between two kept rings (a
+    // bend's outside, a strip rounding off its width): under kBandKerbIn, so
+    // no chord carries the first row under the deck.
+    static constexpr float kBandKerbIn = 0.17f, kBandSag = 0.12f;
     static constexpr int kBandMinEnd = 2;
     static constexpr float kBandStep = 4.0f, kBandTurnCos = 0.9848f;   // 10 degrees
     static constexpr float kApronLevel = 0.7f, kApronRun = 2.5f, kApronRef = 2.0f;
@@ -1471,6 +1474,7 @@ private:
         float squash = 0, squashV = 0;             // landing spring: body offset along up (<= 0)
         float airPitch = 0;                        // the body's eased pitch against the deck
         float droop = 0;                           // how far the wheels hang, eased (AIR_DROOP)
+        float stripLift[4] = {}, stripLiftV[4] = {}; // the body's sprung height over each wheel on a strip
         float accelNorm = 0;                       // forward-bite 0..1 — launch-scratch skids read it
         filament::math::float3 lastPos{};          // wheel-roll travel measurement
         bool hasLastPos = false;
@@ -1816,6 +1820,8 @@ private:
     std::vector<SkidRect> mSkidMipRects;
     int mSkidMipLevel = 0;
     float mSkidLatHalf = 0;                       // half the lat span the texture covers
+    uint32_t mSandRut = 0xccb894;                 // the track's rut tint (bindSkidLayer)
+    float mSandRutInk = 2.2f;                     //   and how fast the ink deepens it
     // Texel edges in world units per axis. The stamp feather is sized from
     // the texel footprint along the mark's own width direction, so straights
     // (resolved by the fine lat axis) stay crisp while diagonal segments —
@@ -2993,13 +2999,16 @@ public:
     // The sand dust's look (renderSandSpray), one knob each, in the order of
     // ttp_display_debug_sand_dust. The authored values are these; the display's
     // debug panel moves them live. Each puff varies around its knob's value.
+    // A low cloud: round puffs standing on the deck that barely rise. They
+    // ride along with the car (trail), so the chase camera keeps the cloud at
+    // the tyres; a low cloud left behind sinks out of the frame's bottom.
     enum SandDustKnob {
         kDustRate,      // puffs a second, per rear tyre on the sand, at speed
         kDustLife,      // seconds a puff lasts
         kDustStart,     // its size when it appears
         kDustEnd,       // ...and fully grown
         kDustOpacity,   // its peak alpha
-        kDustFlat,      // height over width
+        kDustFlat,      // its top's height over its width
         kDustTrail,     // the share of the car's speed it starts with
         kDustDrift,     // how fast it drifts outward
         kDustRise,      // ...and upward
@@ -3010,16 +3019,38 @@ public:
         kDustKnobs
     };
     static constexpr float kSandDustAuthored[kDustKnobs] = {
-        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
+        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.85f, 0.8f, 0.3f, 0.04f, 3.0f, 0.5f, 0.7f, 0.8f };
     static float sandDustAuthored(int knob) {
         return knob >= 0 && knob < kDustKnobs ? kSandDustAuthored[knob] : 0.0f;
     }
     // Sets one knob (a negative value restores the authored one) and answers its
     // authored value. mSandDust starts as the authored table.
     float debugSandDust(int knob, float value);
+    // The strip's own overrides ride the same call, past the dust's knobs, in
+    // theme.road's units (a colour as its 0xRRGGBB number). A knob never set
+    // is the theme's. Setting one makes the next scene build a full one; a NaN
+    // sets nothing, and either way the answer is what the resident scene was
+    // built with.
+    // Seven are theme.road.dust, in its order; the last two are the body's
+    // spring over a strip's step (mStripSpring), set live with no rebuild.
+    enum { kStripStep = kDustKnobs, kStripRutInk, kStripDust, kStripSlope, kStripSink,
+        kStripColor, kStripRut, kStripEdge, kStripDustMul,
+        kStripSpringK = kStripDustMul + 7, kStripSpringD, kStripKnobsEnd };
 private:
+    float mStripDebug[kStripKnobsEnd - kDustKnobs] = {};
+    bool mStripSet[kStripKnobsEnd - kDustKnobs] = {};
+    float mStripBuilt[kStripKnobsEnd - kDustKnobs] = {};
+    // The body's spring over a strip's step, per wheel: stiffness and damping.
+    // Bouncy on purpose (about 0.4 of critical): the body rocks a couple
+    // of times after a wheel drops onto a strip or climbs off it.
+    float mStripSpring[2] = { 420.0f, 16.0f };
     float mSandDust[kDustKnobs] = {
-        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.6f, 0.675f, 0.3f, 0.1f, 3.0f, 0.5f, 0.7f, 0.8f };
+        60.0f, 0.75f, 0.1f, 0.11f, 0.5f, 0.85f, 0.8f, 0.3f, 0.04f, 3.0f, 0.5f, 0.7f, 0.8f };
+    // The track's own dust on top of the knobs (theme.road.dust: its rate, life,
+    // start, end, rise, whiteness and opacity as multiples), so each cup's cloud
+    // comes off one table. buildSandDraws sets it.
+    float mSandDustMul[kDustKnobs] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    float dustKnob(int k) const { return mSandDust[k] * mSandDustMul[k]; }
     bool mHideCars = false;
     // Feature-ablation state (debugFeatureMask). mFeatureTagged latches the one
     // pass that moves every renderable off the default layer bit onto its

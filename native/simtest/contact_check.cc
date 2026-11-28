@@ -450,6 +450,86 @@ int main() {
     }
   }
 
+  // ---- 7. the strip is per side ---------------------------------------------
+  //
+  // Where one strip is wider than the other the asphalt is off the centre
+  // line, so a lat that is on the strip on one side is on the asphalt at its
+  // mirror. The traces cannot see a side swapped: they race tracks whose strips
+  // are the same on both sides throughout. And the wheels' share feeds only the
+  // strip's sound, which no replay hears.
+  //
+  // The edges are worked out here from the frame's own fields (L is -lateral),
+  // not asked of Frame's helpers, which are part of what is judged.
+  {
+    const char* const ID = "gauntlet";
+    BuiltRaceTrack bt = track(ID);
+    // The stretch is wherever the strips differ most, so nothing else may be
+    // lying on it: a pad there would lift the ceiling, oil would spin the car.
+    bt.game.hazards.clear(); bt.game.pads.clear(); bt.game.bananas.clear();
+    double s0 = 0, most = 0;
+    for (double s = 0; s < bt.game.length; s += 0.5) {
+      const Frame f = bt.centerline->sampleAt(s);
+      const double d = std::fabs(f.sandL - f.sandR);
+      if (d > most) { most = d; s0 = s; }
+    }
+    const Frame f = bt.centerline->sampleAt(s0);
+    const double wideSide = f.sandL > f.sandR ? -1.0 : 1.0;
+    // |lat| of the asphalt's edge on each side
+    const double wideEdge = f.width / 2 - std::max(f.sandL, f.sandR);
+    const double narrowEdge = f.width / 2 - std::min(f.sandL, f.sandR);
+    check(most > 2 * Stats().halfWid,
+          std::string(ID) + " has a stretch with one strip a car's width wider than the other");
+
+    // The cup's ceiling, found from the cup's own track list.
+    double cupSpeed = 0;
+    for (const CupDef& cup : TTP_CUPS)
+      for (int i = 0; i < cup.nTracks; i++)
+        if (std::string(cup.tracks[i]) == ID) cupSpeed = cup.stripSpeed;
+
+    // The centre between the two edges: past the asphalt on the wide strip's
+    // side only. At the ceiling already, so the strip holds the car there and
+    // the asphalt lets it run on.
+    for (double side : {wideSide, -wideSide}) {
+      Game game(field(2), bt.game, [](const Event&) {});
+      Car& a = *game.cars()[0];
+      Car& b = *game.cars()[1];
+      const double ceiling = a.vmax * cupSpeed;
+      a.totalS = s0; a.lat = (wideEdge + narrowEdge) / 2 * side;
+      a.v = ceiling; a.vlat = 0; a.heading = 0;
+      b.totalS = -80.0;
+      for (int n = 0; n < 12; n++) game.update(DT);
+      const std::string what = side == wideSide ? "the wide strip's side" : "its mirror";
+      if (side == wideSide) {
+        check(a.onSand, "a car past the asphalt is on the strip (" + what + ")");
+        check(std::fabs(a.v - ceiling) < 1e-9, "the strip holds a car at its cup's ceiling ("
+                                                   + std::to_string(a.v) + " vs "
+                                                   + std::to_string(ceiling) + ")");
+      } else {
+        check(!a.onSand, "the same lat on the other side is still asphalt (" + what + ")");
+        check(a.v > ceiling + 0.5, "the asphalt lets the car past the strip's ceiling ("
+                                       + std::to_string(a.v) + " vs " + std::to_string(ceiling)
+                                       + ")");
+      }
+      std::printf("  strip, %s: lat %+.2f, onSand %d, v %.2f (ceiling %.2f)\n", what.c_str(),
+                  a.lat, a.onSand ? 1 : 0, a.v, ceiling);
+    }
+
+    // The wheels: a car square to the road with its centre on the wide strip's
+    // edge has one side's pair on the strip, and at the mirror none.
+    Game game(field(2), bt.game, [](const Event&) {});
+    Car& a = *game.cars()[0];
+    a.totalS = s0; a.heading = 0;
+    a.lat = wideEdge * wideSide;
+    const double on = game.stripShare(a);
+    a.lat = -wideEdge * wideSide;
+    const double off = game.stripShare(a);
+    check(on == 0.5, "half the wheels are on the strip with the car astride its edge ("
+                         + std::to_string(on) + ")");
+    check(off == 0.0, "none are at the mirror of that lat (" + std::to_string(off) + ")");
+    std::printf("  strip at s %.1f: L %.2f, R %.2f, wheel share %.2f astride the edge, %.2f mirrored\n",
+                s0, f.sandL, f.sandR, on, off);
+  }
+
   std::printf("contact check: %d assertions, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

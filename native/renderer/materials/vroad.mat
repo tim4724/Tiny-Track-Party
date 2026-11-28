@@ -231,7 +231,11 @@ material {
         // rgb = SKID_COLOR in linear (srgbToLinear stays C++-side, one source),
         // a = the cap on summed ink, so crossing trails darken but a donut spot
         // cannot go pure black.
-        { type : float4, name : skidColor }
+        { type : float4, name : skidColor },
+        // rgb = what a tyre track multiplies the sand strip by, the biome's
+        // (theme.road.rut): warm on sand, cold on snow. float4 for the float3
+        // padding trap on Vulkan; a = how fast the ink deepens it.
+        { type : float4, name : rutTint }
     ]
 }
 
@@ -464,13 +468,13 @@ fragment {
             // On the sand strip (its vertex alpha is 0, buildRoadMesh) a tyre
             // leaves a GROOVE, not rubber: the same ink tints the sand itself,
             // each pass deeper, so the strip wears in where the cars drive.
-            // Damp, churned sand: warmer and only a little darker, never grey.
+            // Churned, a little darker in the strip's own hue (rutTint), never grey.
             // (Lit ridges along its edges, two more taps, were tried and read
             // as odd light lines. An early-out for sand pixels that skipped the
             // paint and decal work measured SLOWER on the GE9215, ~1.3 ms at
             // 4P/1080 with the antialias pass on.)
             if (getColor().a < 0.5) {
-                base = mix(base, base * vec3(0.8, 0.72, 0.58), min(ink * 2.2, 0.8));
+                base = mix(base, base * materialParams.rutTint.rgb, min(ink * materialParams.rutTint.a, 0.8));
             } else {
                 base = mix(base, sc.rgb, min(ink, sc.a));
             }

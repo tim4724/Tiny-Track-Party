@@ -866,6 +866,46 @@ bool checkRainBed() {
   return ok;
 }
 
+// The strip under the tyres, which no corpus world reaches either (a snapshot
+// carries no strip share): on the cue the track's theme named, a human car's
+// voice follows the share of its wheels on the strip, a CPU car's is faded by
+// its distance to the nearest player, and a car back on the asphalt stops it.
+bool checkStripVoice() {
+  bool ok = true;
+  auto expect = [&](bool cond, const char* what) {
+    if (!cond) { std::fprintf(stderr, "FAIL strip voice: %s\n", what); ok = false; }
+  };
+  const char* const cue = "sand_snow";
+  au::Car human, cpu;
+  human.id = Id::Num(1); human.hasPos = true; human.spd = 0.9; human.strip = 0.5;
+  cpu.id = Id::Num(2); cpu.hasPos = true; cpu.spd = 0.9; cpu.strip = 1;
+  cpu.pos.x = (au::AUD_NEAR + au::AUD_FAR) / 2;
+  au::AiIds ai;
+  ai.add(cpu.id);
+  const double faded = au::audibility(&cpu.pos, { &human.pos });
+  // What `out` says of one car's strip voice: its level, 0 for none, -1 for a stop.
+  const auto said = [&](const std::vector<au::Command>& out, const au::Car& c) {
+    double level = 0;
+    for (const au::Command& cmd : out) {
+      if (std::strcmp(cmd.name, cue) != 0 || !(cmd.id == c.id)) continue;
+      if (cmd.kind == au::Command::VOICE) level = cmd.level;
+      if (cmd.kind == au::Command::VOICE_STOP) level = -1;
+    }
+    return level;
+  };
+  au::Decider dec;
+  dec.strip(cue);
+  std::vector<au::Command> out;
+  dec.frame({ human, cpu }, {}, ai, 0, out);
+  expect(said(out, human) == au::SAND_LEVEL * human.strip, "a human car's follows its share of the strip");
+  expect(faded < au::AUD_PEAK && said(out, cpu) == au::SAND_LEVEL * faded, "a CPU car's is faded by its distance");
+  human.strip = cpu.strip = 0;
+  out.clear();
+  dec.frame({ human, cpu }, {}, ai, 0, out);
+  expect(said(out, human) == -1 && said(out, cpu) == -1, "a car back on the asphalt stops it");
+  return ok;
+}
+
 // Landings are decided off car height, which no recorded snapshot carries, so
 // the corpus can never reach them. Stated here instead: a car coming down hard
 // thumps once on the frame it lands, a skim off a crest makes no sound, and a
@@ -916,7 +956,7 @@ int landingChecks() {
 }
 
 int main(int argc, char** argv) {
-  if (!checkDriftVoice() || !checkAirVoices() || !checkRainBed()) return 1;
+  if (!checkDriftVoice() || !checkAirVoices() || !checkRainBed() || !checkStripVoice()) return 1;
   std::string fixture, outPath;
   if (corpus::wants_record(argc, argv, &fixture, &outPath)) {
     // The traces directory is still needed: the trace cases record only the

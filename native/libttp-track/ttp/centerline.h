@@ -19,14 +19,18 @@ namespace ttp {
 struct Frame {
   Vec3 pos, tangent, up, lateral;
   double width = 0.0;
-  double sand = 0.0;  // per side, inside `width`
-  double asphaltHalf() const { return width / 2 - sand; }  // the drivable asphalt's half-width
+  // The strip on each side (L: -lateral, R: +lateral), inside `width`, which
+  // runs kerb to kerb about `pos`; the asphalt's centre stands asphaltMid().
+  double sandL = 0.0, sandR = 0.0;
+  double asphaltHalf() const { return width / 2 - (sandL + sandR) / 2; }  // the drivable asphalt's half-width
+  double asphaltMid() const { return (sandL - sandR) / 2; }
+  double sandOn(double lat) const { return lat < 0 ? sandL : sandR; }    // the strip on lat's side
 };
 
 struct Sample {
   Vec3 pos, tangent, up, lateral;
   double width = 0.0;
-  double sand = 0.0;
+  double sandL = 0.0, sandR = 0.0;
   double s = 0.0;
 };
 

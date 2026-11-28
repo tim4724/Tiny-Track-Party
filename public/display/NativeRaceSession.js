@@ -54,6 +54,7 @@ export async function init() {
     setSteerExpo: c('ttp_set_steer_expo', null, ['number']),
     getSteerExpo: c('ttp_get_steer_expo', 'number', []),
     debugCurbSpeed: c('ttp_debug_curb_speed', 'number', ['number']),
+    debugStripSpeed: c('ttp_debug_strip_speed', 'number', ['number']),
     debugCurbTurn: c('ttp_debug_curb_turn', 'number', ['number']),
     debugCurbTurnMax: c('ttp_debug_curb_turn_max', 'number', ['number']),
     debugCurbImpact: c('ttp_debug_curb_impact', 'number', ['number']),
@@ -71,6 +72,7 @@ export function getNativeSteerExpo() { return fn ? fn.getSteerExpo() : 0; }
 // The curb's feel, likewise live (ttp/game.h): a negative value restores the
 // authored one, and each answers the authored value.
 export function debugCurbSpeed(n) { return fn ? fn.debugCurbSpeed(n) : 0; }
+export function debugStripSpeed(n) { return fn ? fn.debugStripSpeed(n) : 0; }
 export function debugCurbTurn(n) { return fn ? fn.debugCurbTurn(n) : 0; }
 export function debugCurbTurnMax(n) { return fn ? fn.debugCurbTurnMax(n) : 0; }
 export function debugCurbImpact(n) { return fn ? fn.debugCurbImpact(n) : 0; }

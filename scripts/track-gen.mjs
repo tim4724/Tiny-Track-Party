@@ -553,7 +553,9 @@ export function measureGrid(t, source, s0 = 0) {
     curvature = Math.max(curvature, curvatureFrom(before, after, H));
     grade = Math.max(grade, Math.abs(f.tangent.y));
     bank = Math.max(bank, Math.abs(f.lateral.y));
-    minWidth = Math.min(minWidth, f.width); maxWidth = Math.max(maxWidth, f.width);
+    // The width is the asphalt's: a frame runs kerb to kerb.
+    const asphalt = f.width - f.sandL - f.sandR;
+    minWidth = Math.min(minWidth, asphalt); maxWidth = Math.max(maxWidth, asphalt);
     rise = Math.max(rise, f.pos.y - groundY);
   }
   return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank,
@@ -785,7 +787,7 @@ export function measureTrack(t, source) {
   let prevH = null, prevS = 0, totTurn = 0, minW = Infinity, maxW = 0, climb = 0, prevY = null;
   for (const f of frames) {
     const s = f.s;
-    const w = f.width;
+    const w = f.width - f.sandL - f.sandR;
     minW = Math.min(minW, w); maxW = Math.max(maxW, w);
     if (prevY != null) climb += Math.max(0, f.pos.y - prevY);
     prevY = f.pos.y;

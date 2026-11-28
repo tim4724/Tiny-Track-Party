@@ -15,12 +15,13 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 263 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 265 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
     external fun ttp_add_human(h: Int, idJson: ByteArray?, statsJsonOrNull: ByteArray?)
     external fun ttp_audio_bind(session: Int)
+    external fun ttp_audio_biome(name: ByteArray?)
     external fun ttp_audio_cue_id(code: Int): ByteArray?
     external fun ttp_audio_drain(): ByteBuffer?
     external fun ttp_audio_frame(nowMs: Double)
@@ -39,6 +40,7 @@ object Ttp {
     external fun ttp_debug_curb_turn(rate: Double): Double
     external fun ttp_debug_curb_turn_max(rate: Double): Double
     external fun ttp_debug_drift_release(sec: Double): Double
+    external fun ttp_debug_strip_speed(frac: Double): Double
     external fun ttp_display_advance(dtSeconds: Double): Int
     external fun ttp_display_antialias(on: Int)
     external fun ttp_display_asset(name: ByteArray?, bytes: ByteArray?): Int

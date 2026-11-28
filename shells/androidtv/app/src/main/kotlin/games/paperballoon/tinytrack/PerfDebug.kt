@@ -28,8 +28,6 @@ import androidx.compose.runtime.setValue
  *                                            # system's mode). Probes a 50 Hz race.
  * adb shell setprop debug.ttp.tags 0         # no name tags: neither the per-frame read
  *                                            # nor the tag View's draw (1/unset = shown)
- * adb shell setprop debug.ttp.biome snow     # build every scene in this biome, whatever
- *                                            # the cup (SceneStaging reads it at build)
  * adb shell setprop debug.ttp.detail full    # draw the FULL world, not this box's lite
  *                                            # tier (read when the surface is created,
  *                                            # DisplayHost): what lite buys, A/B

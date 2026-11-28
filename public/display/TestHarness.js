@@ -417,7 +417,17 @@ export function runDisplayScenario(opts, ctx) {
   // engine deals toUint32(seed + n), so every gallery race was watching bots no
   // real race has. The seed is the SESSION's, so the field and the race it
   // drives are one draw.
-  const raceField = () => benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
+  // `?bots=<n>` keeps the first n of the fill, the live launch's debug cap
+  // (main.js): a few cars in one view (/gallery-dust.html), or none on a card
+  // about the road itself (the strip cards).
+  const fieldParams = new URLSearchParams(location.search);
+  const botCap = fieldParams.has('bots') ? Math.max(0, parseInt(fieldParams.get('bots'), 10) || 0) : Infinity;
+  const raceField = () => {
+    const f = benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
+    const kept = new Set(f.field.filter((e) => e.ai).slice(0, botCap).map((e) => e.peerIndex));
+    return { field: f.field.filter((e) => !e.ai || kept.has(e.peerIndex)),
+             bots: f.bots.filter((b) => b.player || kept.has(b.peerIndex)) };
+  };
 
   // The lobby demo's shape (buildDemoField): the roster and the CPU fill in
   // livery order, EVERY entry driven by the persona at its grid slot — the fill
@@ -3174,7 +3184,7 @@ export function runDisplayScenario(opts, ctx) {
     // `?showcase=` — a live card's item loop (ttp_item_showcase), for an item no
     // race shows on its own. A capture names its moment with a hold instead, and
     // the loop would change the race on the way there, so a hold switches it off.
-    const showcase = hold ? null : new URLSearchParams(location.search).get('showcase');
+    let showcase = hold ? null : new URLSearchParams(location.search).get('showcase');
     const newSession = () => {
       const s = bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
       if (hold && !s.shotHold(hold)) console.error(`[harness] the engine refused hold ${holdParam}`);
@@ -3183,6 +3193,8 @@ export function runDisplayScenario(opts, ctx) {
     };
     let engine = newSession();
     window.__engine = engine;
+    // The loop, changed live (/gallery-dust.html's Drive buttons).
+    window.__showcase = (kind) => { showcase = kind; engine.itemShowcase(kind); };
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
     // Humans get their split-screen cell, the CPU fill drives cell-less — the

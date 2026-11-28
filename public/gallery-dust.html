@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Strip dust — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<style>
+  body { margin: 0; padding: 0.8rem; background: #eef0f4; color: #1c2333; font: 600 0.9rem/1.3 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.8rem; }
+  h1 { font-size: 1.1rem; margin: 0 1rem 0 0; }
+  header button { padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; border-radius: 0.5rem; border: 2px solid #1c2333; background: #fff; color: #1c2333; }
+  header button.on { background: #1c2333; color: #fff; }
+  header .group { display: flex; align-items: center; gap: 0.4rem; margin-right: 1rem; }
+  nav { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-left: auto; }
+  nav a { color: #1c2333; text-decoration: none; font-size: 0.8rem; padding: 0.3rem 0.6rem; border-radius: 0.5rem; background: #fff; }
+  nav a.active { background: #1c2333; color: #fff; }
+  #cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0.8rem; }
+  .cell { background: #fff; border-radius: 0.8rem; padding: 0.6rem; }
+  .cell[hidden] { display: none; }
+  .cell h2 { font-size: 1rem; margin: 0 0 0.4rem; }
+  .cell iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 0.5rem; background: #000; }
+  .controls > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); column-gap: 1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Strip dust</h1>
+  <span class="group">Cars:
+    <button data-cars="1">1</button>
+    <button data-cars="3">3</button>
+    <button data-cars="5">5</button>
+  </span>
+  <span class="group">Drive:
+    <button data-mode="strip-on">On the strip</button>
+    <button data-mode="strip-off">Off the strip</button>
+    <button data-mode="strip">On and off</button>
+    <button id="monster">Monster trucks</button>
+  </span>
+  <span class="group">Spread:
+    <input type="range" id="spread" min="0" max="2.5" step="0.05">
+    <span id="spread-val"></span>
+  </span>
+  <span class="group">Camera:
+    <button data-cam="chase">Chase</button>
+    <button data-cam="lobby">Lobby</button>
+  </span>
+  <span class="group">Show: <span id="show" style="display:flex;gap:0.4rem"></span></span>
+  <button id="copy">Copy all changed values</button>
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-assets.html">Assets</a>
+    <a href="/gallery-landmarks.html">Landmarks</a>
+    <a href="/gallery-dust.html" class="active">Dust</a>
+    <a href="/gallery-artwork.html">Artwork</a>
+    <a href="/gallery-sounds.html">Sounds</a>
+    <a href="/gallery-music.html">Music</a>
+    <a href="/gallery-shots.html">Screens</a>
+    <a href="/licenses.html">Licenses</a>
+  </nav>
+</header>
+<div id="cells"></div>
+<script type="module" src="/gallery-dust.js"></script>
+</body>
+</html>

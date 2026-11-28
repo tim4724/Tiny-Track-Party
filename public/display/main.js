@@ -168,7 +168,9 @@ const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.g
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
 // ?laps=<n> — DEBUG: every race, lobby start and cup race alike, runs n laps
 // instead of TOTAL_LAPS (?laps=1 tours the catalogue quickly).
-const RACE_LAPS = Math.max(0, parseInt(_trackParams.get('laps'), 10) || 0) || TOTAL_LAPS;
+// The strip tuner (?striptune=1, stripTuner.js) drives on without a finish.
+const RACE_LAPS = Math.max(0, parseInt(_trackParams.get('laps'), 10) || 0)
+  || (_trackParams.get('striptune') === '1' ? 999 : TOTAL_LAPS);
 // ?bootdelay=<ms> — DEBUG: hold the engine boot this long, so the pre-boot NEW
 // GAME path (the caught click held pressed, then the lobby reveal and the
 // ticket's QR/URL fade) can be watched by hand instead of racing a fast machine.
@@ -259,6 +261,18 @@ const sceneBooted = scene.boot().catch((e) => {
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_biomes.has(_qBiome)) scene.biomeOverride = _qBiome;
+
+// The strip tuner's road-strip overrides (?stripstep= and its siblings,
+// stripTuner.js's table), handed over before the first scene build reads
+// them, and under ?striptune=1 its controls as an always-on overlay. Loaded
+// only for a URL that names one, and never bundled with this page: the module
+// imports shared/tracks.js.
+const _strip = [..._trackParams.keys()].some((k) => k.startsWith('strip'))
+  ? await import('./stripTuner.js') : null;
+if (_strip) sceneBooted.then(() => {
+  _strip.applyStripQuery(scene.display, _trackParams);
+  if (_trackParams.get('striptune') === '1') _strip.initStripTuner(scene);
+}).catch(() => {});
 
 // ?scenario=assets — the asset gallery's SHOWROOM look: the biome above (or the
 // track's own) carrying every biome's vocabulary, so one scene holds the whole
@@ -496,6 +510,7 @@ function rotatePreview(dt) {
 // silently (the decisions still run — they are what the corpus pins).
 const audio = new RaceAudio();
 const audioDecide = new _nativeAudio.NativeAudioDecider();
+if (scene.biomeOverride) audioDecide.biome(scene.biomeOverride);   // ?biome=: the strip heard as drawn
 // Perform a decision stream. Every audio call in this file goes through here.
 const sfx = (cmds) => audio.apply(cmds);
 
@@ -1637,6 +1652,7 @@ window.__net = net; window.__scene = scene; window.__startRace = startRace; wind
 window.__series = () => flow.seriesState(net.flow.handle); // the room's series state (null outside a cup)
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
+window.__stripSpeed = _nativeSim.debugStripSpeed; // the strip's speed ceiling, live (stripTuner.js's slow-down slider)
 // Perf HUD (render/PerfHud.js). show()/hide() arm it without a reload, and
 // sample() hands back the same numbers it prints — which is how a scripted GPU
 // budget sweep across the catalogue reads a track: show(), race it, sample().

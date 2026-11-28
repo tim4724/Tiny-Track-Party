@@ -1015,7 +1015,11 @@ TTP_ABI double ttp_display_debug_monster_back(double units);
  * (rate, life, start size, end size, opacity, flatness, trail, drift, rise, drag,
  * whiteness, turn boost, bite boost). A negative value restores the authored
  * one. Answers the AUTHORED value, with or without a display, so a slider reads
- * its default by resetting. */
+ * its default by resetting. Knobs past those are the road strip's overrides
+ * (TtpRenderer.h's kStrip* enum, with their units) under another contract: a
+ * NaN value only reads, anything else is a value (a negative too, so nothing
+ * restores), and the answer is what the resident scene was built with (for
+ * the two spring knobs, the live value), or 0 with no display. */
 TTP_ABI double ttp_display_debug_sand_dust(int knob, double value);
 
 #ifdef __cplusplus

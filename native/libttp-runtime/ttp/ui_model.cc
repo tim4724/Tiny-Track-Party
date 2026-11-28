@@ -717,11 +717,23 @@ uint32_t cupTintRgb(const OptStr& cupId, double pct) {
 
 uint32_t neutralTintRgb(double pct) { return towardWhite(TTP_CUP_NEUTRAL_COLOR, pct); }
 
-int shippedCupDifficulty(const std::string& trackId) {
+namespace {
+const CupDef* cupOf(const std::string& trackId) {
   for (int i = 0; i < TTP_CUP_COUNT; i++)
     for (int t = 0; t < TTP_CUPS[i].nTracks; t++)
-      if (trackId == TTP_CUPS[i].tracks[t]) return TTP_CUPS[i].difficulty;
-  return 0;
+      if (trackId == TTP_CUPS[i].tracks[t]) return &TTP_CUPS[i];
+  return nullptr;
+}
+}  // namespace
+
+int shippedCupDifficulty(const std::string& trackId) {
+  const CupDef* c = cupOf(trackId);
+  return c ? c->difficulty : 0;
+}
+
+double shippedCupBotMistakes(const std::string& trackId) {
+  const CupDef* c = cupOf(trackId);
+  return c ? c->botMistakes : 1.0;
 }
 
 std::vector<CatalogEntry> shippedCatalog() {

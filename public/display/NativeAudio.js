@@ -69,6 +69,7 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     bind: c('ttp_audio_bind', null, ['number']),
+    biome: c('ttp_audio_biome', null, ['string']),
     frame: c('ttp_audio_frame', null, ['number']),
     roster: c('ttp_audio_roster', null, ['number', 'number']),
     stopVoices: c('ttp_audio_stop_voices', null, []),
@@ -102,6 +103,12 @@ export class NativeAudioDecider {
   bind(sessionHandle) {
     fn.bind(sessionHandle | 0);
     return this._drain();
+  }
+
+  // The ?biome= inspector override, so the strip is heard as it is drawn;
+  // read at the next bind. Empty for the track's own.
+  biome(name) {
+    fn.biome(name || '');
   }
 
   // One frame of the continuous mix, decided off the bound session's live cars

@@ -21,9 +21,6 @@ static const double MAX_HEADING = 1.25;
 // The speed cap while scraping the curb, as a fraction of vmax.
 static const double WALL_SPEED_FRAC = 0.30;
 static const double WALL_DECEL = 20.0;
-// The speed ceiling with the car's centre past the asphalt, on a track that has
-// sand between the asphalt and the curb, as a fraction of what it would be.
-static const double SAND_SPEED_FRAC = 0.75;
 // While pinned, the wall turns the car along itself, so a car never hangs
 // nose-first on the curb: the angle into the wall eases at WALL_TURN_RATE (1/s)
 // until the car points WALL_PEEL (rad) away from it. Contact only, into-wall
@@ -203,6 +200,7 @@ static double g_wallSpeedFrac = WALL_SPEED_FRAC;
 static double g_wallTurnRate = WALL_TURN_RATE;
 static double g_wallTurnMax = WALL_TURN_MAX;
 static double g_wallImpact = WALL_IMPACT;
+static double g_sandSpeed = -1;   // debugSandSpeed's override; negative = each track's own
 // The drift's live copy, moved only by debugDriftRelease — traces never move it.
 static double g_driftRelease = DRIFT_RELEASE_T;
 
@@ -214,6 +212,11 @@ double debugDriftRelease(double sec) {
 double debugCurbSpeed(double frac) {
   g_wallSpeedFrac = frac < 0 ? WALL_SPEED_FRAC : js_min(1.0, frac);
   return WALL_SPEED_FRAC;
+}
+
+double debugSandSpeed(double frac) {
+  g_sandSpeed = frac < 0 ? -1 : js_min(1.0, frac);
+  return GameTrack().sandSpeed;
 }
 double debugCurbTurn(double rate) {
   g_wallTurnRate = rate < 0 ? WALL_TURN_RATE : rate;
@@ -305,6 +308,7 @@ Game::Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
       forceItem_(std::move(forceItem)),
       rng_(track.seed ? track.seed : 1u) {
   maxLat_ = js_max(0.1, (track.roadWidth ? track.roadWidth : 1) / 2 - LAT_MARGIN);
+  sandSpeed_ = track.sandSpeed;
 
   for (const Zone& h : track.hazards)
     hazards_.push_back(Zone{h.s, h.lat, h.radius ? h.radius : OIL_RADIUS});
@@ -330,15 +334,29 @@ Game::Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
   // Crest curvature: how fast the tangent turns away from the deck's up,
   // differenced across CURV_PROBE either side. Positive over a hill; negative
   // in a dip and all the way round a loop, which is why loops never launch.
+  // Taken along the ASPHALT's centre (Frame::asphaltMid), per ITS arclength:
+  // where one side carries more strip the centre line stands off it, on a
+  // bend's outside, where it runs longer than the road the cars drive and so
+  // reads every crest flatter.
   {
     int n = (int)std::ceil(length_ / CREST_STEP);
     crestK_.resize(n);
+    const auto asphaltAt = [&](double s) {
+      const Frame g = centerline_->sampleAt(s);
+      return g.pos.clone().addScaledVector(g.lateral, g.asphaltMid());
+    };
+    const auto tangentAt = [&](const Frame& g, double s) {
+      if (g.sandL == g.sandR) return g.tangent;
+      return asphaltAt(s + CREST_STEP / 2).sub(asphaltAt(s - CREST_STEP / 2)).normalize();
+    };
     for (int i = 0; i < n; i++) {
       double s = i * CREST_STEP;
       Frame f = centerline_->sampleAt(s);
       Frame a = centerline_->sampleAt(s - CURV_PROBE);
       Frame b = centerline_->sampleAt(s + CURV_PROBE);
-      crestK_[i] = a.tangent.sub(b.tangent).dot(f.up) / (2 * CURV_PROBE);
+      const double span = (a.sandL == a.sandR && b.sandL == b.sandR && f.sandL == f.sandR)
+          ? 2 * CURV_PROBE : asphaltAt(s + CURV_PROBE).distanceTo(asphaltAt(s - CURV_PROBE));
+      crestK_[i] = tangentAt(a, s - CURV_PROBE).sub(tangentAt(b, s + CURV_PROBE)).dot(f.up) / span;
     }
   }
 
@@ -497,6 +515,24 @@ double Game::curbLimit(double width) const {
 Game::HalfExtents Game::halfExtents(const Car& c) const {
   if (c.monsterT > 0) return {MONSTER_HALF_LEN, MONSTER_HALF_WID};
   return {c.halfLen, c.halfWid};
+}
+
+// The wheels as shares of the half-extents: the track and the wheelbase.
+static const double WHEEL_TRACK = 0.85, WHEEL_BASE = 0.7;
+double Game::stripShare(const Car& c) const {
+  if (!centerline_ || c.h >= AIR_MIN) return 0;
+  const Frame f = centerline_->sampleAt(c.totalS);
+  if (!(f.sandL > 0) && !(f.sandR > 0)) return 0;
+  const HalfExtents e = halfExtents(c);
+  const double yaw = bodyYaw(c), across = e.wid * WHEEL_TRACK * dmath::cos(yaw),
+               along = e.len * WHEEL_BASE * dmath::sin(yaw);
+  int on = 0;
+  for (const double a : { -across, across })
+    for (const double b : { -along, along }) {
+      const double lat = c.lat + a + b;
+      if (std::fabs(lat - f.asphaltMid()) > f.asphaltHalf() && f.sandOn(lat) > 0) on++;
+    }
+  return on / 4.0;
 }
 
 // The yaw the body is DRAWN at, and so the one it collides at: the heading plus
@@ -1247,9 +1283,10 @@ void Game::update(double dtMs) {
     }
     double vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
     double targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);
-    c.onSand = c.sandHere > 0 && grounded && c.curbLimSet
-               && std::fabs(c.lat) > c.curbLim + LAT_MARGIN - c.sandHere;
-    if (c.onSand && !boosting) targetV *= SAND_SPEED_FRAC;
+    const double strip = c.lat < 0 ? c.sandL : c.sandR;
+    c.onSand = strip > 0 && grounded && c.curbLimSet
+               && std::fabs(c.lat) > c.curbLim + LAT_MARGIN - strip;
+    if (c.onSand && !boosting) targetV *= g_sandSpeed >= 0 ? g_sandSpeed : sandSpeed_;
     if (c.wallRashT > 0) {
       c.wallRashT -= dt;
       if (!boosting) {
@@ -1281,7 +1318,8 @@ void Game::update(double dtMs) {
     c.totalS = js_max(prevTotal, hit.s);
     c.lat = hit.lat;
     c.curbLim = curbLimit(hit.frame.width); c.curbLimSet = true;
-    c.sandHere = hit.frame.sand;
+    c.sandL = hit.frame.sandL; c.sandR = hit.frame.sandR;
+    c.asphaltMid = hit.frame.asphaltMid();
     c.heading = dmath::atan2(
         hit.frame.tangent.clone().cross(fwd).dot(hit.frame.up),
         hit.frame.tangent.dot(fwd));

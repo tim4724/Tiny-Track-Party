@@ -938,8 +938,30 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
     const auto& rings = tb.rings;
     const size_t N = rings.size();
     if (mTerrainAmp <= 0 || mGroundGrid.h.empty() || N < 8) return;
+    // The band runs straight between two kept rings while the kerb follows
+    // every ring between: how far a kerb's inner face stands OUTSIDE the chord
+    // from ring a's to ring b's (b may be N, ring 0 again), on either side. A
+    // bend's outside does, and so does a strip rounding off its width.
+    const auto sag = [&](size_t a, size_t b) {
+        float worst = 0;
+        for (const float side : { -1.0f, 1.0f }) {
+            const auto face = [&](size_t i) {
+                const TrackBin::Sample& f = rings[i % N];
+                const float3 p = f.pos + f.lat * (side * 0.5f * f.width);
+                return float2{ p.x, p.z };
+            };
+            const float2 from = face(a), chord = face(b) - from;
+            for (size_t j = a + 1; j < b; j++) {
+                const float2 d = face(j) - from;
+                const float2 off = d - chord * (dot(d, chord) / dot(chord, chord));
+                worst = std::max(worst, side * dot(off, float2{ rings[j].lat.x, rings[j].lat.z }));
+            }
+        }
+        return worst;
+    };
     // The rings it keeps: kBandStep apart, closer where the road turns or
-    // crests, and the last held off ring 0 so the closing span is no sliver.
+    // crests or its kerb would leave the chord (kBandSag), and the last held
+    // off ring 0 so the closing span is no sliver.
     std::vector<uint32_t> sel{ 0 };
     {
         float arc = 0;
@@ -947,13 +969,14 @@ void TtpRenderer::buildVergeBand(const TrackBin& tb) {
         for (size_t i = 1; i < N; i++) {
             arc += length(rings[i].pos - rings[i - 1].pos);
             const float3 t = rings[i].tangent();
-            if (arc >= kBandStep || dot(t, t0) < kBandTurnCos) {
+            if (arc >= kBandStep || dot(t, t0) < kBandTurnCos || sag(sel.back(), i + 1) > kBandSag) {
                 sel.push_back((uint32_t) i);
                 arc = 0;
                 t0 = t;
             }
         }
-        if (sel.size() > 2 && length(rings[sel.back()].pos - rings[0].pos) < 0.5f * kBandStep) sel.pop_back();
+        if (sel.size() > 2 && length(rings[sel.back()].pos - rings[0].pos) < 0.5f * kBandStep
+                && sag(sel[sel.size() - 2], N) <= kBandSag) sel.pop_back();
     }
     const int K = (int) sel.size(), R = kBandRows;
     const auto vi = [&](int k, int side, int r) { return ((size_t) k * 2 + side) * R + r; };
@@ -1560,6 +1583,20 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
 
     std::vector<TrackBin::Sample> frames(N);
     for (uint32_t i = 0; i < N; i++) frames[i] = frameAt(((float) i / N) * L);
+    // THE STRIP'S GROUND IS MOTTLED, for no vertex: one flat colour read as a
+    // painted band. Whole waves round the lap, so the seam closes. Its EDGE
+    // stays straight: wandering a few cm, it made a straight swim at speed
+    // (the user felt dizzy on the snow).
+    constexpr float kStripMottle = 0.10f;
+    const float toneA = std::round(L / 6.5f), toneB = std::round(L / 2.3f);
+    // A strip vertex's shade: by ring and by which edge of the strip it is on,
+    // so the mottle runs along AND across.
+    const auto stripTone = [&](uint32_t ring, bool outer) {
+        const float u = (float) (ring % N) / N * (2.0f * (float) M_PI);
+        const float phase = outer ? 3.9f : 1.3f;
+        const float wave = 0.6f * std::sin(u * toneA + phase) + 0.4f * std::sin(u * toneB + 2.1f * phase);
+        return 1.0f + kStripMottle * wave;
+    };
     // Retained on the bin: uv0's track space is linear along exactly these
     // chords, so project() must scan these and no others — see its comment.
     tb.rings = frames;
@@ -1574,6 +1611,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const float3 SKIRT = srgbToLinear(tb.pal[5]);
     const float3 SHOULDER = srgbToLinear(tb.pal[6]);
     const float3 SAND = srgbToLinear(tb.pal[7]);
+    const float3 SAND_EDGE = srgbToLinear(tb.sandEdge);
+    mSandRut = tb.sandRut; mSandRutInk = tb.sandRutInk;  // before the chunks bind them
     const float3 SLUSH = srgbToLinear(tb.kerbSlush);
 
     // Cross-section profile, strips and baked AO.
@@ -1587,8 +1626,12 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // kDeckLodTol. The fine ribbon pays four strips a ring; the far one none.
     const float bev = 0.2f * std::min(cw, ch);
     struct PPoint { int sign; float off, y; };
-    constexpr int kPts = 20;
-    PPoint P[kPts] = {
+    // kPts is the closed ring round the section. Two more points stand outside
+    // it: THE STRIP'S STEP, a point under (or over) each strip's road edge at
+    // the strip's height (kStepL, kStepR), so the edge line stays a flat band
+    // on the slab and the strip meets it by a vertical face, not down a ramp.
+    constexpr int kPts = 20, kStepL = kPts, kStepR = kPts + 1, kAll = kPts + 2;
+    PPoint P[kAll] = {
         { -1, -cw, -deck }, { -1, -cw, 0 }, { -1, -cw, ch - bev }, { -1, -cw + bev, ch },
         { -1, -bev, ch }, { -1, 0, ch - bev },
         { -1, 0, 0 }, { -1, gap, 0 }, { -1, gap + lw, 0 },     // gap: offAt widens it per ring
@@ -1596,6 +1639,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         { 1, -gap - lw, 0 }, { 1, -gap, 0 }, { 1, 0, 0 },
         { 1, 0, ch - bev }, { 1, bev, ch },
         { 1, cw - bev, ch }, { 1, cw, ch - bev }, { 1, cw, 0 }, { 1, cw, -deck },
+        { -1, gap, 0 }, { 1, -gap, 0 },                        // the step's feet: points 7 and 12 again
     };
     // THE PLOUGH BANK (tb.kerbBank): the kerb drawn as the snow a plough threw
     // up, on the same seven points a side. A rounded crest leaning off the
@@ -1704,30 +1748,32 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     }
     // The deck-level points: the inner kerb feet, { ±1, 0, 0 }, and between.
     constexpr int kDeckPt0 = 6, kDeckPt1 = 13;
-    enum Kind { K_SKIRT, K_KERB, K_GAP, K_LINE, K_ROAD, K_DASH };
+    enum Kind { K_SKIRT, K_KERB, K_GAP, K_LINE, K_ROAD, K_DASH, K_STEP };
     struct Strip { int a, b; Kind kind; int side; }; // side: -1 L, +1 R, 0 n/a
-    // The first kFine strips are the ring the fine ribbon draws; the last two
-    // are the far ribbon's square kerb tops, laid but never drawn near.
-    constexpr int kFine = kPts, kFarTopL = kFine, kFarTopR = kFine + 1, kLaid = kFine + 2;
+    // The first kFine strips are what the fine ribbon draws: the ring's own
+    // (the gaps run to the step's feet), then the two steps. The last two are
+    // the far ribbon's square kerb tops, laid but never drawn near.
+    constexpr int kStripStepL = kPts, kStripStepR = kPts + 1;
+    constexpr int kFine = kPts + 2, kFarTopL = kFine, kFarTopR = kFine + 1, kLaid = kFine + 2;
     const Strip STRIPS[kLaid] = {
         { 0, 1, K_SKIRT, 0 }, { 1, 2, K_KERB, -1 }, { 2, 3, K_KERB, -1 },
         { 3, 4, K_KERB, -1 }, { 4, 5, K_KERB, -1 }, { 5, 6, K_KERB, -1 },
-        { 6, 7, K_GAP, 0 }, { 7, 8, K_LINE, 0 },
+        { 6, kStepL, K_GAP, 0 }, { 7, 8, K_LINE, 0 },
         { 8, 9, K_ROAD, 0 }, { 9, 10, K_DASH, 0 }, { 10, 11, K_ROAD, 0 },
-        { 11, 12, K_LINE, 0 }, { 12, 13, K_GAP, 0 }, { 13, 14, K_KERB, 1 },
+        { 11, 12, K_LINE, 0 }, { kStepR, 13, K_GAP, 0 }, { 13, 14, K_KERB, 1 },
         { 14, 15, K_KERB, 1 }, { 15, 16, K_KERB, 1 }, { 16, 17, K_KERB, 1 },
         { 17, 18, K_KERB, 1 }, { 18, 19, K_SKIRT, 0 }, { 19, 0, K_SKIRT, 0 },
+        { kStepL, 7, K_STEP, 0 }, { 12, kStepR, K_STEP, 0 },
         { 2, 5, K_KERB, -1 }, { 14, 17, K_KERB, 1 },
     };
     // The far ribbon's ring, in order round the section: the fine one with
     // each kerb's bevel, top, bevel replaced by its far top.
-    constexpr int kFarStrips = kFine - 4;
-    static const int kFar[] = { 0, 1, kFarTopL, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    static const int kFar[] = { 0, 1, kFarTopL, 5, 6, kStripStepL, 7, 8, 9, 10, 11, kStripStepR, 12, 13,
                                 kFarTopR, 17, 18, 19 };
-    static_assert(sizeof kFar / sizeof *kFar == kFarStrips);
-    const float AO[kPts] = { 0.55f, 0.65f, 0.90f, 0.90f, 1.0f, 1.0f, 0.70f, 0.90f,
+    constexpr int kFarStrips = (int) (sizeof kFar / sizeof *kFar);
+    const float AO[kAll] = { 0.55f, 0.65f, 0.90f, 0.90f, 1.0f, 1.0f, 0.70f, 0.90f,
                              1.0f, 1.0f, 1.0f, 1.0f, 0.90f, 0.70f, 1.0f, 1.0f,
-                             0.90f, 0.90f, 0.65f, 0.55f };
+                             0.90f, 0.90f, 0.65f, 0.55f, 0.90f, 0.90f };
 
     // THE DECK FLAG. The section above is a CLOSED ring, so its last strip —
     // the last point back to P[0] — is the road's UNDERSIDE, spanning the deck's whole lat
@@ -1816,21 +1862,25 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // A point's lateral offset from its kerb at ring i: the gap's two edges
     // follow that ring's own gap (the sand, where there is some).
     // Whether ring i carries sand in its gap. A sand track's stretch without
-    // any (a causeway: tracks.js sandOffFrom/To) keeps the gap every deck has
+    // any (a causeway: tracks.js sandOff) keeps the gap every deck has
     // (deckGap), and that is asphalt: sand-coloured, it drew a yellow hairline
     // inside both kerbs the length of the bridge.
-    const auto sandOn = [&](uint32_t i) { return tb.sand > 0 && frames[i].sand > 0.03f; };
+    // Each side has its own strip; the dash (points 9, 10) is on the asphalt's
+    // centre, which stands off the centre line where the two differ.
+    const auto sandOn = [&](uint32_t i, int side) {
+        return tb.sand > 0 && (side < 0 ? frames[i].sandL : frames[i].sandR) > 0.03f;
+    };
     const auto offAt = [&](uint32_t i, int j) {
-        const float g = tb.gapOf(frames[i]);
         switch (j) {
-            case 7: return g;
-            case 8: return g + lw;
-            case 11: return -g - lw;
-            case 12: return -g;
+            case 7: case kStepL: return tb.gapOf(frames[i], -1);
+            case 8: return tb.gapOf(frames[i], -1) + lw;
+            case 9: case 10: return P[j].off + frames[i].asphaltMid();
+            case 11: return -tb.gapOf(frames[i], 1) - lw;
+            case 12: case kStepR: return -tb.gapOf(frames[i], 1);
             default: return P[j].off;
         }
     };
-    std::vector<float3> ringPts((size_t) N * kPts);
+    std::vector<float3> ringPts((size_t) N * kAll);
     for (uint32_t i = 0; i < N; i++) {
         const TrackBin::Sample& f = frames[i];
         const float kerbK = 1.0f + street[i] * (kStreetKerbH / ch - 1.0f) + shed[i] * (kShedKerbH / ch - 1.0f);
@@ -1841,9 +1891,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             bankAt(sArc, -1, hs[0], ws[0], slush[0]);
             bankAt(sArc, 1, hs[1], ws[1], slush[1]);
         }
-        for (int j = 0; j < kPts; j++) {
+        for (int j = 0; j < kAll; j++) {
             float off = offAt(i, j), y = P[j].y;
-            if (tb.kerbBank && (j < kDeckPt0 || j > kDeckPt1)) {
+            if (tb.kerbBank && j < kPts && (j < kDeckPt0 || j > kDeckPt1)) {
                 const int k = j < kDeckPt0 ? 0 : 1;     // the side
                 const int b = k ? kPts - 1 - j : j;
                 bankPoint(b, bankDepth[2 * i + k], off, y);
@@ -1855,10 +1905,15 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const bool outer = P[j].off * P[j].sign > cw * 0.5f;   // the kerb's outer face and the skirt
             if (y > 0) y *= kerbK;
             const float l = P[j].sign * halfAt(i) + off + (outer ? P[j].sign * wider : 0.0f);
-            ringPts[(size_t) i * kPts + j] = f.pos + f.up * y + f.lat * l;
+            // The strip's two edges stand at its step (TrackBin::stepOf): the
+            // kerb's foot and the step's foot under the edge line's outer edge.
+            const int side = (j == 6 || j == kStepL) ? -1 : 1;
+            if (j == 6 || j == 13 || j == kStepL || j == kStepR) y += tb.stepOf(f, side);
+            if (j == 6 || j == 13) y += tb.slopeOf(f, side);   // its kerb edge, the cross slope higher
+            ringPts[(size_t) i * kAll + j] = f.pos + f.up * y + f.lat * l;
         }
     }
-    const auto pointAt = [&](uint32_t i, int j) { return ringPts[(size_t) i * kPts + j]; };
+    const auto pointAt = [&](uint32_t i, int j) { return ringPts[(size_t) i * kAll + j]; };
 
     // Kerb stripes banded by each kerb edge's own arclength, even-band snap.
     struct KerbDist { std::vector<float> d; float eff; };
@@ -1932,7 +1987,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     static const int VSEQ_PT[4] = { 0, 1, 1, 0 };   // a@i, b@i, b@ni, a@ni
     constexpr uint32_t kNone = ~0u;
     using Slots = std::array<uint32_t, 6>;
-    std::vector<Slots> laidAt((size_t) (N + 1) * kPts,
+    std::vector<Slots> laidAt((size_t) (N + 1) * kAll,
             { kNone, kNone, kNone, kNone, kNone, kNone });
     std::vector<uint32_t> roadRemap;
     roadRemap.reserve((size_t) N * kLaid * 4);
@@ -1942,7 +1997,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     mRoad.idx.reserve((size_t) N * kFine * 6);
     const auto lay = [&](uint32_t u, int pt, const Vertex& v, const float3& n,
             const math::float2& uv) {
-        Slots& here = laidAt[(size_t) u * kPts + pt];
+        Slots& here = laidAt[(size_t) u * kAll + pt];
         for (const uint32_t k : here) {
             if (k != kNone && !std::memcmp(&mRoad.verts[k], &v, sizeof v)
                     && !std::memcmp(&mRoad.normals[k], &n, sizeof n)
@@ -1966,7 +2021,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // road. It is ROAD SEEN FROM BELOW: no corner shade, and at least the
     // light the deck has in shade (after bakeVertexLight). Baked like the
     // rest, so it costs a frame nothing.
-    constexpr int kUnderside = kFine - 1;
+    constexpr int kUnderside = kPts - 1;
     std::vector<uint32_t> underside;
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
@@ -1979,6 +2034,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         for (int s = 0; s < kLaid; s++) {
             const Strip& st = STRIPS[s];
             const bool onDeck = P[st.a].y == 0.0f && P[st.b].y == 0.0f;
+            // the side a gap, step or edge line is on (its strip's)
+            const int gs = (st.a == 6 || st.a == 7 || st.a == kStepL) ? -1 : 1;
             float3 cb;
             switch (st.kind) {
                 case K_KERB:
@@ -1999,8 +2056,18 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                     }
                     break;
                 case K_DASH: cb = bare ? ASPHALT : (dashOn(i) ? DASHC : ASPHALT); break;
-                case K_LINE: cb = bare ? ASPHALT : (tb.edgeLines ? LINE : SHOULDER); break;
-                case K_GAP: cb = sandOn(i) || sandOn(ni) ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
+                // the step's face, in the strip's own colour a little darker.
+                // Never the slab's dark side: the face is a centimetre or two
+                // tall, under a pixel in a bend ahead, and a dark sliver
+                // between a white line and pale ground flickered there.
+                case K_STEP: cb = SAND * 0.9f; break;
+                case K_LINE:
+                    cb = bare ? ASPHALT : (tb.edgeLines ? LINE : SHOULDER);
+                    // beside a strip whose biome has one, the damp or packed
+                    // band the loose ground leaves at the road's edge
+                    if (!bare && tb.sandEdge && (sandOn(i, gs) || sandOn(ni, gs))) cb = SAND_EDGE;
+                    break;
+                case K_GAP: cb = sandOn(i, gs) || sandOn(ni, gs) ? SAND : (tb.edgeLines ? ASPHALT : SHOULDER); break;
                 default: cb = ASPHALT; break;
             }
             if (game >= 0 && st.kind != K_KERB && st.kind != K_SKIRT) cb = GAME[game][0];
@@ -2057,8 +2124,11 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 // A sand strip's alpha is 0: vroad.mat reads it as "a tyre
                 // leaves a groove here, not rubber". The deck is opaque, so the
                 // alpha is free.
-                const float flag = (st.kind == K_GAP && sandOn(ri)) ? 0.0f : 1.0f;
-                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cb, ao, flag) },
+                const float flag = (st.kind == K_GAP && sandOn(ri, gs)) ? 0.0f : 1.0f;
+                // the strip's mottle, per vertex so it shades smoothly (stripTone)
+                const float3 cv = (st.kind == K_GAP && sandOn(ri, gs) && game < 0)
+                        ? cb * stripTone(ri, pt == 6 || pt == 13) : cb;
+                corner[v] = lay(uIdx[v], pt, { p.x, p.y, p.z, packAlbedo(cv, ao, flag) },
                         ri == i ? nA : nB,
                         { (float) uIdx[v] / N * L,
                           onDeck ? P[pt].sign * halfAt(ri) + offAt(ri, pt) : OFF_DECK_LAT });
@@ -2102,7 +2172,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
         float4 acc{ 0.0f };
         int cnt = 0;
         for (int pt = kDeckPt0; pt <= kDeckPt1; pt++) {
-            for (const uint32_t k : laidAt[(size_t) u * kPts + pt]) {
+            for (const uint32_t k : laidAt[(size_t) u * kAll + pt]) {
                 if (k == kNone || k >= mRoad.custom0.size()) continue;
                 const math::half4& h = mRoad.custom1[k];   // ambient + sun, encoded
                 acc += float4{ (float) h.x, (float) h.y, (float) h.z, (float) h.w };
@@ -2138,12 +2208,15 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // the chunk boundaries are all exactly the fine ribbon's. What a run gives
     // up is the chord between its two rings, capped by kDeckLodTol against
     // every ring it skips (bends, crests and width changes keep their rings)
-    // and by kDeckLodSpan. A split cell on the Android box is ~200 lines tall
-    // and a 0.48 u ring past ~17 u is under two pixels, so looking down a
-    // straight the fine ribbon is thousands of sub-pixel triangles a cell; the
-    // far ribbon is worth ~4 ms of that frame (chooseLods has the numbers).
+    // and by kDeckLodSpan. A sand strip also gives up its mottle (stripTone)
+    // between them: that is per vertex and no part of the run's key, so the
+    // far form carries it at a run's two ends only. A split cell on the
+    // Android box is ~200 lines tall and a 0.48 u ring past ~17 u is under two
+    // pixels, so looking down a straight the fine ribbon is thousands of
+    // sub-pixel triangles a cell; the far ribbon is worth ~4 ms of that frame
+    // (chooseLods has the numbers).
     // Ring runs are the whole of it: a coarse CROSS-SECTION on top measured
-    // nothing further, so the square kerb's sixteen strips stay (kFar).
+    // nothing further, so the square kerb's strips stay (kFar).
     constexpr uint32_t kDeckLodSpan = 16;
     mRoadFarIdx.clear();
     std::vector<std::pair<uint32_t, uint32_t>> farRange;
@@ -2464,9 +2537,10 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind, uint32_t baseColor) {
 void TtpRenderer::buildGantry(const TrackBin& tb) {
     const TrackBin::Sample f = tb.frameAt(0);
     const float3 tanv = f.tangent();
+    const float mid = f.asphaltMid();   // centred on the asphalt, as its pylons collide (resolveFurniture)
     const auto toWorld = [&](float x, float y, float z) {
         // buildFinishGate seats the group a hair (0.02) INTO the road.
-        return f.pos + f.lat * x + f.up * (y - 0.02f) + tanv * z;
+        return f.pos + f.lat * (mid + x) + f.up * (y - 0.02f) + tanv * z;
     };
     // theme.gantry picks the plastic colours; theme.gate multiplies its
     // near-white colour grade over every part (sun-bleach / heat / cold).
@@ -3019,8 +3093,40 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
 
     TrackBin tb;
     applyTheme(tb, theme);
+    // The debug panel's strip overrides (debugSandDust), over the theme's.
+    const auto knob = [&](int k) { return mStripSet[k - kDustKnobs] ? &mStripDebug[k - kDustKnobs] : nullptr; };
+    if (const float* v = knob(kStripStep)) tb.sandStep = *v;
+    if (const float* v = knob(kStripRutInk)) tb.sandRutInk = *v;
+    if (const float* v = knob(kStripDust)) tb.sandDust = *v > 0.5f;
+    if (const float* v = knob(kStripSlope)) tb.sandSlope = *v;
+    if (const float* v = knob(kStripSink)) tb.sandSink = *v;
+    if (const float* v = knob(kStripColor)) tb.pal[7] = (uint32_t) *v;
+    if (const float* v = knob(kStripRut)) tb.sandRut = (uint32_t) *v;
+    if (const float* v = knob(kStripEdge)) tb.sandEdge = (uint32_t) *v;
+    for (int k = 0; k < 7; k++) if (const float* v = knob(kStripDustMul + k)) tb.dustMul[k] = *v;
+    const float built[] = { tb.sandStep, tb.sandRutInk, tb.sandDust ? 1.0f : 0.0f, tb.sandSlope, tb.sandSink,
+        (float) tb.pal[7], (float) tb.sandRut, (float) tb.sandEdge };
+    std::copy(std::begin(built), std::end(built), mStripBuilt);
+    std::copy(tb.dustMul, tb.dustMul + 7, mStripBuilt + (kStripDustMul - kDustKnobs));
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
+    // THE WORLD KEEPS ITS DISTANCE FROM THE KERB. A set piece and a free
+    // landform are authored a `lat` from the centre of the bare asphalt, which
+    // stands asphaltMid() off the centre line; where the road carries a sand
+    // strip the kerb stands that side's strip further out, and so does
+    // everything authored beside it. What is authored over the asphalt itself
+    // (a gate, a stream across the road) stays on it.
+    if (tb.sand > 0) {
+        const auto out = [&](float u, float& lat) {
+            const TrackBin::Sample f = tb.frameAt(u * tb.length);
+            const float half = f.width * 0.5f - (f.sandL + f.sandR) * 0.5f;   // the asphalt's
+            const float strip = std::abs(lat) > half ? f.sandOn(lat) : 0.0f;
+            lat = f.asphaltMid() + lat + (lat < 0 ? -strip : strip);
+        };
+        for (auto& p : tb.setPieces) out(p.u, p.lat);
+        for (ttp::rt::Landform& l : tb.land)
+            if (l.piece < 0 && l.kind != 6 && l.kind < 9) out(l.u, l.lat);
+    }
     setupTerrain(tb); // before the ground sheet and every builder that stands on it
     {
         // The light every static sheet is folded with (Mesh::bakeLight) —

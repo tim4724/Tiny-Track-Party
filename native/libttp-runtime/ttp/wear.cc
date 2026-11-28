@@ -42,11 +42,12 @@ WearPlan compute_wear_plan(const RaceTrack& geo, const RoadPalette& road) {
     const float hl = 0.35f + 0.45f * (float) rng.next();
     const bool dark = rng.next() < 0.5;
     if (nearFurniture(s)) continue;
-    const float half = (float) center->sampleAt(s).asphaltHalf();
+    const ttp::Frame here = center->sampleAt(s);
+    const float half = (float) here.asphaltHalf();
     const float latMax = std::max(0.0f, half - hl - 0.4f);
     WearMark m;
     m.s = s;
-    m.lat = (u * 2.0f - 1.0f) * latMax;
+    m.lat = (float) here.asphaltMid() + (u * 2.0f - 1.0f) * latMax;
     m.halfS = hs;
     m.halfLat = hl;
     m.shade = dark ? 0.86f : 1.10f;

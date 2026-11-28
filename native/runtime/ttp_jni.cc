@@ -108,6 +108,11 @@ void n_ttp_audio_bind(JNIEnv* env, jclass, jint a0) {
     ttp_audio_bind((int) a0);
 }
 
+void n_ttp_audio_biome(JNIEnv* env, jclass, jbyteArray a0) {
+    CStr s0(env, a0);
+    ttp_audio_biome(s0.get());
+}
+
 jbyteArray n_ttp_audio_cue_id(JNIEnv* env, jclass, jint a0) {
     (void) env;
     return toBytes(env, ttp_audio_cue_id((int) a0));
@@ -200,6 +205,11 @@ jdouble n_ttp_debug_curb_turn_max(JNIEnv* env, jclass, jdouble a0) {
 jdouble n_ttp_debug_drift_release(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jdouble) ttp_debug_drift_release((double) a0);
+}
+
+jdouble n_ttp_debug_strip_speed(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    return (jdouble) ttp_debug_strip_speed((double) a0);
 }
 
 jint n_ttp_display_advance(JNIEnv* env, jclass, jdouble a0) {
@@ -1482,6 +1492,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_add_bot", "(I[BDDI[B)V", (void*) n_ttp_add_bot },
     { "ttp_add_human", "(I[B[B)V", (void*) n_ttp_add_human },
     { "ttp_audio_bind", "(I)V", (void*) n_ttp_audio_bind },
+    { "ttp_audio_biome", "([B)V", (void*) n_ttp_audio_biome },
     { "ttp_audio_cue_id", "(I)[B", (void*) n_ttp_audio_cue_id },
     { "ttp_audio_drain", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_audio_drain },
     { "ttp_audio_frame", "(D)V", (void*) n_ttp_audio_frame },
@@ -1500,6 +1511,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_debug_curb_turn", "(D)D", (void*) n_ttp_debug_curb_turn },
     { "ttp_debug_curb_turn_max", "(D)D", (void*) n_ttp_debug_curb_turn_max },
     { "ttp_debug_drift_release", "(D)D", (void*) n_ttp_debug_drift_release },
+    { "ttp_debug_strip_speed", "(D)D", (void*) n_ttp_debug_strip_speed },
     { "ttp_display_advance", "(D)I", (void*) n_ttp_display_advance },
     { "ttp_display_antialias", "(I)V", (void*) n_ttp_display_antialias },
     { "ttp_display_asset", "([B[B)I", (void*) n_ttp_display_asset },

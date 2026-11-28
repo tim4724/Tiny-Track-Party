@@ -219,6 +219,12 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
       const double g = audibility(c.hasPos ? &c.pos : nullptr, humans_);
       if (g >= AUD_FLOOR && (!haveScrub || g > scrubG)) { haveScrub = true; scrubSpd = c.spd; scrubG = g; }
     }
+    // The strip under the tyres, as much as the share of the wheels on it:
+    // every car's, a CPU car's faded by its distance to the nearest player
+    // like any world cue, since a field running the strip is heard as one.
+    const double strip = SAND_LEVEL * c.strip * clamp01(c.spd / 0.4);
+    voice(out, strip_, c.id, aiIds.has(c.id) ? strip * audibility(c.hasPos ? &c.pos : nullptr, humans_) : strip,
+          nullptr);
     // State-driven voices per HUMAN car — each level follows the physics this
     // frame. CPU cars stay silent here: they corner and brake constantly, and a
     // 7-car chorus would be noise.
@@ -236,7 +242,6 @@ void Decider::frame(const std::vector<Car>& cars, const std::vector<Rocket>& roc
     voice(out, "corner", c.id, js_max(c.steer * c.steer, c.drift) * (1 - c.drift) * tyreGate, nullptr);
     voice(out, "drift", c.id, c.drift * tyreGate, nullptr);
     voice(out, "brake", c.id, c.brake * (1 - c.drift) * clamp01((c.spd - 0.2) / 0.4) * ground, nullptr);
-    voice(out, "sand", c.id, c.onSand ? SAND_LEVEL * clamp01(c.spd / 0.4) : 0, nullptr);
     // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
     // While a monster truck, the same loop deepens into a big-truck growl.
     voice(out, "engine_putt", c.id, clamp01(c.spd / 1.2) + (c.airborne ? ENGINE_FLARE : 0),

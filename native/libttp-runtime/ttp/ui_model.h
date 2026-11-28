@@ -272,6 +272,8 @@ std::vector<CatalogEntry> shippedCatalog();
 // The authored difficulty (1..4) of the shipped cup holding `trackId`, or 0 for
 // a track no cup lists (the dev tracks).
 int shippedCupDifficulty(const std::string& trackId);
+// ...and the spread of its cup's bot field (CupDef::botMistakes); 1 in no cup.
+double shippedCupBotMistakes(const std::string& trackId);
 
 enum class PickMode { NONE, CUP, TRACK, RANDOM, TOUR };
 PickMode pickModeOf(const OptStr& mode);
