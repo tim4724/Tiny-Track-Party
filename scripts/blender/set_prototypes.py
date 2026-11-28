@@ -1206,7 +1206,8 @@ class fig_frame:
 # joints down from the body (x off the leg's line, y, half width, half
 # depth), the hoof under it, the tail, the shoulder the neck hinges on and
 # how far the head dips in each pose, the neck and head's limbs and blocks
-# (size, where, colour, roll, fine).
+# (size, where, colour, roll, fine), its ears and horns a limb each side
+# (the ears in `ears_c`'s colour, its coat's by default).
 FIG_QUAD = {
     'cow': dict(
         barrel=((-0.4, 0.46, 0.1, 0.1), (-0.3, 0.47, 0.17, 0.17), (0.0, 0.44, 0.18, 0.19), (0.24, 0.45, 0.165, 0.18),
@@ -1219,9 +1220,11 @@ FIG_QUAD = {
         tail=((-0.4, 0.55, 0.018, 0.02), (-0.45, 0.5, 0.02, 0.022), (-0.46, 0.28, 0.016, 0.018), (-0.45, 0.14, 0.03, 0.034)),
         hinge=(0.3, 0.5), dip=dict(graze=-0.95, drink=-0.1, up=0.15, lie=0.1),
         head=((((0.28, 0.5, 0.1, 0.13), (0.42, 0.55, 0.075, 0.1), (0.5, 0.58, 0.07, 0.085)), 'coat', dict(bury=3)),
-              (((0.47, 0.6, 0.085, 0.085), (0.58, 0.55, 0.07, 0.075), (0.66, 0.5, 0.055, 0.055)), 'face', dict(bury=2)),
-              (((0.64, 0.51, 0.055, 0.052), (0.7, 0.475, 0.05, 0.045)), 'muzzle', dict(bury=1))),
-        blocks=(((0.05, 0.045, 0.3), (0.47, 0.67), 'horn', 0.0, False), ((0.05, 0.07, 0.26), (0.44, 0.61), 'coat', 0.0, False)),
+              # (a face tapering to a small muzzle read as a cone)
+              (((0.46, 0.6, 0.08, 0.085), (0.64, 0.51, 0.07, 0.065)), 'face', dict(bury=2)),
+              (((0.625, 0.52, 0.072, 0.058), (0.705, 0.478, 0.07, 0.052)), 'muzzle', dict(bury=1))),
+        horns=((0.455, 0.665, 0.06, 0.024, 0.022), (0.465, 0.73, 0.15, 0.013, 0.013)),   # (one bar across the poll read as a yoke)
+        ears=((0.44, 0.61, 0.06, 0.035, 0.02), (0.43, 0.585, 0.15, 0.04, 0.012)),
         look=dict(mane=0x5a4632, muzzle=0xf2bf99, horn=0xfde4c7, hoof=0x38383d)),
     'sheep': dict(
         barrel=((-0.27, 0.33, 0.09, 0.09), (-0.2, 0.34, 0.17, 0.16), (0.0, 0.345, 0.185, 0.175), (0.17, 0.34, 0.17, 0.16),
@@ -1231,9 +1234,10 @@ FIG_QUAD = {
         tail=((-0.25, 0.39, 0.045, 0.045), (-0.33, 0.27, 0.028, 0.028)),
         hinge=(0.2, 0.33), dip=dict(graze=-1.1, up=0.1),
         head=((((0.16, 0.36, 0.105, 0.11), (0.3, 0.42, 0.075, 0.08)), 'coat', dict(fine=True, bury=1)),
-              (((0.27, 0.43, 0.064, 0.068), (0.36, 0.435, 0.058, 0.062), (0.45, 0.41, 0.042, 0.042)), 'face', {}),
+              (((0.25, 0.44, 0.062, 0.072), (0.39, 0.385, 0.05, 0.05)), 'face', {}),
               (((0.44, 0.412, 0.04, 0.038), (0.48, 0.4, 0.033, 0.03)), 'muzzle', dict(n=4, fine=True, bury=1))),
-        blocks=(((0.04, 0.045, 0.21), (0.3, 0.465), 'face', 0.0, False), ((0.09, 0.05, 0.1), (0.28, 0.505), 'coat', 0.0, True)),
+        # (its face a long black brick straight out, the ears a bar across it)
+        ears=((0.29, 0.46, 0.05, 0.03, 0.014), (0.29, 0.44, 0.13, 0.035, 0.012)), ears_c='face',
         look=dict(coat=0xf8f8fb, face=0x2a2735, legs=0x2a2735, mane=0xf8f8fb, muzzle=0xf2bf99)),
     # a toy's horse, built like the cattle and the cars: short thick legs
     # under a deep barrel (on a real horse's long thin ones it read as an
@@ -1250,11 +1254,13 @@ FIG_QUAD = {
         hinge=(0.2, 0.415), dip=dict(up=0.0, graze=-1.25),
         head=((((0.16, 0.415, 0.098, 0.138), (0.26, 0.515, 0.069, 0.098), (0.33, 0.6, 0.055, 0.071), (0.365, 0.645, 0.046, 0.052)),
                'coat', dict(keep=True, bury=3)),
-              (((0.335, 0.66, 0.05, 0.055), (0.425, 0.615, 0.045, 0.05), (0.51, 0.545, 0.036, 0.038)), 'coat', dict(bury=2)),
-              (((0.49, 0.563, 0.036, 0.037), (0.57, 0.5, 0.032, 0.03)), 'muzzle', dict(bury=1)),
+              (((0.335, 0.665, 0.046, 0.05), (0.359, 0.612, 0.056, 0.07), (0.429, 0.561, 0.04, 0.046),
+                (0.462, 0.524, 0.036, 0.04)), 'coat', dict(keep=True, bury=2)),
+              (((0.456, 0.532, 0.038, 0.042), (0.479, 0.506, 0.042, 0.045), (0.496, 0.487, 0.033, 0.033)), 'muzzle',
+               dict(bury=1)),
               (((0.18, 0.535, 0.016, 0.02), (0.25, 0.61, 0.018, 0.03), (0.31, 0.675, 0.018, 0.03), (0.345, 0.71, 0.016, 0.02)),
                'mane', dict(n=4))),
-        blocks=(((0.03, 0.03, 0.105), (0.41, 0.64), 'eye', 0.6, True), ((0.05, 0.03, 0.04), (0.385, 0.69), 'mane', 0.5, True)),
+        blocks=(((0.03, 0.03, 0.12), (0.395, 0.63), 'eye', 0.8, True), ((0.05, 0.03, 0.04), (0.37, 0.675), 'mane', 0.8, True)),
         look=dict(mane=0x5a4632, muzzle=0xf2bf99, hoof=0x38383d, eye=0x2a2735)),
     'dog': dict(
         barrel=((-0.25, 0.35, 0.05, 0.06), (-0.15, 0.345, 0.08, 0.085), (0.02, 0.33, 0.085, 0.095), (0.15, 0.335, 0.09, 0.105),
@@ -1333,9 +1339,11 @@ def fig_quad(kind, at, yaw=0.0, coat=0x8a5a3c, k=1.0, pose='up', dip=None, life=
         box_ = fig_lite() and 'lite_head' in A
         for rings, key, kw in A['lite_head' if box_ else 'head']:
             F.limb(rings, C[key], **kw)
-        if 'ears' in A:                                  # pricked: a pointed limb each side
-            F.pair(A['lite_ears' if box_ else 'ears'], coat, n=4, bury=1)
-        for size, pos, key, roll, fine in A['blocks']:
+        if 'ears' in A:                                  # a limb each side: pricked, or out to the sides
+            F.pair(A['lite_ears' if box_ else 'ears'], C[A.get('ears_c', 'coat')], n=4, bury=1)
+        if 'horns' in A:
+            F.pair(A['horns'], C['horn'], n=4, bury=1)
+        for size, pos, key, roll, fine in A.get('blocks', ()):
             F.block(size, pos, C[key], roll=roll, fine=fine)
         if ears:
             for ez in (-0.035, 0.035):
@@ -1375,7 +1383,8 @@ FIG_BIRD = {
         bill=((0.5, 0.57, 0.075, 0.04), (0.76, 0.52, 0.065, 0.022)),
         tail=((-0.44, 0.24, 0.13, 0.06), (-0.72, 0.42, 0.05, 0.025)), tail_c='tip',
         folded=((0.22, 0.28, 0.25, 0.1, 0.03), (-0.1, 0.32, 0.27, 0.14, 0.035), (-0.46, 0.32, 0.16, 0.05, 0.02)), folded_side='y',
-        blocks=(((0.05, 0.05, 0.27), (0.46, 0.67), 'eye', True),)),
+        # an eye each side (one bar through the head stood out of both like sunglasses)
+        blocks=(((0.05, 0.05, 0.04), (0.46, 0.67, 0.084), 'eye', True), ((0.05, 0.05, 0.04), (0.46, 0.67, -0.084), 'eye', True))),
     'hawk': dict(
         colors=dict(body=0x38383d, wing=0x38383d, tip=0x4f5260, bill=0xffc044, tail=0xf1976c),
         body=((-0.2, 0.0, 0.03, 0.03), (-0.08, 0.0, 0.06, 0.05), (0.08, 0.0, 0.065, 0.055), (0.17, 0.01, 0.04, 0.04)),
@@ -15985,8 +15994,9 @@ def swan(at, k=0.9):
     loft([p(1.38, 2.16), p(1.66, 2.22), p(1.92, 2.1)], r((0.16, 0.16), (0.175, 0.165), (0.1, 0.09)), 'white', Z, 6)
     loft([p(1.86, 2.1), p(2.28, 1.97)], r((0.09, 0.065), (0.05, 0.03)), 0xff7e44, Z, 4)              # the bill
     with plain_parts():
-        box((0.14 * k, 0.12 * k, 0.2 * k), p(1.9, 2.2), 0x2a2735)                                   # its knob
-        box((0.07 * k, 0.07 * k, 0.345 * k), p(1.7, 2.28), 0x2a2735)                                # the eyes
+        box((0.14 * k, 0.12 * k, 0.12 * k), p(1.9, 2.2), 0x2a2735)                                  # its knob
+        for sd in (-1, 1):                                                                          # an eye each side
+            box((0.07 * k, 0.07 * k, 0.04 * k), p(1.7, 2.28, sd * 0.145), 0x2a2735)
 
 @piece(REAL)
 def boating_lake():
@@ -20578,8 +20588,9 @@ def equine(at, yaw, coat, L=0.62, ears=0.07, life=None, mane=0x5a4632, muzzle=0x
     F = fig_quad('horse', at, yaw, coat, k=L / 0.62, dip=-1.25 * head, life=life,
                  step=tuple(d * stance for d in (0.035, -0.02, -0.03, 0.03)), ears=ears,
                  mane=mane, muzzle=muzzle, sock=legs, belly=belly)
-    if stripe:
-        F.block((0.44, 0.02, 0.035), (-0.04, 0.555), stripe, fine=True)
+    if stripe:     # on the barrel's top at its rings, fitted to FIG_QUAD['horse']'s (a straight bar stood over the dip)
+        F.limb(((-0.2, 0.551, 0.018, 0.008), (-0.02, 0.511, 0.018, 0.008), (0.15, 0.536, 0.016, 0.008)), stripe,
+               n=4, fine=True)
     if tack:
         blanket, saddle = tack
         F.block((0.2, 0.03, 0.25), (-0.01, 0.54), blanket)
