@@ -99,8 +99,8 @@ const char* ttp_theme_showcase_set_models(void) {
   return scratch().c_str();
 }
 
-const char* ttp_showcase_inventory_json(void) {
-  scratch() = ttp::rt::showcase_inventory_json();
+const char* ttp_showcase_inventory_json(uint32_t mask) {
+  scratch() = ttp::rt::showcase_inventory_json(mask);
   return scratch().c_str();
 }
 

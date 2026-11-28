@@ -214,13 +214,12 @@ inline Prim primPlate(const std::vector<std::pair<float, float>>& yz, float t) {
 // ---------------------------------------------------------------------------
 // MODEL VARIANTS — the takes on each of the props worth looking at closely.
 //
-// WHY THESE ARE FUNCTIONS AND NOT INLINE IN buildLandmarks. Two callers need
-// the same geometry from different frames: the landmark placer, which stands
-// ONE of them wherever its clearance search lands, and the MODEL BENCH, which
-// stands ALL of them in a row so they can be judged against each other. A
-// model authored inline in the placer can only ever be seen in the place the
-// placer chose, next to nothing to compare it with — which is how the rocket
-// shipped as four rectangles and a cone for as long as it did.
+// WHY THESE ARE FUNCTIONS AND NOT INLINE IN buildLandmarks. The placer stands
+// one of them wherever its clearance search lands, and the variant latches
+// pick which take. A model authored inline in the placer can only ever be
+// seen in the place the placer chose — which is how the rocket shipped as
+// four rectangles and a cone for as long as it did. The gallery does not
+// stand a row of the variants.
 //
 // Everything emits through a `part` callback in the model's OWN local frame
 // (y up, +z forward, origin on the ground for the standing models and at the
@@ -265,10 +264,9 @@ inline const mat4f rotYm(float a) { return mat4f::rotation(a, float3{ 0, 1, 0 })
 inline const mat4f rotZm(float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); }
 
 // ---- the wind-up train ----------------------------------------------------
-// buildTrainModel below still draws the loco, for the asset gallery's model
-// bench alone. The stadium oval it used to trundle — the path, the sleepers,
-// the gauge they were laid to and the per-frame walk — went when the playroom's
-// train became the Holiday Kit's own set on its own rails (theme.cc).
+// buildTrainModel still builds the loco. Nothing places it: the gallery does
+// not stand a variant row, and the playroom's train is the set piece on its
+// own rails (theme.cc). The function stays with the other variant builders.
 
 // ---- rocket ---------------------------------------------------------------
 // SLEEK AND MODERN, decided after four rounds of toy shapes were turned down.
@@ -293,10 +291,12 @@ inline const mat4f rotZm(float a) { return mat4f::rotation(a, float3{ 0, 0, 1 })
 // one side reads as a propeller. Everything here is on the axis, three-fold or
 // four-fold.
 //
-// Ship scale is 0.2 world units and it is only ever seen crossing the screen at
-// speed, so VALUE is the other thing that matters: the body stays near-white on
-// all three, because the thing it flies over is dark asphalt and a mid-grey
-// missile disappears into it.
+// Ship scale is this factor on the authored mesh (~0.2–0.45 u) and it is only
+// ever seen crossing the screen at speed, so VALUE is the other thing that
+// matters: the body stays near-white on all three, because the thing it flies
+// over is dark asphalt and a mid-grey missile disappears into it. The race
+// bakes kRocketMesh into the vertex buffer; the gallery applies the same one.
+constexpr float kRocketMesh = 1.12f;
 
 inline void buildRocketModel(const PartFn& part, int variant) {
     constexpr uint32_t SHELL = 0xeef1f5,   // cool near-white — the body, always

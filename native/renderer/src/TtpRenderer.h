@@ -194,10 +194,10 @@ public:
 
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
-    // later scene is built with, and — for the asset gallery's MODEL BENCH —
-    // which prop to stand ALL of its variants in a row of instead of building
-    // the usual landmark set. Both are latched, like the biome override: they
-    // change what the next buildScene meshes, not what a frame draws.
+    // later scene is built with. setModelBench latches a model id and drops
+    // the static key; the gallery does not place a row of variants. Both are
+    // latched, like the biome override: they change what the next buildScene
+    // meshes, not what a frame draws.
     //
     // Variant 0 is the ORIGINAL geometry of each, kept as the thing the others
     // are argued against; what actually ships is mModelVariant's defaults, see
@@ -2213,6 +2213,13 @@ private:
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
     int mModelVariant[4] = { 1, 1, 1, 4 };
     int mBenchModel = -1;
+    // The asset gallery's flat-pad build (Theme::gallery). Cleared with the
+    // scene. Spots are a copy of the theme's, so landmark and clutter placement
+    // can read them without the theme. mGalleryAssets are the kit cars and the
+    // named item GLBs — not car-modelN.glb, which is the race roster's name.
+    bool mGallery = false;
+    std::vector<ttp::rt::GallerySpot> mGallerySpots;
+    std::vector<filament::gltfio::FilamentAsset*> mGalleryAssets;
 
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
@@ -2556,6 +2563,11 @@ private:
 
     // The two halves of buildScene and releaseScene (see buildScene). The
     // static build leaves its TrackBin in mTrack for the field to read.
+    bool buildGalleryWorld(TrackBin& tb, const ttp::rt::Theme& theme);
+    // True when this is a gallery build: fn runs once per spot of `kind` and
+    // the caller skips the race placement (which would consume the rnd stream
+    // and carve terrain). False on a race, and fn is not called.
+    bool forGalleryLandmark(uint32_t kind, const std::function<void(float x, float z, float yaw)>& fn) const;
     bool buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);
     bool buildField(const std::vector<TtpRosterCar>& roster);

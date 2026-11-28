@@ -12,45 +12,13 @@
 <header>
   <h1>TINY TRACK · ASSETS</h1>
 
-  <div class="group">
-    <select id="asset-biome" aria-label="Biome"></select>
-  </div>
+  <div id="asset-filters"></div>
 
-  <div class="group">
-    <select id="asset-item" aria-label="Item roulette">
-      <option value="">Item: roulette</option>
-    </select>
-  </div>
-
-  <!-- The MODEL BENCH: every take on one procedural prop, in a row, so two
-       shapes can be argued about side by side instead of one at a time. -->
-  <div class="group">
-    <select id="asset-bench" aria-label="Model bench">
-      <option value="">Bench: off</option>
-    </select>
-  </div>
-
-  <div class="group">
-    <select id="asset-variant" aria-label="Variant in use"></select>
-  </div>
-
-  <div class="group">
-    <label class="checkbox-label" for="asset-drive">
-      <input type="checkbox" id="asset-drive">
-      Drive
-    </label>
-  </div>
-
-  <div class="group">
-    <label class="checkbox-label" for="asset-legend">
-      <input type="checkbox" id="asset-legend" checked>
-      Legend
-    </label>
-  </div>
-
-  <!-- In a .group so the mobile header collapses it behind ⚙ with the rest. -->
-  <div class="group">
-    <button class="ctrl" id="asset-home">Back to the cars</button>
+  <!-- In a .group so the mobile header collapses it behind ⚙ with the rest.
+       Home frames the opening pad; the biome buttons are filled from the
+       inventory, one per pad. -->
+  <div class="group" id="asset-places">
+    <button class="ctrl" id="asset-home" aria-pressed="true">Home</button>
   </div>
 
   <button class="ctrl options-toggle" id="options-toggle" aria-expanded="false" aria-label="Options">⚙</button>
@@ -75,10 +43,6 @@
        takes the pointer rather than passing it through to the page. -->
   <iframe id="asset-stage" title="Asset showroom"
           src="/?scenario=assets&track=showroom"></iframe>
-  <aside class="legend" id="asset-legend-panel" hidden>
-    <p class="legend__hint">Drag to look · scroll to fly · WASD · Q/E</p>
-    <div id="asset-legend-lists"></div>
-  </aside>
 </section>
 
 <script src="/shared/protocol.js?v=__APP_V__"></script>

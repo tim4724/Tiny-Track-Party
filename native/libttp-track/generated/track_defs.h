@@ -2663,49 +2663,9 @@ constexpr FurnDef kKickers_gym[] = {
 
 constexpr WptDef kW_showroom[] = {
   { 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.ep+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.6a66666666666p+6, 0x1.199999999999ap+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.7cp+6, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.6a66666666666p+6, 0x1.999999999999ap+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4p+6, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.ep+5, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4p+5, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x1.4p+4, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { 0x0p+0, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { -0x1.8p+4, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { -0x1.14ccccccccccdp+5, 0x1.999999999999ap+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { -0x1.38p+5, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { -0x1.14ccccccccccdp+5, 0x1.199999999999ap+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { -0x1.8p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-  { -0x1.8p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
-};
-constexpr FurnDef kOils_showroom[] = {
-  { 0x1p-1, 0x0p+0, false, 0x0p+0 },
-  { 0x1.0f5c28f5c28f6p-1, -0x1p+0, false, 0x0p+0 },
-};
-constexpr FurnDef kPads_showroom[] = {
-  { 0x1.3333333333333p-4, -0x1.ccccccccccccdp-1, false, 0x0p+0 },
-  { 0x1.3333333333333p-4, 0x1.ccccccccccccdp-1, false, 0x0p+0 },
-};
-constexpr FurnDef kBoxes_showroom[] = {
-  { 0x1.47ae147ae147bp-6, 0x0p+0, false, 0x0p+0 },
-  { 0x1.70a3d70a3d70ap-5, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.70a3d70a3d70ap-5, -0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.70a3d70a3d70ap-5, 0x1.6666666666666p-2, false, 0x0p+0 },
-  { 0x1.70a3d70a3d70ap-5, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-};
-constexpr FurnDef kPoles_showroom[] = {
-  { 0x1.428f5c28f5c29p-1, -0x1p+0, false, 0x0p+0 },
-  { 0x1.428f5c28f5c29p-1, 0x1p+0, false, 0x0p+0 },
-  { 0x1.51eb851eb851fp-1, 0x0p+0, false, 0x0p+0 },
-};
-constexpr BananaDef kBananas_showroom[] = {
-  { 0x1.1eb851eb851ecp-1, 0x0p+0 },
-  { 0x1.2666666666666p-1, -0x1.ccccccccccccdp-1 },
-  { 0x1.2e147ae147ae1p-1, 0x1.ccccccccccccdp-1 },
+  { 0x1.4p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+3, 0x1.4p+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x0p+0, 0x1.4p+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
 };
 
 constexpr SegDef kS_drift[] = {
@@ -2749,7 +2709,7 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "gate0", "Gate 0", nullptr, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "warp", "Warp Ladder", nullptr, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "gym", "Gym", nullptr, true, nullptr, 0, kW_gym, 16, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_gym, 2, kPads_gym, 1, kBoxes_gym, 5, kPoles_gym, 3, kBananas_gym, 3, kKickers_gym, 1, nullptr, 0, nullptr, 0 },
-  { "showroom", "Showroom", nullptr, true, nullptr, 0, kW_showroom, 19, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, kOils_showroom, 2, kPads_showroom, 2, kBoxes_showroom, 5, kPoles_showroom, 3, kBananas_showroom, 3, nullptr, 0, nullptr, 0, nullptr, 0 },
+  { "showroom", "Showroom", nullptr, true, nullptr, 0, kW_showroom, 4, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
   { "drift", "Drift", nullptr, false, kS_drift, 14, nullptr, 0, 0x1.4p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0 },
 };
 // The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).

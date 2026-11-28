@@ -2757,6 +2757,10 @@ void TtpRenderer::releaseStatic() {
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
     for (auto*& a : mSetAssets) dropAsset(a);
+    for (auto*& a : mGalleryAssets) dropAsset(a);
+    mGalleryAssets.clear();
+    mGallery = false;
+    mGallerySpots.clear();
     dropAsset(mBoxAsset);
     dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);

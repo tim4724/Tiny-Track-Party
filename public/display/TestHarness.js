@@ -625,171 +625,79 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
-  // ---- asset showroom (used by the asset gallery, /gallery-assets.html) ----
-  // Everything the game draws, in one scene, under a camera you fly yourself.
-  //
-  // Three pieces do the work and none of them is new machinery: the SHOWROOM
-  // track (shared/devTracks.js) is a stadium oval whose exhibition straight the
-  // renderer lines its hero landmarks along; the SHOWCASE theme (set in main.js
-  // for this scenario) unions every biome's scenery, clutter and fliers into
-  // whichever biome is being shown; and the field is a bare session left UNRUN,
-  // so the cars sit parked on the grid — one per model, in the liveries — which
-  // is the shot the gallery opens on.
-  //
-  // The only thing here the other previews do not do is stay INTERACTIVE: the
-  // camera is the viewer's, and window.__showroom lets the gallery's own chrome
-  // drive the biome, the field and the item roulette without reloading the page
-  // (a reload would re-fetch the wasm and every GLB to change a dropdown).
+  // ---- asset gallery (/gallery-assets.html) ----
+  // The kit on flat pads, under a camera you fly yourself. No session and no
+  // grid: showcase mode (set in main.js for this scenario) builds the pads and
+  // returns before the road. window.__showroom is how the page's filter chips
+  // rebuild that scene without reloading the wasm.
   if (scenario === 'assets') {
     show('race');
     hideResults();
+    document.getElementById('corner-btns')?.style.setProperty('display', 'none');
     ready().then(() => setupShowroom()).catch((e) => console.warn('[TestHarness] showroom failed to start', e));
 
     function setupShowroom() {
       const { scene, track } = ctx;
-      const MODEL_NAMES = window.CAR_NAMES || [];
-      // Three-quarters behind the grid, at car height: the opening frame is the
-      // parked lineup wearing its liveries, with the gantry
-      // and then the whole exhibition straight receding past it — the cars, and
-      // where to fly next, in one shot. Fitted to the showroom's own geometry
-      // (the line is at world origin, the road runs +x, the grid sits behind
-      // it), which is why it is authored rather than solved: this scenario
-      // builds exactly one track.
-      const START_CAM = { eye: { x: -12, y: 2, z: -7.5 }, yaw: 0.75, pitch: -0.12 };
-      const cam = enableFreeCam(scene, START_CAM);
+      const cam = enableFreeCam(scene);
+      // The pads span hundreds of units. Pace follows eye height (Stage._freePace).
+      cam.scaleWithHeight = true;
+      let mask = 0x7f;
+      // null frames the opening pad. A biome name frames that pad and is kept
+      // across a filter rebuild, which moves the pad.
+      let place = null;
 
-      // One seat per LIVERY, cycling the models — eight cars covers every model
-      // twice over, and no model is represented by only one paint job.
-      //
-      // TWO PER MODEL, CYCLING IN SLOT ORDER is load-bearing beyond the paint:
-      // the parked showroom puts the monster rig on the BACK HALF of the grid
-      // (showcase_monster_from, native/libttp-runtime/ttp/showcase.h), and a rig
-      // is the kit chassis seating that slot's own body — so a lineup of this
-      // shape is what makes those four rigs one of each of the four trucks
-      // rather than the same one four times.
-      //
-      // The seats are the BENCH ROSTER's (ttp_race.h's bench field, one per
-      // livery here rather than a race's four): livery = seat, model = seat
-      // wrapped into the model list, every seat carrying a controller. That is
-      // the lineup above, dealt by the launch rule instead of by this page.
-      const { field, bots } = benchField(track.trackId, COLORS.length, 1);
+      // Stand south of ONE pad and frame the whole of it, so a biome's
+      // catalogue is in the picture and not only the front row. yaw/pitch are
+      // the free cam's look (Stage._freeDir).
+      function aim(box) {
+        const cx = (box.x0 + box.x1) / 2;
+        const cz = (box.z0 + box.z1) / 2;
+        const span = Math.max(box.x1 - box.x0, box.z1 - box.z0, 12);
+        const need = Math.max(span * 0.72, 18);
+        const eye = { x: cx, y: need * 0.55, z: box.z1 + need * 0.28 };
+        const dx = cx - eye.x, dy = 1.2 - eye.y, dz = cz - eye.z;
+        const hyp = Math.hypot(dx, dy, dz) || 1;
+        cam.eye = eye;
+        cam.yaw = Math.atan2(dx, dz);
+        cam.pitch = Math.asin(dy / hyp);
+        scene.display.lookFov(0);
+      }
 
-      let forceItem = null;   // the roulette override the gallery's picker sets
-      let engine = null;
-      let driving = false;
-      const newSession = () => {
-        if (engine) engine.dispose();
-        engine = bareSession(field, track, { bots, forceItem });
-        // Every box rolls the forced item, and the engine gives and fires it on a
-        // loop (the rocket's flight and burst, the monster truck's grow-in)
-        // instead of once a lap: the showcase rule, ttp_item_showcase.
-        engine.itemShowcase(forceItem);
-        window.__engine = engine;
-        scene.bindSession(engine.h);
-        scene.hold(!driving);
-      };
-      newSession();
+      function inventory() {
+        try {
+          return window.__biomes && window.__biomes.showcaseInventory(mask);
+        } catch (_) { return null; }
+      }
 
-      for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-      // cell:false — no split-screen: one camera over the whole showroom, which
-      // is the one this page hands to the viewer.
-      // Labelled by MODEL rather than by driver: this page is a catalogue of
-      // the kit, and the roster's names say nothing about which car is which.
-      field.forEach((f, i) => scene.addCar(f.peerIndex, f.colorIndex,
-                                           MODEL_NAMES[f.carIndex] || `Car ${i + 1}`,
-                                           { cell: false, carIndex: f.carIndex }));
+      function frame(name) {
+        const inv = inventory();
+        const pads = inv && inv.pads || [];
+        const pad = name && pads.find((p) => p.name === name);
+        const box = pad || (inv && inv.bounds);
+        if (box && box.x1 > box.x0) aim(box);
+        else scene.display.lookFov(0);
+      }
 
-      scene.onFrame = (dt) => {
-        if (!driving) return;   // parked: the renderer holds the grid at rest
-        engine.update(dt * 1000);
-        if (raceOver(engine.getSnapshot())) newSession();   // endless: back to the grid, lap again
-      };
-
-      // The gallery chrome's control surface. Same-origin, so the page reaches
-      // it through the iframe's contentWindow rather than through postMessage.
       window.__showroom = {
-        // Park the field back on the grid, or let the AI drive it out — the only
-        // way to see the moving half of the kit (skids, dust, items in flight).
-        drive(on) {
-          driving = on !== false;
-          if (driving) scene.hold(false);
-          else newSession();   // parked means back ON the grid, not stopped mid-corner
-          return driving;
-        },
-        driving: () => driving,
-        // Every box rolls this item, so the demo above can spend it on a loop.
-        // null hands the roulette back.
-        item(id) { forceItem = id || null; newSession(); return forceItem; },
-        heldItem: () => forceItem,
-        // Repaint the world. A biome is a scene REBUILD (the palette is baked
-        // into the meshes), so this awaits the new scene and rebinds the field.
-        async biome(name) {
-          scene.biomeOverride = name || null;
+        async filter(next) {
+          mask = next >>> 0;
+          scene.galleryMask(mask);
           await scene.setTrack(track);
-          scene.bindSession(engine.h);
-          return scene.biome();
+          frame(place);
         },
-        // The MODEL BENCH: every variant of one procedural prop in a row on the
-        // verge, instead of the usual landmark set. Same rebuild shape as the
-        // biome pick above — the geometry is baked into the scene's meshes, so
-        // there is nothing to toggle on a live one.
-        //
-        // It FLIES YOU THERE too. The row starts 26 units up the exhibition
-        // straight on the far verge, facing the road: findable, but only if you
-        // already know it is there, and a bench you have to search for is a
-        // bench that gets used once. The viewpoint is authored from the
-        // showroom's own geometry for the same reason START_CAM is — this
-        // scenario builds exactly one track.
-        async bench(model, view) {
-          scene.bench(model || '');
-          await scene.setTrack(track);
-          scene.bindSession(engine.h);
-          if (model && view) {
-            // Scripted close-ups: a caller that knows where it wants to stand
-            // (screenshot sweeps) skips the authored row viewpoint.
-            if (view.eye) cam.eye = { ...view.eye };
-            cam.yaw = view.yaw ?? 0;
-            cam.pitch = view.pitch ?? -0.05;
-          } else if (model) {
-            // Offset up-track and pulled back so the whole row clears the
-            // legend panel, which is the right quarter of the frame whenever
-            // the gallery is showing one. The ROCKET row is one entry longer
-            // than the other two and is staged at 9x, so it needs both a wider
-            // shot and more height.
-            const wide = model === 'rocket';
-            // The starfish row lies flat on the sand, so the shared eye reads
-            // it nearly edge-on — it gets a higher, steeper viewpoint.
-            const flat = model === 'starfish';
-            cam.eye = { x: wide ? 37.0 : flat ? 35.2 : 31.5,
-                        y: wide ? 5.4 : flat ? 5.8 : 2.6,
-                        z: wide ? -19.0 : flat ? -9.2 : -10.5 };
-            cam.yaw = 0;
-            cam.pitch = flat ? -0.5 : -0.05;
-          } else {
-            this.home();
-          }
-          return model || '';
+        // Frame one named pad (a biome, or "kit"). Unknown names fall back
+        // to the opening pad.
+        goto(name) {
+          place = name || null;
+          frame(place);
         },
-        // Which variant of a prop the SCENE is built with, which is the answer
-        // the bench exists to reach: pick one here and it is what the showroom
-        // (and every race, until the page reloads) draws.
-        async variant(model, v) {
-          scene.modelVariant(model, v | 0);
-          await scene.setTrack(track);
-          scene.bindSession(engine.h);
-          return scene.variants();
-        },
-        // Where the camera is, and how to put it back on the cars. `cam` is the
-        // free cam's own state (enableFreeCam hands it back), so this moves the
-        // camera the same way a drag does.
         camera: () => ({ ...cam.eye }),
         home() {
-          cam.eye = { ...START_CAM.eye };
-          cam.yaw = START_CAM.yaw;
-          cam.pitch = START_CAM.pitch;
-          scene.display.lookFov(0);
+          place = null;
+          frame(null);
         }
       };
+      window.__showroom.home();
     }
     return;
   }

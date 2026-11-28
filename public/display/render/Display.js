@@ -167,6 +167,7 @@ export class Display {
       dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
+      galleryMask: mod.cwrap('ttp_display_gallery_mask', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
       bench: mod.cwrap('ttp_display_bench', null, ['string']),
       setLayout: mod.cwrap('ttp_display_set_layout', 'string', []),
@@ -398,21 +399,24 @@ export class Display {
   // perf.pacing, so the readout's budget and the rule's are one number.
   scalePanelMs() { return this._fn.scalePanelMs(); }
 
-  // Build every scene from here on as the ASSET GALLERY's showroom: the picked
-  // biome's palette carrying every biome's vocabulary (ttp_display_showcase).
-  // Latched, and set before setTrack — it changes both what the build resolves
-  // and which scenery bytes this class has to fetch.
+  // Build every scene from here on as the ASSET GALLERY: flat pads, one per
+  // biome, no race (ttp_display_showcase). Latched, and set before setTrack —
+  // it changes both what the build resolves and which bytes this class fetches.
   showcase(on) {
     this._showcase = on !== false;
     this._fn.showcase(this._showcase ? 1 : 0);
   }
 
+  // Which gallery categories to place (GalleryCat bits). 0 is pads and nothing
+  // on them. Latched like showcase(); the next setTrack rebuilds.
+  galleryMask(mask) { this._fn.galleryMask(mask >>> 0); }
+
   // DEV. Which take on a procedural prop ("rocket" | "gnome" | "train") later
-  // scenes are meshed with, and the asset gallery's MODEL BENCH — every variant
-  // of one prop in a row instead of the usual landmarks. Calling NEITHER is the
-  // shipping scene: the picked variants are C++ defaults (TtpRenderer.h), and a
-  // null/"" bench is the normal one. Latched like showcase(): they change what
-  // the next setTrack meshes, not what a frame draws.
+  // scenes are meshed with, and the bench latch. The gallery does not place a
+  // variant row. Calling neither is the shipping scene: the picked variants
+  // are C++ defaults (TtpRenderer.h), and a null/"" bench is the normal one.
+  // Latched like showcase(): they change what the next setTrack meshes, not
+  // what a frame draws.
   modelVariant(model, variant) { this._fn.modelVariant(model, variant | 0); }
   bench(model) { this._fn.bench(model || ''); }
 
@@ -505,6 +509,12 @@ export class Display {
     // a stand-in track with none of its own and stages every track's in a row.
     const setModels = this._showcase ? biomes.showcaseSetModels() : biomes.setModels(trackId);
     setModels.forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
+    // The gallery stands the four kit cars as static instances. They are not a
+    // roster (there is no race), and Display cannot import the protocol module,
+    // so the names are the same window.CAR_MODELS Stage already reads.
+    if (this._showcase) {
+      for (const name of (window.CAR_MODELS || [])) want.push({ name: `${name}.glb`, tag: name });
+    }
     want.push(...this._carWants(roster));
     for (const name of PROP_MODELS) {
       want.push({ name: `${name}.glb`, tag: name });

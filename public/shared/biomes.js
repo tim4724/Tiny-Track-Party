@@ -36,7 +36,7 @@ export async function loadBiomes() {
   const showModels = m.cwrap('ttp_theme_showcase_models', 'string', []);
   const showPropModels = m.cwrap('ttp_theme_showcase_prop_models', 'string', []);
   const showSetModels = m.cwrap('ttp_theme_showcase_set_models', 'string', []);
-  const inventory = m.cwrap('ttp_showcase_inventory_json', 'string', []);
+  const inventory = m.cwrap('ttp_showcase_inventory_json', 'string', ['number']);
   // The name list is fixed for the life of the module, and its ORDER is
   // user-visible (the ?biome= dropdown), so it is read across once.
   const names = [];
@@ -69,9 +69,10 @@ export async function loadBiomes() {
     showcaseModels: () => JSON.parse(showModels()),
     showcasePropModels: () => JSON.parse(showPropModels()),
     showcaseSetModels: () => JSON.parse(showSetModels()),
-    // What that showroom holds, for the gallery's legend. Captions, not ids:
-    // the layer that stages the world is the one that says what it staged.
-    showcaseInventory: () => JSON.parse(inventory()),
+    // The gallery's pad bounds and category names for one filter mask
+    // (GalleryCat bits; a missing mask is everything). The names are the
+    // inventory's, in bit order, so a chip cannot drift from the C++ list.
+    showcaseInventory: (mask) => JSON.parse(inventory((mask ?? 127) >>> 0)),
   };
   return api;
 }

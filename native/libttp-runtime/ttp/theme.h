@@ -73,6 +73,26 @@ enum ClutterKindId : uint32_t {
   CL_FLOWER = 0, CL_SHELL, CL_STARFISH, CL_DRIFTWOOD, CL_DRIFT,
   CL_SCRUB, CL_PEBBLES, CL_BRICK, CL_MARBLE, CL_DOMINO
 };
+// Asset-gallery category bits, in inventory order (cars, items, scenery, props,
+// landmarks, clutter, set). A mask of 0 draws the pads and nothing on them.
+// The display shim restates the same bits beside DisplayState::galleryMask
+// without including this header.
+enum GalleryCat : uint32_t {
+  GAL_CARS = 1, GAL_ITEMS = 2, GAL_SCENERY = 4, GAL_PROPS = 8,
+  GAL_LANDMARKS = 16, GAL_CLUTTER = 32, GAL_SET = 64,
+  GAL_ALL = 127
+};
+// Which mesh channel a gallery spot is. The slot is an index into that
+// channel's model list, or the landmark / clutter kind id.
+enum GalleryChannel : uint32_t {
+  GAL_CH_SCENERY = 0, GAL_CH_PROP, GAL_CH_SET, GAL_CH_CAR,
+  GAL_CH_NAMED, GAL_CH_LANDMARK, GAL_CH_CLUTTER, GAL_CH_ROCKET
+};
+// Set pieces are authored at track size. Showcase lays their spots this far
+// apart; the renderer shrinks any piece wider than the foot so two neighbours
+// stay apart. The foot is inside the pitch.
+constexpr float kGallerySetPitch = 8.f;
+constexpr float kGallerySetFoot = 6.5f;
 
 // ---- the resolved theme -----------------------------------------------------
 // Every default here is the VERBATIM constant the renderer used before theming
@@ -247,6 +267,15 @@ struct Landform {
 // the renderer applies these by name.
 struct MatTint { std::string name; uint32_t rgb = 0xffffff; };
 
+// One coloured rectangle of the asset gallery's flat ground. Post-corpus.
+struct GalleryPad { float x0 = 0, z0 = 0, x1 = 0, z1 = 0; uint32_t color = 0; };
+// One thing stood on a pad. `scale` is the uniform GLB (or rocket) scale; the
+// yaw is the gallery's three-quarter, not a track heading.
+struct GallerySpot {
+  uint32_t cat = 0, channel = 0, slot = 0;
+  float x = 0, z = 0, yaw = 0, scale = 1;
+};
+
 struct Theme {
   RoadPalette road;
   uint32_t sky[3] = { 0x59a7e8, 0x8ecae6, 0xc8e9f2 };  // zenith / horizon / below
@@ -304,6 +333,18 @@ struct Theme {
   // One entry per `scenery.models` index, filled by resolve_model_tints() once
   // the shell has handed over that model's bytes. Empty until then.
   std::vector<std::vector<MatTint>> modelTints;
+  // THE ASSET GALLERY (showcase_theme). Post-corpus, like `life` and
+  // `modelTints`: theme_check does not serialize these, and resolve_theme
+  // leaves them off, so a race theme never carries a pad. The renderer reads
+  // the fields and does not call showcase.cc — it may not link that code.
+  bool gallery = false;
+  // The sheet under the pads. A step darker than the kit pad so that pad
+  // reads as a pad. 0 off a race theme.
+  uint32_t galleryGround = 0;
+  std::vector<GalleryPad> galleryPads;
+  std::vector<GallerySpot> gallerySpots;
+  std::vector<std::string> galleryCars;   // kit car GLB base names, slot order
+  std::vector<std::string> galleryNamed;  // always-loaded item GLBs, slot order
 };
 
 // ---- boost accent -----------------------------------------------------------

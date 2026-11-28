@@ -514,7 +514,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
 // 'flower' kind is ported; palettes with other kinds send no clutter config
 // at all.
 void TtpRenderer::buildClutter(const TrackBin& tb) {
-    if (tb.clKinds.empty() || tb.clDensity <= 0) return;
+    if (!mGallery && (tb.clKinds.empty() || tb.clDensity <= 0)) return;
     uint32_t seed = tb.scSeed2;
     const auto rnd = [&]() {
         seed = seed * 1664525u + 1013904223u;
@@ -547,30 +547,16 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
     const auto RY = [](float a) { return mat4f::rotation(a, float3{ 0, 1, 0 }); };
     const auto RZ = [](float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); };
 
-    uint32_t step = 0;
-    for (float d = 0; d < tb.length && geoms < 700; d += 5, step++) {
-        const TrackBin::Sample f = tb.frameAt(d);
-        const float half = f.width / 2;
-        for (const int side : { -1, 1 }) {
-            seed = spotSeed(tb.scSeed2, step, side);  // spotSeed: one stream a spot
-            if (rnd() > tb.clDensity) continue;
-            const float lat = side * (half + 1.3f + (float) rnd() * 3.4f);
-            const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 1.6f;
-            const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 1.6f;
-            if (!isClearC(x, z)) continue;
-            // Every part stands on the relief at its OWN foot (the lowest
-            // point under it, r across), not the spot's: the verge band's
-            // apron climbs to the kerb through the very strip this lays.
-            const auto foot = [&](float px, float pz, float r) { return footprintY(tb, px, pz, r); };
-            const float gy = groundSurfaceY(tb, x, z);
-            const double r = rnd(); // weighted kind pick (one draw)
-            double acc = 0;
-            const TrackBin::ClutterKind* entry = &tb.clKinds.back();
-            for (const auto& e : tb.clKinds) { acc += e.w; if (r < acc) { entry = &e; break; } }
-            const auto pick = [&](const TrackBin::ClutterKind* e) {
-                return e->tints.empty() ? 0xffffffu
-                        : e->tints[(size_t) std::floor(rnd() * e->tints.size())];
-            };
+    const auto foot = [&](float px, float pz, float r) { return footprintY(tb, px, pz, r); };
+    const auto pick = [&](const TrackBin::ClutterKind* e) {
+        return e->tints.empty() ? 0xffffffu
+                : e->tints[(size_t) std::floor(rnd() * e->tints.size())];
+    };
+    // One kind at one spot. gy is this spot's own foot: hoisting it would
+    // plant a verge piece on the wrong contour. The race calls this AFTER the
+    // weighted kind draw, so the stream below is the stream it always was.
+    const auto drawAt = [&](const TrackBin::ClutterKind* entry, float x, float z) {
+        const float gy = groundSurfaceY(tb, x, z);
             if (entry->kind != 0) {
                 // ---- the small kinds (CLUTTER_BUILDERS, verbatim draws) ----
                 switch (entry->kind) {
@@ -682,7 +668,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                     }
                     default: break;
                 }
-                continue;
+                return;
             }
             // ---- flower patch (CLUTTER_BUILDERS.flower's placement and draws) ----
             // The parts are LOW-POLY on purpose: the flowers are the biggest share
@@ -738,13 +724,50 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                 put(primSphere(0.08f * s, 4, 3), T(fx, by + h + 0.03f * s, fz) * SC(1, 0.7f, 1),
                         0xf2c14e, 1.05f);
             }
-        }
-    }
-    if (!mClutter.verts.empty()) {
+    };
+    const auto finish = [&]() {
+        if (mClutter.verts.empty()) return;
         accumulateNormals(mClutter);
         mClutter.bakeLight = true;
         buildMesh(mClutter, true, nullptr, 4, 2000);
+    };
+
+    // The gallery stands one of each kind where the pad says. No verge walk,
+    // no isClearC: the spots are already laid out, and density is 0 here.
+    if (mGallery) {
+        for (const auto& sp : mGallerySpots) {
+            if (sp.channel != ttp::rt::GAL_CH_CLUTTER) continue;
+            const TrackBin::ClutterKind* entry = nullptr;
+            for (const auto& e : tb.clKinds) {
+                if (e.kind == sp.slot) { entry = &e; break; }
+            }
+            TrackBin::ClutterKind synth{ sp.slot, 1.f, { 0xffffffu } };
+            if (!entry) entry = &synth;
+            drawAt(entry, sp.x, sp.z);
+        }
+        finish();
+        return;
     }
+
+    uint32_t step = 0;
+    for (float d = 0; d < tb.length && geoms < 700; d += 5, step++) {
+        const TrackBin::Sample f = tb.frameAt(d);
+        const float half = f.width / 2;
+        for (const int side : { -1, 1 }) {
+            seed = spotSeed(tb.scSeed2, step, side);  // spotSeed: one stream a spot
+            if (rnd() > tb.clDensity) continue;
+            const float lat = side * (half + 1.3f + (float) rnd() * 3.4f);
+            const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 1.6f;
+            const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 1.6f;
+            if (!isClearC(x, z)) continue;
+            const double r = rnd(); // weighted kind pick (one draw)
+            double acc = 0;
+            const TrackBin::ClutterKind* entry = &tb.clKinds.back();
+            for (const auto& e : tb.clKinds) { acc += e.w; if (r < acc) { entry = &e; break; } }
+            drawAt(entry, x, z);
+        }
+    }
+    finish();
 }
 
 // Grass-biome landmarks — verbatim placement streams (seed 51966-FNV) and the
@@ -764,10 +787,24 @@ void TtpRenderer::setModelBench(const char* model) {
     if (id != mBenchModel) { mBenchModel = id; dropStaticKey(); }
 }
 
+// Gallery: place every spot of this landmark kind and report that the race
+// placement must not run. A race returns false without calling fn, so the
+// caller's findSpot / shore / island draws stay on their own stream. Several
+// biomes share a kind, so this walks every spot, not the first.
+bool TtpRenderer::forGalleryLandmark(uint32_t kind,
+        const std::function<void(float x, float z, float yaw)>& fn) const {
+    if (!mGallery) return false;
+    for (const auto& sp : mGallerySpots) {
+        if (sp.channel == ttp::rt::GAL_CH_LANDMARK && sp.slot == kind)
+            fn(sp.x, sp.z, sp.yaw);
+    }
+    return true;
+}
+
 void TtpRenderer::buildLandmarks(const TrackBin& tb) {
-    // The BENCH has no landmark set behind it — it replaces one — so it must
-    // not be gated on the theme listing kinds the way everything below is.
-    if (tb.lmKinds.empty() && mBenchModel < 0) return;
+    // The gallery still builds with an empty kind list: the rocket is a spot,
+    // not a landmark kind. The model bench no longer places geometry.
+    if (tb.lmKinds.empty() && !mGallery) return;
     uint32_t seed = tb.lmSeed;
     const auto rnd = [&]() {
         seed = seed * 1664525u + 1013904223u;
@@ -875,82 +912,6 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 uint32_t hex, float shade) { part(prim, lx, ly, lz, sp, hex, shade); };
     };
 
-    // ---- the MODEL BENCH ---------------------------------------------------
-    // Every variant of one model, in a row on the verge, all facing the road.
-    // The row replaces the landmark set entirely: this is a scene for judging
-    // one thing, and a doghouse behind the middle gnome is a thumb on the
-    // scale. Stand on the road opposite the middle of it and the whole row is
-    // side by side at near-equal distance, which is the only way a shape
-    // argument gets settled.
-    if (mBenchModel >= 0 && mBenchModel < MODEL_COUNT) {
-        constexpr float BENCH_S0 = 26, BENCH_OFF = 4.2f;
-        // Spacing is per model for the same reason the COUNT is: the rocket
-        // row is one entry longer than the others AND is a narrow object, so at
-        // the gnome's spacing it would run far enough up the straight to have
-        // to be viewed from a distance where the shapes stop resolving — which
-        // is the one thing a bench may not do.
-        const float BENCH_STEP = mBenchModel == MODEL_ROCKET ? 5.6f
-                : mBenchModel == MODEL_STARFISH ? 4.6f : 7.0f;
-        // The ROCKET ships at 0.2 world units — a fist. Judged at that size a
-        // bench tells you nothing but which one is a dot, so its row is blown
-        // up and the legend says by how much. The STARFISH is clutter-sized
-        // (about a unit across) and flat on the ground besides, so it gets the
-        // same treatment at 3x — the row's viewpoint, not a lift, handles the
-        // flatness. Nothing else is rescaled.
-        const float scale = mBenchModel == MODEL_ROCKET ? 9.0f
-                : mBenchModel == MODEL_STARFISH ? 3.0f : 1.0f;
-        const float lift = mBenchModel == MODEL_ROCKET ? 3.1f : 0.0f;
-        // A PRESENTATION YAW off square, per model, because "facing the road"
-        // is not the same as "the angle this shape reads at". A gnome is a
-        // front elevation and wants none; a locomotive seen nose-on is a dark
-        // rectangle with a lamp on it, and everything the detail went into —
-        // the boiler bands, the rods, the wheels, the cab — is edge-on to the
-        // viewer. Three quarters is the angle a toy train is photographed at.
-        const float present = mBenchModel == MODEL_TRAIN ? 0.85f : 0.0f;
-        const int nv = modelVariantCount(mBenchModel);
-        for (int v = 0; v < nv; v++) {
-            // LAID OUT BACKWARDS ALONG THE TRACK, on purpose. The row faces the
-            // road, so the only place it can be read from is the far verge —
-            // and from there the track runs right to left. Placing v0 at the
-            // FAR end puts it on the left of the one shot this whole mode
-            // exists to produce, which is the order the legend lists them in.
-            const float s = BENCH_S0 + (float) (nv - 1 - v) * BENCH_STEP;
-            if (s > tb.length - 10) break;
-            const TrackBin::Sample f = tb.frameAt(s);
-            const float lat = f.width / 2 + BENCH_OFF;
-            const Spot sp{ f.pos.x + f.lat.x * lat, f.pos.z + f.lat.z * lat,
-                           std::atan2(-f.lat.x, -f.lat.z) + present, true };
-            mShadowSpots.push_back({ sp.x, sp.z, 1.6f, 1.6f });
-            const PartFn emit = [&, sp, scale, lift](const Prim& prim, float lx,
-                    float ly, float lz, uint32_t hex, float shade) {
-                Prim s2 = prim;
-                if (scale != 1.0f) for (auto& q : s2.v) q *= scale;
-                part(s2, lx * scale, ly * scale + lift, lz * scale, sp, hex, shade);
-            };
-            if (mBenchModel == MODEL_ROCKET) buildRocketModel(emit, v);
-            else if (mBenchModel == MODEL_GNOME) buildGnomeModel(emit, v);
-            else if (mBenchModel == MODEL_STARFISH)
-                buildStarfishModel(emit, v, 0xe4784f); // the beach theme's first tint
-            else {
-                buildTrainModel(emit, v);
-                // The key rides behind the loco rather than on it, which is
-                // where the render loop puts it in play.
-                const PartFn keyEmit = [&, sp](const Prim& prim, float lx, float ly,
-                        float lz, uint32_t hex, float shade) {
-                    part(prim, lx, ly + 0.9f, lz - 1.9f, sp, hex, shade);
-                };
-                buildTrainKeyModel(keyEmit, v);
-            }
-        }
-        if (!mLandmarks.verts.empty()) {
-            accumulateNormals(mLandmarks);
-            mLandmarks.bakeLight = true;
-            tileMajor(mLandmarks, kSheetTile, kSheetMinTris);
-            buildMesh(mLandmarks);
-        }
-        return;
-    }
-
     // The kinds run in buildLandmarks' SOURCE order (not id order): several
     // share one rand stream, so the draw order is part of the contract.
 
@@ -962,12 +923,13 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     for (const float3& a : mHillAnchors) {
         if (!lowest || a.z < lowest->z) lowest = &a; // .z carries `top`
     }
-    if (has(ttp::rt::LM_LIGHTHOUSE) && lowest) { // lighthouse — banded tower on its island
+    if (has(ttp::rt::LM_LIGHTHOUSE)) { // lighthouse — banded tower on its island
         // ~9.5 u tall: a tall real lighthouse (40 m) beside a 0.9 car, out on
         // its island (the beach's scale rule: big things only as big as in life).
+        // On a race the foot is sunk into the island crown; on a pad it sits
+        // on the ground (baseY 0).
+        const auto drawTower = [&](const Spot& at, float baseY) {
         constexpr float LH = 1.0f;
-        const Spot at{ lowest->x * mHillSf, lowest->y * mHillSf, 0, true };
-        const float baseY = lowest->z - 0.8f; // sunk into the island crown
         const auto seg = [&](float r0, float r1, float h, float cy, uint32_t hex,
                 int radial = 10) {
             part(primCylinder(r0 * LH, r1 * LH, h * LH, radial), 0, baseY + cy * LH, 0,
@@ -981,16 +943,20 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         seg(1.05f, 1.05f, 0.32f, 7.76f, 0x5c6470); // gallery deck
         seg(0.62f, 0.62f, 0.85f, 8.35f, 0xffd98a); // lamp room — warm, reads lit
         part(primCone(0.85f * LH, 0.9f * LH, 10), 0, baseY + 9.2f * LH, 0, at, 0xb2453a);
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_LIGHTHOUSE, [&](float x, float z, float yaw) {
+                drawTower(Spot{ x, z, yaw, true }, 0.f);
+            }) && lowest) {
+            drawTower(Spot{ lowest->x * mHillSf, lowest->y * mHillSf, 0, true },
+                      lowest->z - 0.8f);
+        }
     }
-    if (has(ttp::rt::LM_SAILBOAT) && mShoreFn) { // sailboat — anchored out in the shallows
+    if (has(ttp::rt::LM_SAILBOAT) && (mGallery || mShoreFn)) { // sailboat — anchored out in the shallows
         // A third of the way round from the lighthouse's island, so the two
         // never share a sight-line; radius = the shoreline ON THAT BEARING
-        // plus an open-water margin.
-        const float ba = (lowest ? std::atan2(lowest->y, lowest->x) : 0.0f) + 2.3f;
-        const float br = mShoreFn(ba) + 22.0f;
-        const float bx = std::cos(ba) * br, bz = std::sin(ba) * br;
-        const float wy = gy + kWaterLift - seaSink(bx, bz); // rides ON the water sheet
-        const float yaw = (float) rnd() * 2.0f * (float) M_PI;
+        // plus an open-water margin. The gallery sits the same hull on the pad
+        // at the spot's yaw and does not draw that bearing (no shore, no rnd).
+        const auto drawBoat = [&](float bx, float bz, float wy, float yaw) {
         constexpr float HEEL = 0.09f; // a sailing boat leans
         // Built 5.5 long; at BOAT a 10 m yacht beside a 0.9 car.
         constexpr float BOAT = 0.45f;
@@ -1039,14 +1005,27 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         bpart(applyPre(primCone(0.26f, 0.7f, 3), rotX(-(float) M_PI / 2)
                     * mat4f::scaling(float3{ 1, 1, 0.5f })),
                 0, 5.85f, -0.1f, 0xd94f3d);                            // masthead pennant
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_SAILBOAT, [&](float x, float z, float yaw) {
+                drawBoat(x, z, gy, yaw);
+            })) {
+            const float ba = (lowest ? std::atan2(lowest->y, lowest->x) : 0.0f) + 2.3f;
+            const float br = mShoreFn(ba) + 22.0f;
+            const float bx = std::cos(ba) * br, bz = std::sin(ba) * br;
+            const float wy = gy + kWaterLift - seaSink(bx, bz); // rides ON the water sheet
+            const float yaw = (float) rnd() * 2.0f * (float) M_PI;
+            drawBoat(bx, bz, wy, yaw);
+        }
     }
 
     // The whole block draws three-entry rock picks, and an empty (or short)
     // rocks palette is a legal theme state (buildScenery guards it the same
     // way) — skipping BEFORE any rnd() keeps the stream draws at zero.
-    if (has(ttp::rt::LM_HOODOO) && tb.scRocks.size() >= 3) {
-        // hoodoo — a balanced-rock family trackside (canyon)
-        const uint32_t* rocks = tb.scRocks.data();
+    if (has(ttp::rt::LM_HOODOO) && (mGallery || tb.scRocks.size() >= 3)) {
+        // hoodoo — a balanced-rock family trackside (canyon). A gallery pad
+        // has no rock palette, so the canyon's three colours stand in.
+        static const uint32_t kCanyon[3] = { 0xc07a55, 0xa8623f, 0xd39a70 };
+        const uint32_t* rocks = tb.scRocks.size() >= 3 ? tb.scRocks.data() : kCanyon;
         const auto hoodoo = [&](float hx, float hz, float T) {
             const float radii[4] = { 0.20f * T, 0.15f * T, 0.115f * T, 0.095f * T };
             const float hts[3] = { 0.30f * T, 0.24f * T, 0.19f * T };
@@ -1069,6 +1048,14 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                         rotY(ry) * mat4f::scaling(float3{ 1, 0.62f, 0.88f })),
                     0, cy + 0.1f * T - 0.15f, 0, at, capCol, capShade);
         };
+        // One family a spot. The race keeps its track-frame offsets; a pad has
+        // no heading, so the two smaller stacks sit at fixed offsets.
+        if (!forGalleryLandmark(ttp::rt::LM_HOODOO, [&](float x, float z, float) {
+                hoodoo(x, z, 8.6f);
+                hoodoo(x + 4.0f, z + 1.6f, 5.4f);
+                hoodoo(x - 3.4f, z + 2.2f, 3.6f);
+                mShadowSpots.push_back({ x, z, 2.4f, 6.0f });
+            })) {
         for (float s = 35; s < tb.length - 10; s += 3) {
             const TrackBin::Sample f = tb.frameAt(s);
             if (f.pos.y - gy > 0.8f) continue;
@@ -1103,6 +1090,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             mShadowSpots.push_back({ x, z, 2.4f, 6.0f });
             break; // one family is a landmark; a forest of them is scenery
         }
+        }
     }
 
     // NO snowman, and none of the playroom's giants (alphabet blocks, bath
@@ -1113,7 +1101,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     // geometry went with the placement rather than sitting here unreachable.
 
     if (has(ttp::rt::LM_UMBRELLA)) { // umbrella — a day at the beach
-        const Spot sp = findSpot(45, 5.2f, 4);
+        const auto drawUmbrella = [&](const Spot& sp) {
         if (sp.ok) {
             constexpr float TILT = 0.2f; // leans gently toward the road
             // The pole runs UP INTO the dome, so the fabric hangs off its stick.
@@ -1164,11 +1152,16 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             part(primBox(0.74f, 0.14f, 0.49f), -2.1f, 0.59f, 0.4f, sp, 0xf5f0e2);
             mShadowSpots.push_back({ sp.x, sp.z, 2.2f, 4.4f });
         }
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_UMBRELLA, [&](float x, float z, float yaw) {
+                drawUmbrella(Spot{ x, z, yaw, true });
+            })) {
+            drawUmbrella(findSpot(45, 5.2f, 4));
+        }
     }
 
     if (has(ttp::rt::LM_SANDCASTLE)) { // sandcastle — a bucket-castle at sandbox scale
-        Spot sp = findSpotMid(3.2f);
-        if (!sp.ok) sp = findSpot(80, 6.0f, 3.2f);
+        const auto drawCastle = [&](const Spot& sp) {
         if (sp.ok) {
             static const uint32_t SAND[2] = { 0xe8d49e, 0xdfc98e };
             constexpr float S = 0.44f;
@@ -1214,10 +1207,18 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                     0.3f * S, KH + 0.85f * S, 0, sp, 0xd94f3d); // pennant
             mShadowSpots.push_back({ sp.x, sp.z, 1.4f, 1.2f });
         }
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_SANDCASTLE, [&](float x, float z, float yaw) {
+                drawCastle(Spot{ x, z, yaw, true });
+            })) {
+            Spot sp = findSpotMid(3.2f);
+            if (!sp.ok) sp = findSpot(80, 6.0f, 3.2f);
+            drawCastle(sp);
+        }
     }
 
     if (has(ttp::rt::LM_CABIN)) { // cabin — a log cabin with smoke curling from the chimney
-        const Spot sp = findSpot(65, 10 + (float) rnd() * 5, 5);
+        const auto drawCabin = [&](const Spot& sp) {
         if (sp.ok) {
             constexpr uint32_t LOG = 0x8a6142, LOG2 = 0x7a5438, SNOWC = 0xf3f7fb;
             // Authored five units long; built at K, a real cabin's two and a
@@ -1270,18 +1271,29 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             }
             mShadowSpots.push_back({ sp.x, sp.z, 3.0f * K, 4.3f * K });
         }
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_CABIN, [&](float x, float z, float yaw) {
+                drawCabin(Spot{ x, z, yaw, true });
+            })) {
+            drawCabin(findSpot(65, 10 + (float) rnd() * 5, 5));
+        }
     }
 
     if (has(ttp::rt::LM_GNOME)) { // gnome
-        const Spot sp = findSpot(30, 3.4f, 2.2f);
+        const auto drawGnome = [&](const Spot& sp) {
         if (sp.ok) {
             mShadowSpots.push_back({ sp.x, sp.z, 0.9f, 1.2f });
             buildGnomeModel(at(sp), mModelVariant[MODEL_GNOME]);
         }
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_GNOME, [&](float x, float z, float yaw) {
+                drawGnome(Spot{ x, z, yaw, true });
+            })) {
+            drawGnome(findSpot(30, 3.4f, 2.2f));
+        }
     }
     if (has(ttp::rt::LM_DOGHOUSE)) { // doghouse
-        const float off = 8 + (float) rnd() * 3;
-        const Spot sp = findSpot(60, off, 3.2f);
+        const auto drawDoghouse = [&](const Spot& sp) {
         if (sp.ok) {
             mShadowSpots.push_back({ sp.x, sp.z, 2.3f, 1.4f });
             const uint32_t WALL = 0xc4573f, ROOF = 0x5e4434, TRIM = 0xf5f0e2, DARK = 0x3a3040;
@@ -1305,10 +1317,16 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                         -1.15f, 0.09f, 1.55f, sp, 0xf3ecdc);
             }
         }
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_DOGHOUSE, [&](float x, float z, float yaw) {
+                drawDoghouse(Spot{ x, z, yaw, true });
+            })) {
+            const float off = 8 + (float) rnd() * 3;
+            drawDoghouse(findSpot(60, off, 3.2f));
+        }
     }
     if (has(ttp::rt::LM_PICNIC)) { // picnic
-        Spot sp = findSpotMid(3.2f);
-        if (!sp.ok) sp = findSpot(95, 4.8f, 3.2f);
+        const auto drawPicnic = [&](const Spot& sp) {
         if (sp.ok) {
             mShadowSpots.push_back({ sp.x, sp.z, 2.1f, 0.4f });
             // Blanket: 5×5 chequer grid, thrown slightly askew.
@@ -1328,13 +1346,42 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             part(primCylinder(0.22f, 0.22f, 0.04f, 12), -0.35f, 0.07f, 0.9f, sp, 0xf7f5ee);
             part(primCylinder(0.22f, 0.22f, 0.04f, 12), 0.55f, 0.07f, -0.55f, sp, 0xf7f5ee);
         }
+        };
+        if (!forGalleryLandmark(ttp::rt::LM_PICNIC, [&](float x, float z, float yaw) {
+                drawPicnic(Spot{ x, z, yaw, true });
+            })) {
+            Spot sp = findSpotMid(3.2f);
+            if (!sp.ok) sp = findSpot(95, 4.8f, 3.2f);
+            drawPicnic(sp);
+        }
     }
 
     // NO LM_TRAIN. The playroom's train runs round the room on its own rails
     // now, a track's set piece (set-room-train, theme.cc), so the oval, its
     // sleepers and the per-frame walk went with the placement. buildTrainModel
-    // SURVIVES in TtpRendererKit.h: it is the asset gallery's model bench,
-    // which is where retired shapes live.
+    // stays in TtpRendererKit.h; the gallery no longer lines variants up.
+
+    // The gallery's rocket is one shipping variant, stood on its pad. It goes
+    // into this mesh: the frame loop hides mRockets when no live rocket exists.
+    if (mGallery) {
+        for (const auto& g : mGallerySpots) {
+            if (g.channel != ttp::rt::GAL_CH_ROCKET) continue;
+            const Spot sp{ g.x, g.z, g.yaw, true };
+            // Same bake as a live rocket (kRocketMesh on the authored mesh).
+            // The boat-tail sits about 0.18 below the origin; lift that onto
+            // the pad. g.scale stays 1 — a gallery must not enlarge it.
+            const float scale = kRocketMesh * (g.scale > 0.f ? g.scale : 1.f);
+            const float lift = 0.18f * scale;
+            const PartFn emit = [&, sp, scale, lift](const Prim& prim, float lx, float ly,
+                    float lz, uint32_t hex, float shade) {
+                Prim s2 = prim;
+                if (scale != 1.0f) for (auto& q : s2.v) q *= scale;
+                part(s2, lx * scale, ly * scale + lift, lz * scale, sp, hex, shade);
+            };
+            buildRocketModel(emit, mModelVariant[MODEL_ROCKET]);
+            mShadowSpots.push_back({ sp.x, sp.z, 0.22f, 0.45f });
+        }
+    }
 
     if (!mLandmarks.verts.empty()) {
         accumulateNormals(mLandmarks);

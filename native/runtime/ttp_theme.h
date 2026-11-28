@@ -88,15 +88,15 @@ TTP_ABI const char* ttp_theme_set_models(const char* trackId);
 
 /* ---- the asset gallery ---------------------------------------------------
  *
- * The SHOWCASE world (ttp/showcase.h): one biome's palette carrying every
- * biome's vocabulary, which is what /gallery-assets.html builds so a viewer can
- * walk past everything the renderer draws instead of one cup's corner of it.
- * Reached with ttp_display_showcase(1) before a build.
+ * The gallery world (ttp/showcase.h): flat pads, one per biome, the union of
+ * every biome's models. Reached with ttp_display_showcase(1) before a build.
+ * The lists below are NOT a function of the filter mask — the shell fetches
+ * them before it knows which chips are on. The inventory is, because a filter
+ * changes the pad bounds the camera homes to.
  *
- * These two are here — rather than beside it in the Filament-gated display ABI —
- * for this header's own reason: the tables are plain data, and both answers are
- * things the SHELL does (fetching bytes, drawing a legend) with no renderer
- * needed to ask. */
+ * These live here rather than beside the Filament-gated display ABI for this
+ * header's own reason: the tables are plain data, and the shell fetches bytes
+ * from them with no renderer needed to ask. */
 
 /* The scenery GLBs a showcase build stages, same JSON array and same slot
  * contract as ttp_theme_scenery_models — and deliberately NOT a function of the
@@ -115,17 +115,15 @@ TTP_ABI const char* ttp_theme_showcase_prop_models(void);
  * (whose answer for the showroom's own id is empty). */
 TTP_ABI const char* ttp_theme_showcase_set_models(void);
 
-/* What that world holds, as JSON, for the gallery's legend:
+/* Where the pads are for `mask`, and the category vocabulary:
  *
- *   {"clutter":[…],"fliers":[…],"landmarks":[…],"props":[…],"scenery":[…],"set":[…]}
+ *   {"bounds":{"x0","x1","z0","z1"},
+ *    "categories":["cars","items","scenery","props","landmarks","clutter","set"]}
  *
- * HUMAN-READABLE captions, not ids: nothing resolves by them. They come from
- * here because the layer that decides what is staged should be the one that says
- * what it staged — three shells will draw this legend, and a caption list kept
- * by hand in each is the drift this ABI's manifest rule exists to stop.
- *
+ * Bounds are the union of the pads at that mask, millimetres. Categories are
+ * always the full vocabulary in bit order (bit i is 1<<i), not the filter.
  * Static scratch, valid until the next call (the ttp_theme_scenery_models rule). */
-TTP_ABI const char* ttp_showcase_inventory_json(void);
+TTP_ABI const char* ttp_showcase_inventory_json(uint32_t mask);
 
 #ifdef __cplusplus
 }

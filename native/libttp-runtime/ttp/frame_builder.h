@@ -141,14 +141,16 @@ struct DisplayState {
     // all three read the same field.
     std::string biome;
 
-    // The asset gallery's showroom (ttp_display_showcase). Latched beside
-    // `biome` because it is mostly the same kind of thing — what the next BUILD
-    // resolves its theme through (ttp/showcase.h) — but it is read here too:
-    // while the field is PARKED (`hold`) the frame carries the showroom's
-    // standing exhibits, the two things a race would otherwise have to produce
-    // before anyone could look at them (a rocket, the monster rig). Off
-    // everywhere on the shipping path.
+    // The asset gallery (ttp_display_showcase). The next build resolves through
+    // showcase_theme instead of the track's biome. Off on the shipping path.
     bool showcase = false;
+    // Which gallery categories to stand (ttp_display_gallery_mask). Bits, in
+    // the inventory's category order: cars 1, items 2, scenery 4, props 8,
+    // landmarks 16, clutter 32, set pieces 64. 0x7f is every category. 0 is
+    // the pads with nothing on them, and is not coerced. Read only while
+    // `showcase` is set. Not a theme.h include: this header stays free of the
+    // palette, so the bits are restated rather than named.
+    uint32_t galleryMask = 0x7f;
 
     // THE SHIPPING GAME'S RIG, not "no rig". With no cells the only surface
     // this library draws is the LOBBY PREVIEW, and its answer is the coverage

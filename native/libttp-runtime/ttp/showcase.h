@@ -1,29 +1,20 @@
-// showcase — the ASSET GALLERY's world: every biome's vocabulary at once.
+// showcase — the ASSET GALLERY's world: the kit stood on flat ground.
 //
-// The gallery (/gallery-assets.html) exists to answer one question — "what does
-// this game actually draw?" — and the honest answer is spread across six
-// biomes. A grass track carries three landmark kinds and two tree models; the
-// snow cup's pines and the playroom's wind-up train are drawn by the same
-// renderer and are simply never in the same scene. So this layer builds the
-// scene that has never existed in play: the picked biome's PALETTE (its sky,
-// ground, road, light rig, water and ice — the look), carrying the UNION of
-// every biome's VOCABULARY (its scenery models, hero landmarks, ground clutter
-// and fliers — the things).
+// /gallery-assets.html answers "what does this game actually draw?" by standing
+// every model the shipping biomes and catalogue tracks use, on coloured pads,
+// one pad per biome plus a neutral pad for the cars and the items. There is no
+// race, no single biome palette, and no model bench: a filter mask drops a
+// category's spots and leaves the model lists alone, so the shell's GLB slots
+// do not move when a chip is toggled.
 //
-// The split is deliberate and is the whole design. What a thing IS gets unioned;
-// what it LOOKS LIKE stays the picked biome's, because a gallery that averaged
-// six palettes together would show a world that ships nowhere. Flying the same
-// showroom in `grass` and then in `canyon` is how the same cactus gets judged
-// under two suns.
-//
-// Here rather than in the renderer for the reason everything else in
-// libttp-runtime is here: it names no platform API, so every leg compiles AND
-// ctests it (showcase_check). And here rather than in theme.cc because that file
-// is held byte-for-byte against a frozen JS-recorded corpus — this is new data
-// with no JS twin, and it must not be able to move a single number of the
-// palette the shipping game draws with.
+// Here rather than in the renderer because it names no platform API, so every
+// leg compiles and ctests it (showcase_check). And here rather than in theme.cc
+// because that file is held against a frozen corpus — this must not be able to
+// move a number the shipping game draws with. The renderer reads the result off
+// Theme and does not call these functions.
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -32,87 +23,39 @@
 namespace ttp {
 namespace rt {
 
-// The scenery GLBs the showcase stages, in the slot order a shell must provide
-// them in (scenery<i>.glb — the renderer binds its instanced props by that
-// index). Deduped by first appearance walking the biomes in ?biome= list order,
-// so it is a function of the palette tables alone: a shell asks, it does not
-// keep a list of its own.
+// Scenery GLBs the gallery stages, in scenery<i>.glb slot order. Deduped by
+// first appearance walking the biomes, then each biome's catalogue tracks.
+// Independent of the filter mask and of which biome a caller names.
 const std::vector<std::string>& showcase_models();
 
-// The prop GLBs the showcase stages, in prop<i>.glb slot order — the
-// showcase_models() contract, for the trackside prop channel (Theme::props).
+// Prop GLBs, in prop<i>.glb slot order. The showcase_models() contract.
 const std::vector<std::string>& showcase_prop_models();
 
-// The set-piece GLBs the showcase stages, in set<i>.glb slot order: every
-// catalogue track's pieces, stood in a row (showcase_theme). The same
-// biome-independence rule as showcase_models().
+// Set-piece GLBs, in set<i>.glb slot order: every catalogue track's pieces,
+// first appearance wins, filed onto that track's biome pad.
 const std::vector<std::string>& showcase_set_models();
 
-// The showcase world for `biomeName`, on `trackId`. Everything a track's own
-// theme decides is unchanged (resolve_theme's per-track ambient patch and
-// shoreline seed included); what is added is the rest of the kit.
+// The gallery world. `biomeName` and `trackId` do not restyle it — the sky is
+// a fixed studio and the pads are every biome — and are kept so the two-arg
+// call sites stay valid. `mask` is GalleryCat bits; 0 is pads with no spots,
+// and is not coerced to GAL_ALL. Model lists are the full union either way.
 //
 // NOT reachable from resolve_theme and never resolved for a race: a shell asks
-// for this explicitly (ttp_display_showcase), and nothing on the shipping path
-// does.
-Theme showcase_theme(const char* biomeName, const char* trackId);
+// for this explicitly (ttp_display_showcase).
+Theme showcase_theme(const char* biomeName, const char* trackId, uint32_t mask = GAL_ALL);
 
-// What that world holds, for the gallery's legend:
+// Where the pads are, and the category vocabulary, for the gallery chrome:
 //
-//   {"scenery":[…GLB names…],"props":[…GLB names…],"set":[…GLB names…],
-//    "landmarks":[…names…],"clutter":[…names…],"fliers":[…names…]}
+//   {"bounds":{"x0","x1","z0","z1"},
+//    "categories":["cars","items","scenery","props","landmarks","clutter","set"],
+//    "pads":[{"name","x0","x1","z0","z1"}, ...]}
 //
-// Canonical JSON, keys sorted, as every ttp_*_json boundary but ttp_ui.h's is.
-// The names are for HUMANS to read beside the thing they name — they are not an
-// id anything resolves by, which is why a legend can live here at all: a shell
-// that drew its own list would be maintaining a second copy of what is staged.
-std::string showcase_inventory_json();
-
-// ---------------------------------------------------------------------------
-// THE STANDING EXHIBITS.
-//
-// Three of the things the renderer draws exist ONLY while cars are racing: a
-// rocket in flight, the monster truck, and a dropped banana. A gallery that can
-// show them only under its Drive toggle is showing them the way a race does,
-// which is to say briefly and from behind.
-//
-// The BANANAS need nothing here — the showroom track authors three of them
-// (shared/devTracks.js) and an authored banana respawns, so it is live from the
-// first frame. The other two cannot be authored into a track descriptor at all:
-// a rocket is a homing projectile with an owner and a fuse, and the monster
-// truck is a TRANSFORM OF A CAR rather than a prop. So they are staged at frame
-// time instead (frame_builder.cc), and only while the field is PARKED. The
-// moment Drive lets the AI out, what is on screen should be what the sim
-// actually produced.
-//
-// Here rather than in the frame builder for the same reason the theme union is
-// here: this is the gallery deciding what to exhibit, and the gallery's
-// decisions sit in one dev-only file that the shipping path cannot reach.
-// ---------------------------------------------------------------------------
-
-// A rocket stood on the showroom's ITEM RUN: its track position as a LAP
-// FRACTION (the unit a track descriptor places furniture in) and a lateral
-// offset in the same units a banana's is. The renderer hovers and whizz-rolls
-// it exactly as it does one in flight, so the exhibit IS the in-race object and
-// not a still of it.
-struct ShowcaseRocket { float u, lat; };
-const std::vector<ShowcaseRocket>& showcase_rockets();
-
-// The first roster slot that wears the monster rig while the field is parked;
-// every slot from there to the end wears one too, and -1 is a field with none.
-// The BACK HALF of the grid, which is a rule about the picture: the front rows
-// stay the lineup shot the gallery opens on, and the rows behind them are the
-// trucks.
-//
-// It is also how all FOUR trucks get staged, and that part leans on the shell.
-// The rig is a transform of a car — the kit chassis seating that car's own body
-// — so there are exactly as many distinct trucks as there are car models, and
-// the showroom's lineup is TWO SEATS PER MODEL cycling in slot order
-// (display/TestHarness.js). The back half of a 2n lineup is therefore one of
-// each. A lineup that stopped cycling, or one sized to something other than a
-// whole multiple of the models, would still get rigs here — just not one of
-// every truck, which is a thing to look at rather than a thing that breaks.
-int showcase_monster_from(int rosterSize);
+// Canonical JSON, metres rounded to millimetres. `bounds` is the OPENING pad
+// for this mask: the one with the most spots, else the kit. It is not the
+// whole row. `pads` is every pad in order (kit, then each biome), empty ones
+// included, so a button can frame one after a filter has moved it. Categories
+// are the vocabulary, always in bit order, not the filter.
+std::string showcase_inventory_json(uint32_t mask = GAL_ALL);
 
 }  // namespace rt
 }  // namespace ttp

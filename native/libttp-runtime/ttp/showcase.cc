@@ -2,28 +2,65 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <string>
+#include <vector>
 
 #include "generated/track_defs.h"
 #include "ttp/canonical.h"
+#include "ttp/detail.h"
 
 namespace ttp {
 namespace rt {
 namespace {
 
-// ---------------------------------------------------------------------------
-// The union, walked in the ?biome= list order.
-//
-// Every merge below is FIRST-APPEARANCE-WINS over that order, which is what
-// makes the result a pure function of the biome tables: no seed, no clock, and
-// nothing to keep in step by hand. A biome added to kBiomes brings its own
-// scenery, landmarks, clutter and fliers into the gallery on the same commit,
-// which is the property this file exists for — the alternative is a second list
-// of "everything we draw" that rots the first time it is not updated.
-// ---------------------------------------------------------------------------
+// The kit cars. The same four strings as public/shared/protocol.js CAR_MODELS
+// and native/libttp-party/ttp/protocol.h. This library does not include the
+// party header; showcase_check pins the spellings.
+const char* kCars[] = { "vehicle-gt", "vehicle-lemans", "vehicle-stock", "vehicle-jeep" };
+// Display.js PROP_MODELS: fetched for every scene, not a biome's scatter.
+const char* kNamed[] = { "item-box", "item-banana", "item-cone", "vehicle-monster-truck" };
 
-void addTree(std::vector<TreeSpec>& into, const TreeSpec& t) {
-  for (const TreeSpec& seen : into) if (seen.model == t.model) return;
-  into.push_back(t);
+constexpr float kYaw = 0.4f;
+constexpr float kMargin = 2.0f;
+constexpr float kMinW = 18.0f, kMinH = 12.0f;
+constexpr float kGap = 3.0f;
+constexpr float kPitchSmall = 4.5f;
+constexpr int kColsSmall = 6;
+constexpr float kPitchKit = 4.0f;
+constexpr int kColsKit = 6;
+constexpr float kPitchLm = 11.0f;
+constexpr int kColsLm = 4;
+constexpr float kPitchCl = 2.8f;
+constexpr int kColsCl = 6;
+constexpr int kColsSet = 12;
+constexpr uint32_t kKitPad = 0xd9d6cf;
+// A step darker than kKitPad, so the kit pad reads as a pad.
+constexpr uint32_t kGalleryGround = 0xc3bfb6;
+
+struct Sc { std::string model; float scale; };
+struct BiomeBag {
+  const char* name = "";
+  uint32_t color = 0;
+  std::vector<Sc> scenery;
+  std::vector<Sc> props;
+  std::vector<uint32_t> landmarks;
+  std::vector<ClutterSpec> clutter;
+  std::vector<Sc> sets;
+};
+
+float stampScale(float s0, float s1) {
+  const float s = s0 + 0.5f * s1;
+  return s > 1e-3f ? s : 1.0f;
+}
+
+void addModel(std::vector<Sc>& into, const std::string& model, float scale) {
+  for (const Sc& s : into) if (s.model == model) return;
+  into.push_back({ model, scale });
+}
+
+void addKind(std::vector<uint32_t>& into, uint32_t kind) {
+  if (std::find(into.begin(), into.end(), kind) == into.end()) into.push_back(kind);
 }
 
 void addClutter(std::vector<ClutterSpec>& into, const ClutterSpec& c) {
@@ -31,299 +68,322 @@ void addClutter(std::vector<ClutterSpec>& into, const ClutterSpec& c) {
   into.push_back(c);
 }
 
-void addLandmark(std::vector<uint32_t>& into, uint32_t kind) {
-  if (std::find(into.begin(), into.end(), kind) == into.end()) into.push_back(kind);
+uint32_t slotOf(std::vector<std::string>& models, const std::string& model) {
+  for (size_t i = 0; i < models.size(); i++) if (models[i] == model) return (uint32_t) i;
+  models.push_back(model);
+  return (uint32_t) models.size() - 1;
 }
 
-// ---------------------------------------------------------------------------
-// Names, for the legend alone.
-//
-// These are captions, not identifiers: nothing resolves by them and no fixture
-// records them. They are here rather than in the gallery's JS because the thing
-// that decides WHAT is staged should be the thing that says what it staged —
-// three shells will read this, and a hand-kept caption list in each is exactly
-// the drift the manifest rule exists to stop.
-// ---------------------------------------------------------------------------
-const char* landmarkName(uint32_t kind) {
-  switch (kind) {
-    case LM_GNOME: return "garden gnome";
-    case LM_DOGHOUSE: return "doghouse";
-    case LM_PICNIC: return "picnic table";
-    case LM_HOODOO: return "hoodoo rocks";
-    case LM_LIGHTHOUSE: return "lighthouse";
-    case LM_SAILBOAT: return "sailboat";
-    case LM_UMBRELLA: return "beach umbrella";
-    case LM_SANDCASTLE: return "sandcastle";
-    case LM_CABIN: return "log cabin";
-    default: return "landmark";
+uint32_t padColorFor(const char* name, const Theme& base) {
+  // Sunset shares grass's lawn kind; a warmer pad is what tells the two apart.
+  if (std::strcmp(name, "sunset") == 0) return 0xc6a15a;
+  if (std::strcmp(name, "playroom") == 0) return base.groundBase ? base.groundBase : 0xd6b07c;
+  switch (base.groundKind) {
+    case GROUND_SAND: return 0xdec896;
+    case GROUND_REDROCK: return 0xd39671;
+    case GROUND_SNOW: return 0xedf2f7;
+    case GROUND_WOOD: return base.groundBase ? base.groundBase : 0xd6b07c;
+    default: return 0x6aa84f;  // lawn
   }
 }
 
-const char* clutterName(uint32_t kind) {
-  switch (kind) {
-    case CL_FLOWER: return "wildflowers";
-    case CL_SHELL: return "seashells";
-    case CL_STARFISH: return "starfish";
-    case CL_DRIFTWOOD: return "driftwood";
-    case CL_DRIFT: return "snow drifts";
-    case CL_SCRUB: return "desert scrub";
-    case CL_PEBBLES: return "pebbles";
-    case CL_BRICK: return "toy bricks";
-    case CL_MARBLE: return "marbles";
-    case CL_DOMINO: return "dominoes";
-    default: return "clutter";
+void absorb(BiomeBag& bag, const Theme& o) {
+  for (const TreeSpec& tr : o.scenery.trees) addModel(bag.scenery, tr.model, stampScale(tr.s0, tr.s1));
+  if (o.scenery.hasBush) addModel(bag.scenery, o.scenery.bush.model, stampScale(o.scenery.bush.s0, o.scenery.bush.s1));
+  for (const PropStamp& p : o.props.scatter) {
+    if (p.slot >= o.props.models.size()) continue;
+    addModel(bag.props, o.props.models[p.slot], stampScale(p.s0, p.s1));
   }
+  for (uint32_t k : o.landmarks) addKind(bag.landmarks, k);
+  for (const ClutterSpec& c : o.scenery.clutter) addClutter(bag.clutter, c);
 }
 
-// How thickly the showroom is planted, whatever the picked biome does. A desert
-// reads empty ON PURPOSE (canyon runs 0.45), and that is right for a race and
-// wrong for a gallery: a viewer walking the exhibition straight wants to meet
-// each model, not to be shown how sparse a biome is. Floors, not overrides —
-// a denser biome keeps its own number.
-constexpr float kMinSceneryDensity = 0.6f;
-constexpr float kMinClutterDensity = 0.3f;
-// The scatter's roll thresholds, restated for a spec that now has every model in
-// it: trees, then the bush channel, then boulders. Cumulative (theme.h), so the
-// gap between them is the bush share and what is left over is rock.
-constexpr float kMixTree = 0.7f;
-constexpr float kMixBush = 0.86f;
+BiomeBag* bagFor(std::vector<BiomeBag>& bags, const char* name) {
+  for (BiomeBag& b : bags) if (std::strcmp(b.name, name) == 0) return &b;
+  return nullptr;
+}
+
+struct Kit {
+  std::vector<BiomeBag> bags;
+  std::vector<std::string> scenery, props, set;
+  std::vector<uint32_t> landmarks;
+  std::vector<ClutterSpec> clutter;
+};
+
+// The union, once per call. Mask-independent: a filter only drops spots.
+Kit buildKit() {
+  Kit kit;
+  for (int i = 0; i < biome_count(); i++) {
+    const char* name = biome_name(i);
+    const Theme base = resolve_theme(name, "");
+    BiomeBag bag;
+    bag.name = name;
+    bag.color = padColorFor(name, base);
+    absorb(bag, base);
+    kit.bags.push_back(std::move(bag));
+  }
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    const char* id = TTP_TRACKS[i].id;
+    BiomeBag* bag = bagFor(kit.bags, biome_for_track(id));
+    if (!bag) continue;
+    absorb(*bag, resolve_theme(bag->name, id));
+  }
+  const bool lite = detail_in_force() == Detail::Lite;
+  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
+    BiomeBag* bag = bagFor(kit.bags, biome_for_track(TTP_TRACKS[i].id));
+    if (!bag) continue;
+    for (int k = 0; k < TTP_TRACKS[i].nSet; k++) {
+      const SetDef& d = TTP_TRACKS[i].set[k];
+      if (lite && !d.lite) continue;
+      if (!d.model) continue;
+      bool seen = false;
+      for (const std::string& m : kit.set) seen = seen || m == d.model;
+      if (seen) continue;
+      const float scale = d.scale > 0 ? (float) d.scale : 1.0f;
+      kit.set.push_back(d.model);
+      bag->sets.push_back({ d.model, scale });
+    }
+  }
+  for (const BiomeBag& bag : kit.bags) {
+    for (const Sc& s : bag.scenery) slotOf(kit.scenery, s.model);
+    for (const Sc& s : bag.props) slotOf(kit.props, s.model);
+    for (uint32_t k : bag.landmarks) addKind(kit.landmarks, k);
+    for (const ClutterSpec& c : bag.clutter) addClutter(kit.clutter, c);
+  }
+  // resolve_theme already renamed scenery and props when the lite tier is on.
+  // Set names were read off the catalogue, so they still need it. In place:
+  // spot slots are indices and must not move. Full tier keeps the authored name.
+  if (lite) {
+    lite_models(kit.set);
+    for (BiomeBag& bag : kit.bags) {
+      for (Sc& s : bag.sets) {
+        std::vector<std::string> one{ s.model };
+        lite_models(one);
+        s.model = std::move(one[0]);
+      }
+    }
+  }
+  return kit;
+}
+
+struct Item { uint32_t cat, channel, slot; float scale; };
+
+uint32_t findSlot(const std::vector<std::string>& models, const std::string& model) {
+  for (size_t i = 0; i < models.size(); i++) if (models[i] == model) return (uint32_t) i;
+  return (uint32_t) models.size();
+}
+
+// Lay `items` as a grid centred in `contentW`, stacked on +Z. Empty skips.
+void layGroup(std::vector<GallerySpot>& local, const std::vector<Item>& items,
+              float pitch, int maxCols, float contentW, float& z) {
+  const int n = (int) items.size();
+  if (!n) return;
+  const int cols = std::min(maxCols, n);
+  const int rows = (n + cols - 1) / cols;
+  const float w = (float) cols * pitch;
+  const float x0 = (contentW - w) * 0.5f;
+  for (int i = 0; i < n; i++) {
+    const int c = i % cols, r = i / cols;
+    GallerySpot s;
+    s.cat = items[i].cat;
+    s.channel = items[i].channel;
+    s.slot = items[i].slot;
+    s.x = x0 + ((float) c + 0.5f) * pitch;
+    s.z = z + ((float) r + 0.5f) * pitch;
+    s.yaw = kYaw;
+    s.scale = items[i].scale;
+    local.push_back(s);
+  }
+  z += (float) rows * pitch;
+}
+
+float groupW(const std::vector<Item>& items, float pitch, int maxCols) {
+  const int n = (int) items.size();
+  if (!n) return 0;
+  return (float) std::min(maxCols, n) * pitch;
+}
+
+// One pad. `groups` is parallel to pitch/cols. Content is centred in the pad;
+// an empty pad (everything filtered, or a biome with nothing) stays at the
+// minimum so the colour is still there.
+void placePad(Theme& t, float& padX, uint32_t color,
+              const std::vector<std::vector<Item>>& groups,
+              const std::vector<float>& pitch, const std::vector<int>& cols) {
+  float contentW = 0;
+  for (size_t g = 0; g < groups.size(); g++) contentW = std::max(contentW, groupW(groups[g], pitch[g], cols[g]));
+  std::vector<GallerySpot> local;
+  float z = 0;
+  for (size_t g = 0; g < groups.size(); g++) layGroup(local, groups[g], pitch[g], cols[g], contentW, z);
+  const float contentH = z;
+  const float padW = std::max(contentW + 2.0f * kMargin, kMinW);
+  const float padH = std::max(contentH + 2.0f * kMargin, kMinH);
+  const float ox = padX + (padW - contentW) * 0.5f;
+  const float oz = (padH - contentH) * 0.5f;
+  for (GallerySpot& s : local) {
+    s.x += ox;
+    s.z += oz;
+    t.gallerySpots.push_back(s);
+  }
+  t.galleryPads.push_back({ padX, 0, padX + padW, padH, color });
+  padX += padW + kGap;
+}
 
 }  // namespace
 
-// The set<i>.glb slot of `model`, appending it on first sight (theme.cc's own
-// rule for a track's list).
-uint32_t setSlot(std::vector<std::string>& models, const char* model) {
-  uint32_t slot = 0;
-  while (slot < models.size() && models[slot] != model) slot++;
-  if (slot == models.size()) models.push_back(model);
-  return slot;
+const std::vector<std::string>& showcase_models() {
+  static const std::vector<std::string> models = showcase_theme(biome_name(0), "").scenery.models;
+  return models;
+}
+
+const std::vector<std::string>& showcase_prop_models() {
+  static const std::vector<std::string> models = showcase_theme(biome_name(0), "").props.models;
+  return models;
 }
 
 const std::vector<std::string>& showcase_set_models() {
-  // The catalogue walk alone decides this, so it is one list whichever biome
-  // the gallery shows — the showcase_models() rule, for the same reason.
   static const std::vector<std::string> models = showcase_theme(biome_name(0), "").set.models;
   return models;
 }
 
-const std::vector<std::string>& showcase_models() {
-  // Built once: the tables behind it are constant for the life of the process,
-  // and the shell asks for this on every scene build.
-  // Any biome answers the same list — that is the invariant, and showcase_check
-  // holds it for all six — so the first one is as good as a special case.
-  static const std::vector<std::string> models =
-      showcase_theme(biome_name(0), "").scenery.models;
-  return models;
-}
+Theme showcase_theme(const char* biomeName, const char* trackId, uint32_t mask) {
+  (void) biomeName;
+  // Studio daylight, started from grass only so the unset fields stay the
+  // shipping defaults, then overwritten. No road, no hills, no water, no air.
+  Theme t = resolve_theme("grass", trackId ? trackId : "");
+  t.gallery = true;
+  t.galleryGround = kGalleryGround;
+  t.sky[0] = 0x8ec8f0;
+  t.sky[1] = 0xd7eef8;
+  t.sky[2] = 0xc5d5c8;
+  t.fog = 0xd7eef8;
+  t.skyCurve = 0.65f;
+  t.key = { 0xfff1d0, 1.4f };
+  t.hemi = { 0xffffff, 0x9aa68f, 2.2f };
+  t.clouds.count = 0;
+  t.haze.count = 0;
+  t.ambient.count = 0;
+  t.life.count = 0;
+  t.birds.count = 0;
+  t.kites.count = 0;
+  t.hasPlane = false;
+  t.plane = {};
+  t.balloon.panels.clear();
+  t.land.clear();
+  t.groundKind = GROUND_WOOD;
+  t.groundBase = 0;
+  t.hasWater = false;
+  t.hasIce = false;
 
-Theme showcase_theme(const char* biomeName, const char* trackId) {
-  // The PALETTE, whole and unmodified — the picked biome's sky, ground, road,
-  // hills, light rig, water and ice. Nothing below touches any of it.
-  Theme t = resolve_theme(biomeName, trackId);
-  // Set pieces belong to a TRACK, so the showroom's own list is empty; what it
-  // stages instead is the SET ROW: every model the catalogue's set lists use,
-  // once (a track repeats its small pieces round the lap), stood along the
-  // outside of both straights so one lap meets each of them once (the
-  // landmarks' exhibition rule). Each keeps its first authored yaw, lift and scale;
-  // a piece authored on the track's right is turned round, so its front still
-  // faces the road from the row's side.
+  const Kit kit = buildKit();
+  t.scenery = {};
+  t.scenery.models = kit.scenery;
+  t.scenery.clutter = kit.clutter;
+  t.props = {};
+  t.props.models = kit.props;
   t.set = {};
-  {
-    struct Row { float lo, hi; };
-    // The showroom's two straights as lap fractions (devTracks.js): the
-    // exhibition straight runs on from the grid straight before it, and `hi`
-    // past 1 wraps.
-    const Row rows[2] = { { 0.80f, 1.25f }, { 0.43f, 0.75f } };
-    const float kRowLat = -13.0f;
-    std::vector<const SetDef*> pieces;
-    for (int i = 0; i < TTP_TRACK_COUNT; i++) {
-      for (int k = 0; k < TTP_TRACKS[i].nSet; k++) {
-        const SetDef& d = TTP_TRACKS[i].set[k];
-        bool seen = false;
-        for (const SetDef* p : pieces) seen = seen || std::string(p->model) == d.model;
-        if (!seen) pieces.push_back(&d);
+  t.set.models = kit.set;
+  t.landmarks = kit.landmarks;
+
+  for (const char* c : kCars) t.galleryCars.push_back(c);
+  for (const char* c : kNamed) t.galleryNamed.push_back(c);
+
+  const auto on = [&](uint32_t cat) { return (mask & cat) != 0; };
+  float padX = 0;
+
+  std::vector<Item> cars, items;
+  if (on(GAL_CARS)) {
+    for (uint32_t i = 0; i < t.galleryCars.size(); i++) cars.push_back({ GAL_CARS, GAL_CH_CAR, i, 1 });
+  }
+  if (on(GAL_ITEMS)) {
+    for (uint32_t i = 0; i < t.galleryNamed.size(); i++) items.push_back({ GAL_ITEMS, GAL_CH_NAMED, i, 1 });
+    // Scale 1: the renderer bakes kRocketMesh, the same factor as a live rocket.
+    items.push_back({ GAL_ITEMS, GAL_CH_ROCKET, 0, 1 });
+  }
+  placePad(t, padX, kKitPad, { cars, items }, { kPitchKit, kPitchKit }, { kColsKit, kColsKit });
+
+  for (const BiomeBag& bag : kit.bags) {
+    std::vector<Item> scenery, props, landmarks, clutter, sets;
+    if (on(GAL_SCENERY)) {
+      for (const Sc& s : bag.scenery) {
+        const uint32_t slot = findSlot(t.scenery.models, s.model);
+        if (slot == t.scenery.models.size()) continue;
+        scenery.push_back({ GAL_SCENERY, GAL_CH_SCENERY, slot, s.scale });
       }
     }
-    const size_t n = pieces.size();
-    const size_t perRow[2] = { (n + 1) / 2, n / 2 };
-    for (size_t idx = 0; idx < n; idx++) {
-      const SetDef& d = *pieces[idx];
-      const int row = (int) (idx % 2);
-      const float along = ((float) (idx / 2) + 0.5f) / (float) perRow[row];
-      const float u = std::fmod(rows[row].lo + (rows[row].hi - rows[row].lo) * along, 1.0f);
-      const float yaw = (float) (d.yaw * M_PI / 180.0) + (d.lat > 0 ? (float) M_PI : 0.0f);
-      t.set.pieces.push_back({ setSlot(t.set.models, d.model), u, kRowLat, yaw, (float) d.y, (float) d.scale });
+    if (on(GAL_PROPS)) {
+      for (const Sc& s : bag.props) {
+        const uint32_t slot = findSlot(t.props.models, s.model);
+        if (slot == t.props.models.size()) continue;
+        props.push_back({ GAL_PROPS, GAL_CH_PROP, slot, s.scale });
+      }
     }
-  }
-
-  // Started EMPTY, not from the picked biome's own list, and that matters: the
-  // scenery<i>.glb slot order falls out of this walk, and the shell fetches
-  // those bytes from showcase_models() without knowing which biome is about to
-  // be built. Seeding with the picked biome would put its trees first and make
-  // slot 3 a different model per biome — the shell would hand the renderer a
-  // palm and it would plant a cactus.
-  std::vector<TreeSpec> trees;
-  std::vector<ClutterSpec> clutter;
-  for (int i = 0; i < biome_count(); i++) {
-    // Each biome's own RESOLVED theme, so every default, preset and per-track
-    // patch is already folded in (theme.h's "what resolved means"). The track
-    // goes with it: the snow cup patches its flake cloud per track, and reading
-    // it any other way here would be a second resolution rule.
-    const Theme o = resolve_theme(biome_name(i), trackId);
-    for (const TreeSpec& tr : o.scenery.trees) addTree(trees, tr);
-    for (const ClutterSpec& c : o.scenery.clutter) addClutter(clutter, c);
-    for (uint32_t k : o.landmarks) addLandmark(t.landmarks, k);
-    // The bush channel is one donor model sunk to its canopy, so it is adopted
-    // whole rather than merged — half of one biome's bush and half of another's
-    // is not a bush anyone authored.
-    if (!t.scenery.hasBush && o.scenery.hasBush) {
-      t.scenery.hasBush = true;
-      t.scenery.bush = o.scenery.bush;
+    if (on(GAL_LANDMARKS)) {
+      for (uint32_t k : bag.landmarks) landmarks.push_back({ GAL_LANDMARKS, GAL_CH_LANDMARK, k, 1 });
     }
-    // The air. Each of these is a whole flier rig (count, size, orbit, speed),
-    // so the same rule applies: adopt the first biome that flies one, leave a
-    // biome that already flies its own alone.
-    if (!t.birds.count && o.birds.count) t.birds = o.birds;
-    if (!t.kites.count && o.kites.count) t.kites = o.kites;
-    if (!t.hasPlane && o.hasPlane) { t.hasPlane = true; t.plane = o.plane; }
-    if (t.balloon.panels.empty() && !o.balloon.panels.empty()) t.balloon = o.balloon;
-    if (!t.haze.count && o.haze.count) t.haze = o.haze;
-    if (!t.ambient.count && o.ambient.count) t.ambient = o.ambient;
-  }
-
-  // EQUAL WEIGHTS, deliberately. A biome weights its palette for a look — the
-  // grass cup is 65% oak to 35% pine because a meadow reads that way — and
-  // carrying those weights into a nine-model union would leave the rarest model
-  // stamped once on a lap, or not at all. Here every model is equally likely, so
-  // one walk down the exhibition straight meets all of them. The per-model SCALE
-  // range (s0/s1) is the model's own and is kept: a saguaro is not a shrub.
-  const float w = trees.empty() ? 0.0f : 1.0f / (float) trees.size();
-  for (TreeSpec& tr : trees) tr.w = w;
-  const float cw = clutter.empty() ? 0.0f : 1.0f / (float) clutter.size();
-  for (ClutterSpec& c : clutter) c.w = cw;
-
-  t.scenery.trees = trees;
-  t.scenery.clutter = clutter;
-  t.scenery.mixTree = kMixTree;
-  t.scenery.mixBush = t.scenery.hasBush ? kMixBush : kMixTree;
-  t.scenery.density = std::max(t.scenery.density, kMinSceneryDensity);
-  t.scenery.clutterDensity = std::max(t.scenery.clutterDensity, kMinClutterDensity);
-  // The scenery<i>.glb slot order, derived exactly as a biome's own is
-  // (theme.cc's deriveModels): the trees in first-appearance order, then the
-  // bush donor if it is not already among them.
-  t.scenery.models.clear();
-  for (const TreeSpec& tr : t.scenery.trees) {
-    if (std::find(t.scenery.models.begin(), t.scenery.models.end(), tr.model)
-            == t.scenery.models.end()) {
-      t.scenery.models.push_back(tr.model);
+    if (on(GAL_CLUTTER)) {
+      for (const ClutterSpec& c : bag.clutter) clutter.push_back({ GAL_CLUTTER, GAL_CH_CLUTTER, c.kind, 1 });
     }
-  }
-  if (t.scenery.hasBush
-          && std::find(t.scenery.models.begin(), t.scenery.models.end(), t.scenery.bush.model)
-                  == t.scenery.models.end()) {
-    t.scenery.models.push_back(t.scenery.bush.model);
-  }
-
-  // Trackside props, by the same rules: the prop<i>.glb slot order falls out of
-  // the fixed biome walk (never the picked biome first), and the scatter set is
-  // deduped by model then rebalanced to EQUAL weights so one lap meets every prop.
-  t.props = PropsSpec{};
-  const auto propSlot = [&](const std::string& model) -> uint32_t {
-    const auto it = std::find(t.props.models.begin(), t.props.models.end(), model);
-    if (it != t.props.models.end()) return (uint32_t) (it - t.props.models.begin());
-    t.props.models.push_back(model);
-    return (uint32_t) (t.props.models.size() - 1);
-  };
-  const auto addProps = [&](const Theme& o) {
-    for (const PropStamp& p : o.props.scatter) {
-      const std::string& model = o.props.models[p.slot];
-      const bool seen = std::find(t.props.models.begin(), t.props.models.end(), model)
-              != t.props.models.end();
-      const uint32_t slot = propSlot(model);
-      if (!seen) t.props.scatter.push_back({ slot, p.w, p.s0, p.s1 });
+    if (on(GAL_SET)) {
+      for (const Sc& s : bag.sets) {
+        const uint32_t slot = findSlot(t.set.models, s.model);
+        if (slot == t.set.models.size()) continue;
+        sets.push_back({ GAL_SET, GAL_CH_SET, slot, s.scale });
+      }
     }
-    t.props.scatterDensity = std::max(t.props.scatterDensity, o.props.scatterDensity);
-  };
-  for (int i = 0; i < biome_count(); i++) addProps(resolve_theme(biome_name(i), trackId));
-  // Then each catalogue track's own: a track may patch its biome's props (the
-  // beach cup keeps its pirate leavings for Cove), and those ship too.
-  for (int i = 0; i < TTP_TRACK_COUNT; i++) {
-    const char* id = TTP_TRACKS[i].id;
-    addProps(resolve_theme(biome_for_track(id), id));
+    placePad(t, padX, bag.color,
+             { scenery, props, landmarks, clutter, sets },
+             { kPitchSmall, kPitchSmall, kPitchLm, kPitchCl, kGallerySetPitch },
+             { kColsSmall, kColsSmall, kColsLm, kColsCl, kColsSet });
   }
-  const float pw = t.props.scatter.empty() ? 0.0f : 1.0f / (float) t.props.scatter.size();
-  for (PropStamp& p : t.props.scatter) p.w = pw;
   return t;
 }
 
-const std::vector<std::string>& showcase_prop_models() {
-  // The showcase_models() rule: any biome answers the same list.
-  static const std::vector<std::string> models =
-      showcase_theme(biome_name(0), "").props.models;
-  return models;
-}
-
-std::string showcase_inventory_json() {
-  const Theme t = showcase_theme(biome_name(0), "");
-  Value o = Value::Obj();
-
-  Value scenery = Value::Arr();
-  for (const std::string& m : showcase_models()) scenery.push(Value::Str(m));
-  o.set("scenery", scenery);
-
-  Value props = Value::Arr();
-  for (const std::string& m : showcase_prop_models()) props.push(Value::Str(m));
-  o.set("props", props);
-
-  Value set = Value::Arr();
-  for (const std::string& m : showcase_set_models()) set.push(Value::Str(m));
-  o.set("set", set);
-
-  Value landmarks = Value::Arr();
-  for (uint32_t k : t.landmarks) landmarks.push(Value::Str(landmarkName(k)));
-  o.set("landmarks", landmarks);
-
-  Value clutter = Value::Arr();
-  for (const ClutterSpec& c : t.scenery.clutter) clutter.push(Value::Str(clutterName(c.kind)));
-  o.set("clutter", clutter);
-
-  // The air, named by what a viewer sees rather than by field: the picked biome
-  // decides none of this (the union above turns all four on), so the list is the
-  // same whichever biome the gallery is showing.
-  Value fliers = Value::Arr();
-  if (t.birds.count) fliers.push(Value::Str("birds"));
-  if (t.kites.count) fliers.push(Value::Str("kites"));
-  if (t.hasPlane) fliers.push(Value::Str("paper plane"));
-  if (!t.balloon.panels.empty()) fliers.push(Value::Str("hot-air balloon"));
-  if (t.clouds.count) fliers.push(Value::Str("clouds"));
-  if (t.haze.count) fliers.push(Value::Str("dust banks"));
-  if (t.ambient.count) fliers.push(Value::Str("ambient particles"));
-  o.set("fliers", fliers);
-
-  return canonical_stringify(o);
-}
-
-const std::vector<ShowcaseRocket>& showcase_rockets() {
-  // ON THE EXHIBITION STRAIGHT, in among the ITEM RUN the showroom track already
-  // authors there: the lone box at u 0.02, the four-lane row at 0.045, the boost
-  // pads at 0.075. That is 40-odd world units straight ahead of the opening
-  // camera, which is the whole point of moving them here — they first stood at
-  // u 0.70 with the road furniture, 420 units away round two corners, and a
-  // gallery exhibit nobody can find is not an exhibit. The slicks, cones,
-  // pillars and dropped bananas stay on the back straight: those are HAZARDS
-  // laid into the road, and a viewer meets them by flying the lap.
-  //
-  // Staggered across the road rather than paired, so the whizz-roll reads from
-  // two sides at once and neither exhibit hides the other.
-  static const std::vector<ShowcaseRocket> rockets = {
-      { 0.060f, -0.9f },
-      { 0.090f, 0.9f },
+std::string showcase_inventory_json(uint32_t mask) {
+  const Theme t = showcase_theme(biome_name(0), "", mask);
+  // The opening shot is the fullest pad, not the kit. The kit is nine
+  // models; a biome pad holds that biome's whole catalogue. An empty mask
+  // has no spots, so it opens on the kit. Every pad is still listed, empty
+  // ones included, so a button can land on its colour.
+  const auto count = [&](const GalleryPad& p) {
+    size_t n = 0;
+    for (const GallerySpot& s : t.gallerySpots) {
+      if (s.x > p.x0 && s.x < p.x1 && s.z > p.z0 && s.z < p.z1) n++;
+    }
+    return n;
   };
-  return rockets;
-}
-
-int showcase_monster_from(int rosterSize) {
-  return rosterSize > 0 ? rosterSize / 2 : -1;
+  const GalleryPad* open = t.galleryPads.empty() ? nullptr : &t.galleryPads.front();
+  size_t best = 0;
+  for (const GalleryPad& p : t.galleryPads) {
+    const size_t n = count(p);
+    if (n > best) { best = n; open = &p; }
+  }
+  const auto mm = [](float v) { return Value::Num(std::round(v * 1000.0) / 1000.0); };
+  const auto box = [&](Value& o, const GalleryPad& p) {
+    o.set("x0", mm(p.x0));
+    o.set("x1", mm(p.x1));
+    o.set("z0", mm(p.z0));
+    o.set("z1", mm(p.z1));
+  };
+  Value bounds = Value::Obj();
+  if (open) box(bounds, *open);
+  Value cats = Value::Arr();
+  for (const char* c : { "cars", "items", "scenery", "props", "landmarks", "clutter", "set" }) {
+    cats.push(Value::Str(c));
+  }
+  Value pads = Value::Arr();
+  for (size_t i = 0; i < t.galleryPads.size(); i++) {
+    const char* name = i == 0 ? "kit"
+        : (i - 1 < (size_t) biome_count() ? biome_name((int) i - 1) : "");
+    Value one = Value::Obj();
+    one.set("name", Value::Str(name));
+    box(one, t.galleryPads[i]);
+    pads.push(std::move(one));
+  }
+  Value o = Value::Obj();
+  o.set("bounds", bounds);
+  o.set("categories", cats);
+  o.set("pads", std::move(pads));
+  return canonical_stringify(o);
 }
 
 }  // namespace rt

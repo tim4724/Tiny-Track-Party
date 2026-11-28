@@ -527,15 +527,18 @@ export class Stage {
   // The biome this track is being drawn in.
   biome() { return this._biome; }
 
-  // Draw every scene from here on as the ASSET GALLERY's showroom: this biome's
-  // palette carrying every biome's vocabulary (ttp_display_showcase). The
-  // gallery is the only caller; nothing in play sets it.
+  // Draw every scene from here on as the ASSET GALLERY: flat pads, one per
+  // biome (ttp_display_showcase). The gallery is the only caller.
   //
   // Takes effect at the next build, so a caller flipping it on a live scene
   // asks for one — the same contract as biomeOverride. Held here and pushed in
   // _rebuild rather than pushed now, because the gallery sets it at module
   // scope, before boot() has a display to latch it on.
   showcase(on) { this._showcase = on !== false; }
+
+  // Which categories the gallery places (GalleryCat bits, default all). Same
+  // hold-and-push contract as showcase(): a filter chip changes the bake.
+  galleryMask(mask) { this._galleryMask = mask >>> 0; }
 
   // DEV, the asset gallery's model bench (ttp_display_bench /
   // ttp_display_model_variant). Held here and pushed in _rebuild for the same
@@ -595,15 +598,16 @@ export class Stage {
           // the caller's await resolved as if it had not.
           //
           // Two signatures, because the two halves have different cheap paths:
-          // a SCENE input change (track, biome, showcase, bench, variants) is
+          // a SCENE input change (track, biome, showcase, mask, bench, variants) is
           // always a full build, while a roster-only change on a live scene is
           // offered to ttp_display_reroster first — an in-place re-dress that
           // keeps the meshes, the baked shadows and the preview camera's orbit
           // phase. Whether it qualifies is C++'s call; a refusal (a changed
           // id list) just falls through to the build below.
           const variants = this._variants || {};
+          const galleryMask = this._galleryMask ?? 0x7f;
           const sceneSig = JSON.stringify([this._track.id, this._biome,
-                                           !!this._showcase, this._bench || '', variants]);
+                                           !!this._showcase, this._bench || '', variants, galleryMask]);
           const rosterSig = JSON.stringify(roster);
           if (sceneSig === this._sceneSig && rosterSig === this._rosterSig) {
             continue; // nothing the renderer can see
@@ -616,6 +620,7 @@ export class Stage {
               continue;
             }
             this.display.showcase(!!this._showcase); // latched; see showcase()
+            this.display.galleryMask(galleryMask);
             this.display.bench(this._bench || '');   // …and see bench()
             for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
             // The cells before the build, as both TV shells latch them: a build
@@ -1223,13 +1228,13 @@ export class Stage {
       f.pitch = Math.max(-1.55, Math.min(1.55, f.pitch - (e.clientY - ly) * 0.005));
       lx = e.clientX; ly = e.clientY;
     }, { signal });
-    // The wheel flies forward/back along the look direction, scaled by the
-    // framing distance so a notch feels the same near or far.
+    // The wheel flies forward/back along the look direction. The step is the
+    // same pace as WASD, so a notch covers ground at the height you are at.
     dom.addEventListener('wheel', (e) => {
       if (editable(e.target)) return;
       e.preventDefault();
       const d = this._freeDir();
-      const step = Math.max(8, f.fly) * 0.0009 * -e.deltaY;
+      const step = this._freePace() * 0.0009 * -e.deltaY;
       f.eye.x += d.x * step; f.eye.y += d.y * step; f.eye.z += d.z * step;
     }, { passive: false, signal });
 
@@ -1264,10 +1269,19 @@ export class Stage {
     return { x: Math.sin(f.yaw) * cp, y: Math.sin(f.pitch), z: Math.cos(f.yaw) * cp };
   }
 
+  // Units per second before the WASD and wheel fractions. `fly` (40) is the
+  // floor, enough for a track. The asset gallery sets scaleWithHeight: framed
+  // from a few hundred units up, the same keys would otherwise take a minute
+  // to cross it. Pace follows the height, so dropping to a car slows back down.
+  _freePace() {
+    const f = this._free;
+    const lifted = f.scaleWithHeight ? Math.abs(f.eye.y) * 2 : 0;
+    return Math.max(8, f.fly, lifted);
+  }
+
   // WASD ride the camera's GROUND-plane forward/right so you skim level over the
-  // track; Q drops and E rises on world up. Both are fractions of a framing-
-  // anchored reference speed so it feels the same everywhere: WASD at 50%,
-  // rise/dip at a gentler 25% for fine height tweaks.
+  // track; Q drops and E rises on world up. Both are fractions of _freePace:
+  // WASD at 50%, rise/dip at a gentler 25% for fine height tweaks.
   _stepFreeCam(dt) {
     const f = this._free;
     const d = this._freeDir();
@@ -1283,7 +1297,7 @@ export class Stage {
       if (f.keys.has('KeyA')) { hx -= rx; hz -= rz; }
       if (f.keys.has('KeyE')) vy += 1;
       if (f.keys.has('KeyQ')) vy -= 1;
-      const ref = Math.max(8, f.fly) * 0.9 * dt;
+      const ref = this._freePace() * 0.9 * dt;
       const hl = Math.hypot(hx, hz);
       if (hl > 0) { f.eye.x += (hx / hl) * ref * 0.5; f.eye.z += (hz / hl) * ref * 0.5; }
       f.eye.y += vy * ref * 0.25;

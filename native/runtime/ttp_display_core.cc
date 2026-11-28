@@ -180,6 +180,10 @@ void ttp_display_showcase(int on) {
     if (g_disp) g_disp->showcase = on != 0;
 }
 
+void ttp_display_gallery_mask(uint32_t mask) {
+    if (g_disp) g_disp->galleryMask = mask;
+}
+
 void ttp_display_model_variant(const char* model, int variant) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setModelVariant(model, variant);
 }
@@ -223,11 +227,15 @@ const char* ttp_display_spot_issue(double x, double z, double lo, double hi, int
 // one over it. The DETAIL TIER is present because it is a different world:
 // coarser ground, other models, fewer pieces.
 static std::string bakeKeyFor(const char* trackId, const char* biome) {
-    return (trackId ? std::string(trackId) : std::string())
+    // The mask joins the key ONLY while showcase is on. A shipping bake is
+    // `track|biome|0|backend|detail` and must not grow a field.
+    std::string key = (trackId ? std::string(trackId) : std::string())
             + "|" + (biome ? biome : "")
-            + "|" + (g_disp && g_disp->showcase ? "1" : "0")
-            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0)
+            + "|" + (g_disp && g_disp->showcase ? "1" : "0");
+    if (g_disp && g_disp->showcase) key += "|" + std::to_string(g_disp->galleryMask);
+    key += "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0)
             + "|" + ttp::rt::detail_name(ttp::rt::detail_in_force());
+    return key;
 }
 
 // Defined with the rest of the blob walk below; called from the end of a build,
@@ -270,12 +278,12 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
         // laps and seed do not reach the geometry — they are only stamped onto
         // RaceTrack.totalLaps/.seed, and the renderer reads neither.
         const ttp::RaceTrack geo = ttp::build_catalogue_track(*def, 1, 0u);
-        // The gallery's showroom resolves through showcase_theme instead: the
-        // SAME palette this line would have produced, carrying every biome's
-        // vocabulary (ttp_display_showcase). Nothing on the shipping path takes
-        // that branch.
-        ttp::rt::Theme theme = g_disp->showcase ? ttp::rt::showcase_theme(biome, trackId)
-                                                : ttp::rt::resolve_theme(biome, trackId);
+        // The asset gallery resolves through showcase_theme: flat pads, every
+        // biome's models, no race palette (ttp_display_showcase). The mask
+        // drops categories. Nothing on the shipping path takes that branch.
+        ttp::rt::Theme theme = g_disp->showcase
+                ? ttp::rt::showcase_theme(biome, trackId, g_disp->galleryMask)
+                : ttp::rt::resolve_theme(biome, trackId);
         // The one part of the palette that cannot be resolved from data alone: a
         // scenery recolour keyed by AUTHORED colour has to read the model's own
         // glTF materials. Those bytes are already here — the shell provided them

@@ -287,34 +287,33 @@ merged draw groups), is header-only for the same reason and gated by the
 
 ## The asset gallery and the model bench
 
-`/gallery-assets.html` holds the whole kit in one scene, built from data rather
-than a list. It is **dev-only** and reached by nothing on the shipping path, and
-`showcase.cc` sits beside `theme.cc` rather than inside it precisely so a gallery
-can never move a number the shipping game draws with.
+`/gallery-assets.html` stands the kit on flat coloured pads, one pad per biome
+plus a neutral pad for the cars and the items. It is **dev-only** and reached by
+nothing on the shipping path. There is no race and no single biome palette.
+`showcase.cc` sits beside `theme.cc` rather than inside it so a gallery can never
+move a number the shipping game draws with.
 
-**The showcase theme** takes the picked biome's palette unchanged and merges in
-every other biome's vocabulary, first-appearance-wins. A biome added to `theme.cc`
-therefore joins the gallery on the same commit, and the `showcase` ctest says so —
-it also pins that the palette survives untouched and that scenery slot order does
-not depend on the biome, since the shell fetches those bytes before the build
-picks a look.
+**The showcase theme** unions every biome's scenery, props, landmarks and clutter,
+and every catalogue track's set pieces, first-appearance-wins, then lays that
+out as spots on the pads. A filter mask (`ttp_display_gallery_mask`, GalleryCat
+bits) drops a category's spots and leaves the model lists alone, so the shell's
+GLB slots do not move when a chip toggles. A biome added to `theme.cc` joins the
+gallery on the same commit. The `showcase` ctest says so, and that the sky is
+the one studio rather than the named biome.
 
-The field is a bare session left UNRUN — the cars park on the grid, which is the
-opening shot — until the gallery's Drive toggle lets the AI out. A rocket and the
-monster truck cannot be authored into a track descriptor at all, so they are
-staged only while the scene is held and written to the outgoing frame rather than
-into held state; Drive therefore hands the scene back to the sim rather than
-leaving trucks welded to the field.
+The renderer reads the pads and spots off `Theme` and does not call `showcase.cc`.
+Landmark and clutter builders place those spots and skip their race streams. The
+rocket is one shipping variant in the landmark mesh. The frame builder adds
+nothing: showcase mode does not stand rockets or monster trucks.
 
-The gallery's control surface is `window.__showroom` (biome, forced item, drive,
-camera home) over `ttp_display_showcase` / `ttp_theme_showcase_models`.
+The gallery's control surface is `window.__showroom` (`filter`, `home`, `goto`)
+over `ttp_display_showcase` / `ttp_display_gallery_mask`. Category names and
+per-pad bounds come from `ttp_showcase_inventory_json`. `bounds` is the opening
+pad, not the whole row; `goto` frames one named pad.
 
-**The model bench** (`ttp_display_bench`, with `ttp_display_model_variant`
-choosing what later scenes mesh with) exists because some of what the renderer
-draws is procedural geometry authored in C++: there is no file to open and no modelling tool in the
-loop, so the only way to argue about a shape is to build two and look at them.
-Variant 0 is the pre-bench geometry and is kept — a bench with no "what we have
-today" is not a comparison — but the defaults are the picks.
+**The model bench ABI** (`ttp_display_bench`, `ttp_display_model_variant`) stays,
+because the procedural builders still take a variant and the shipping picks are
+`mModelVariant`'s defaults. The gallery does not place a bench row.
 
 **Two standing constraints on rocket-like shapes**, both rediscovered the
 expensive way:

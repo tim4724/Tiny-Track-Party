@@ -423,6 +423,11 @@ jint n_ttp_display_frame(JNIEnv* env, jclass, jdouble a0) {
     return (jint) ttp_display_frame((double) a0);
 }
 
+void n_ttp_display_gallery_mask(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    ttp_display_gallery_mask((uint32_t) a0);
+}
+
 jdouble n_ttp_display_gpu_ms(JNIEnv* env, jclass) {
     (void) env;
     return (jdouble) ttp_display_gpu_ms();
@@ -1202,9 +1207,9 @@ jint n_ttp_shot_hold(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
     return (jint) ttp_shot_hold((int) a0, s1.get());
 }
 
-jbyteArray n_ttp_showcase_inventory_json(JNIEnv* env, jclass) {
+jbyteArray n_ttp_showcase_inventory_json(JNIEnv* env, jclass, jint a0) {
     (void) env;
-    return toBytes(env, ttp_showcase_inventory_json());
+    return toBytes(env, ttp_showcase_inventory_json((uint32_t) a0));
 }
 
 jbyteArray n_ttp_snapshot_json(JNIEnv* env, jclass, jint a0) {
@@ -1531,6 +1536,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_dress_sheets", "(I)V", (void*) n_ttp_display_dress_sheets },
     { "ttp_display_fog", "(I)V", (void*) n_ttp_display_fog },
     { "ttp_display_frame", "(D)I", (void*) n_ttp_display_frame },
+    { "ttp_display_gallery_mask", "(I)V", (void*) n_ttp_display_gallery_mask },
     { "ttp_display_gpu_ms", "()D", (void*) n_ttp_display_gpu_ms },
     { "ttp_display_ground_y", "(DD)D", (void*) n_ttp_display_ground_y },
     { "ttp_display_hold", "(I)V", (void*) n_ttp_display_hold },
@@ -1678,7 +1684,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_set_steer_expo", "(D)V", (void*) n_ttp_set_steer_expo },
     { "ttp_shot_held", "(I)I", (void*) n_ttp_shot_held },
     { "ttp_shot_hold", "(I[B)I", (void*) n_ttp_shot_hold },
-    { "ttp_showcase_inventory_json", "()[B", (void*) n_ttp_showcase_inventory_json },
+    { "ttp_showcase_inventory_json", "(I)[B", (void*) n_ttp_showcase_inventory_json },
     { "ttp_snapshot_json", "(I)[B", (void*) n_ttp_snapshot_json },
     { "ttp_theme_biome_count", "()I", (void*) n_ttp_theme_biome_count },
     { "ttp_theme_biome_for_cup", "([B)[B", (void*) n_ttp_theme_biome_for_cup },

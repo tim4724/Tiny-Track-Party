@@ -21,6 +21,14 @@ header nav a:hover { background: #13132a; color: #fff; }
 header nav a.active { background: #2a2a5a; color: #fff; border-color: #5060c0; }
 
 .group { display: flex; align-items: center; gap: 6px; }
+/* The asset gallery's category chips. One row beside the title; each chip is
+   still a .group so the mobile header can fold them behind the gear. */
+#asset-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; }
+#asset-places { flex-wrap: wrap; }
+#asset-places .ctrl[aria-pressed="true"] {
+  background: #2a2a5a;
+  border-color: #5060c0;
+}
 .checkbox-label {
   display: inline-flex; align-items: center; gap: 6px;
   color: #e0e0ff; font-size: 12px; cursor: pointer;
@@ -457,9 +465,15 @@ div.lm-diff__row:hover { background: none; }
     grid-column: 1 / 3;
     grid-row: 2;
     margin-left: 0;
+    min-width: 0; /* the link row would otherwise widen the grid over the gear */
+    overflow-x: auto;
     display: flex;
     gap: 6px;
   }
+  /* The chips are one strip under the nav, not a grid cell beside it.
+     Closed, the strip is gone so it does not sit on the nav. */
+  #asset-filters { grid-column: 1 / -1; grid-row: 3; }
+  header:not(.options-open) #asset-filters { display: none; }
   header nav a {
     flex: 1;
     text-align: center;

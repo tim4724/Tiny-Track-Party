@@ -272,31 +272,23 @@ TTP_ABI const char* ttp_display_asset_textures(void);
  * it wants to tell the user their spelling was wrong. */
 TTP_ABI void ttp_display_biome(const char* name);
 
-/* Build every scene from here on as the ASSET GALLERY's showroom
- * (ttp/showcase.h): the resolved biome's palette carrying the UNION of every
- * biome's vocabulary — all nine scenery models, all seventeen hero landmarks,
- * all ten clutter kinds and every flier rig — so one scene holds everything the
- * renderer draws rather than one cup's share of it.
+/* Build every scene from here on as the ASSET GALLERY (ttp/showcase.h): flat
+ * coloured pads, one per biome plus a kit pad, with no race and no single
+ * biome palette. A LATCHED FLAG, like ttp_display_biome: it changes what the
+ * next ttp_display_build resolves.
  *
- * A LATCHED FLAG, like ttp_display_biome, and for the same reason: it changes
- * what the next ttp_display_build resolves, so it cannot be an argument to the
- * frame and must not be a mode the renderer has to keep two versions of.
+ * Off by default. The gallery (/gallery-assets.html) is its only caller. A
+ * shell in showcase mode fetches scenery, props and set pieces from
+ * ttp_theme_showcase_models / _prop_models / _set_models — one list, whichever
+ * biome is named — plus the four kit car GLBs under their own names.
  *
- * It also puts the showroom's STANDING EXHIBITS on every frame drawn while the
- * field is parked (ttp_display_hold): a pair of rockets in the item run at the
- * head of the exhibition straight, and a monster rig on every slot in the back
- * half of the grid. Those two are the only things the renderer draws that a
- * track descriptor cannot author — a rocket is a homing projectile, the monster
- * truck is a transform of a car — so without this a gallery could show them
- * only by running a race. Lifting the hold drops them and hands the scene back
- * to the sim.
- *
- * Off by default and reached by nothing on the shipping path — the gallery
- * (/gallery-assets.html) is its only caller. A shell in showcase mode must fetch
- * its scenery bytes from ttp_theme_showcase_models() rather than
- * ttp_theme_scenery_models(): the slot list is longer, and it is the same list
- * for every biome. */
+ * ttp_display_gallery_mask chooses which categories are stood on those pads.
+ * Bits, in inventory order: cars 1, items 2, scenery 4, props 8, landmarks 16,
+ * clutter 32, set pieces 64. 0x7f (the default) is everything. 0 is the pads
+ * alone and is not treated as "all". The model lists do not change with the
+ * mask; the bake key does, so a toggle rebuilds the static scene. */
 TTP_ABI void ttp_display_showcase(int on);
+TTP_ABI void ttp_display_gallery_mask(uint32_t mask);
 
 /* ---- model variants (DEV) ----------------------------------------------- *
  *
@@ -313,14 +305,13 @@ TTP_ABI void ttp_display_showcase(int on);
  * has something to argue against. An unknown name is ignored; an out-of-range
  * variant clamps to that model's own count, which differs per model.
  *
- * ttp_display_bench turns the next build into a MODEL BENCH for `model`: every
- * variant of it standing in a row on the verge, all facing the road, and NO
- * other landmarks at all — a doghouse behind the middle gnome is a thumb on
- * the scale. null or "" builds the normal scene.
+ * ttp_display_bench latches which model a bench build would stand. The asset
+ * gallery no longer places that row — null or "" is what every build sees.
+ * The latch stays because the procedural builders still take a variant.
  *
  * Latched, like ttp_display_biome, and for the same reason: they change what
- * the next ttp_display_build meshes. Reached only by the asset gallery
- * (/gallery-assets.html); nothing on the shipping path calls either. */
+ * the next ttp_display_build meshes. Nothing on the shipping path calls
+ * either. */
 TTP_ABI void ttp_display_model_variant(const char* model, int variant);
 TTP_ABI void ttp_display_bench(const char* model);
 

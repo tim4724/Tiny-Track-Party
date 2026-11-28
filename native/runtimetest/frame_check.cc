@@ -53,7 +53,6 @@
 #include "ttp/jsmath.h"
 #include "ttp/roster.h"
 #include "ttp/race_track.h"
-#include "ttp/showcase.h"
 #include "ttp/util.h"
 #include "ttp/vecmath.h"
 #include "ttp_display.h"
@@ -1846,30 +1845,13 @@ void testProps(const BuiltRaceTrack& base) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. The asset gallery's STANDING EXHIBITS (ttp/showcase.h).
-//
-//    WHAT they are and WHERE they stand is showcase_check's; this is the rule
-//    that lives here, and it is a rule about a MODE rather than about a number:
-//    an exhibit is on the frame only while the showroom is in showcase mode AND
-//    the field is parked. Both halves matter and neither is visible from the
-//    other file. Drop the showcase half and every shipping race grows two
-//    rockets nobody fired. Drop the parked half and the gallery's Drive toggle
-//    hands the scene back to the sim with a truck welded to the last car and a
-//    pair of rockets hanging over the road it is driving down.
-//
-//    The monster rig carries a third rule with no natural home either: it is
-//    written to the OUTGOING frame and never into `held`. The held field is the
-//    real one, kept so a hold has something to hold; baking a gallery decision
-//    into it would leave the truck standing on the grid after the hold lifted,
-//    with nothing left that knew to take it off.
+// 8. Showcase mode is inert on the frame. The gallery stands its own meshes
+//    in the renderer; it does not graft rockets or monster trucks onto a
+//    parked field. The sim's own monster still reads through.
 // ---------------------------------------------------------------------------
 void testShowcaseExhibits(const GameTrack& track) {
   Game game(threePlayers(), track, nullptr);
   dressCars(game);   // car P1 is mid-monster in the SIM, which must read through
-  const double len = game.length();
-  const std::vector<rt::ShowcaseRocket>& want = rt::showcase_rockets();
-  check(!want.empty(), "premise: the showcase stands at least one rocket");
-
   DisplayState d = freshState();
   d.roster = {P0, P1, P2};
 
@@ -1881,98 +1863,15 @@ void testShowcaseExhibits(const GameTrack& track) {
     return s;
   };
 
-  // Off, which is every shell but the gallery.
   const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkU(h->rocketCount, 0, "a shipping display stands no rockets");
   check(monsters(h) == "010", "premise: only the sim's own monster is up");
 
-  // Showcase, but DRIVING: the gallery let the AI out, so the scene is the
-  // sim's again and an exhibit would be the one rocket nobody fired.
   d.showcase = true;
-  h = rt::buildFrame(d, &game, DT, caseAspect(d));
-  checkU(h->rocketCount, 0, "a driving showroom stands no rockets");
-  check(monsters(h) == "010", "…and stages no rig");
-
-  // Parked. This first held frame still goes down the LIVE branch (`held` is
-  // empty), which is the arm that also has to carry the exhibits.
   d.hold = true;
   h = rt::buildFrame(d, &game, DT, caseAspect(d));
-  checkU(h->rocketCount, (uint32_t) want.size(), "the parked showroom stands its rockets");
-  for (size_t i = 0; i < want.size(); i++) {
-    const std::string who = "exhibit rocket " + std::to_string(i);
-    checkF(ttp_frame_rockets(h)[i].s, (float) ttp::wrap_s(want[i].u * len, len),
-           who + " is its lap fraction of THIS track's length");
-    checkF(ttp_frame_rockets(h)[i].lat, want[i].lat, who + " keeps its lateral offset");
-  }
-  // Three seats, so the back half is slots 1 and 2 — and slot 1 was already
-  // wearing the sim's own, which is the case that catches a stage that CLEARS
-  // rather than sets.
-  check(monsters(h) == "011", "the back half of the grid wears the rigs");
-  check(d.held.size() == 3 && d.held[2].monster == 0.0f,
-        "the rig is not written into the held field");
-  check(d.held[1].monster == 1.0f, "…while the sim's own monster is");
-
-  // The second parked frame comes off `held` (the memcpy arm) and must carry it
-  // just the same — this is the frame the gallery actually sits on.
-  h = rt::buildFrame(d, &game, DT, caseAspect(d));
-  check(monsters(h) == "011", "a held frame carries the rig too");
-
-  // Live traffic goes BEHIND the exhibits: the renderer's rocket pool is four,
-  // so the array's order is what keeps an exhibit in the picture.
-  game.stageRocket(12.5, 0.4, 9.0, P0);
-  h = rt::buildFrame(d, &game, DT, caseAspect(d));
-  checkU(h->rocketCount, (uint32_t) want.size() + 1, "a live rocket joins the exhibits");
-  checkF(ttp_frame_rockets(h)[0].lat, want[0].lat, "the exhibits keep the front of the array");
-  checkF(ttp_frame_rockets(h)[want.size()].lat, 0.4f, "…and the live rocket falls in behind");
-
-  // A seat whose car is not in the field was memset to the origin with a zero
-  // forward. A rig grafted onto that is a truck standing in the middle of
-  // nothing, pointing nowhere.
-  DisplayState g = freshState();
-  g.showcase = true;
-  g.hold = true;
-  g.roster = {P0, P1, GHOST};
-  h = rt::buildFrame(g, &game, DT, caseAspect(g));
-  check(monsters(h) == "010", "an empty slot is not put in a monster truck");
-
-  // And an empty roster has no slot to spare, which must not be slot -1.
-  DisplayState e = freshState();
-  e.showcase = true;
-  e.hold = true;
-  h = rt::buildFrame(e, &game, DT, caseAspect(e));
-  checkU(h->carCount, 0, "an empty roster stages no rig");
-  // The rockets do not depend on the field at all (the +1 is the live one still
-  // in flight from the ordering case above).
-  checkU(h->rocketCount, (uint32_t) want.size() + 1, "…but still stands its rockets");
-
-  // No session bound: an exhibit's `u` is a fraction of a lap length there is
-  // nothing to ask for.
-  DisplayState n = freshState();
-  n.showcase = true;
-  n.hold = true;
-  n.roster = {P0, P1, P2};
-  h = rt::buildFrame(n, nullptr, DT, caseAspect(n));
-  checkU(h->rocketCount, 0, "an unbound showroom stands nothing");
-  check(monsters(h) == "000", "…and dresses nobody");
-
-  // THE SHOWROOM'S OWN SHAPE, which is the case the rule was chosen for: eight
-  // seats, two per car model, so the back half is four rigs and one of them is
-  // each of the four trucks. The three-seat cases above cannot see that — they
-  // would pass just as happily on "the last slot only".
-  std::vector<PlayerDesc> eight;
-  std::vector<ScalarId> lineup;
-  for (int i = 0; i < 8; i++) {
-    const Id id = Id::Num(i);
-    eight.push_back(PlayerDesc{id, false, Stats{}});
-    lineup.push_back(id);
-  }
-  Game full(eight, track, nullptr);
-  DisplayState s = freshState();
-  s.showcase = true;
-  s.hold = true;
-  s.roster = lineup;
-  h = rt::buildFrame(s, &full, DT, caseAspect(s));
-  check(monsters(h) == "00001111", "the showroom's eight-seat lineup stands four trucks");
+  checkU(h->rocketCount, 0, "showcase mode adds no rockets");
+  check(monsters(h) == "010", "showcase mode adds no monster rig");
 }
 
 // ---------------------------------------------------------------------------

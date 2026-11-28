@@ -14,6 +14,9 @@
 
 
 namespace {
+// TrackProps sizes the kit box to this height. The GLB ships about 0.445 tall.
+constexpr float kBoxHeight = 0.3f;
+
 // Terrain value noise: integer lattice hash, cosine-eased bilinear blend.
 // Renderer-local and cosmetic — no JS twin, no conformance corpus behind it —
 // but integer-hashed rather than sin-based so every platform draws the same
@@ -2808,6 +2811,202 @@ void TtpRenderer::buildRoomRing(const TrackBin& tb) {
     }
 }
 
+// The asset gallery: a neutral surround, one coloured pad per biome, the kit
+// stood on them, and a studio sky. No road, no race furniture, no scatter.
+// Called after the prologue (theme, terrain amp, bake rig) and instead of the
+// rest of buildStatic. Landmarks and clutter read mGallerySpots.
+bool TtpRenderer::buildGalleryWorld(TrackBin& tb, const ttp::rt::Theme& theme) {
+    const float groundY = tb.groundY;
+    mFogColor = srgbToLinear(tb.fog);
+
+    mGround.verts.clear();
+    mGround.idx.clear();
+    mGround.uvs.clear();
+    mGround.normals.clear();
+    mGround.custom0.clear();
+    mGround.bakeLight = true;
+    const auto quad = [&](float x0, float z0, float x1, float z1, float y, uint32_t hex) {
+        if (!(x1 > x0) || !(z1 > z0)) return;
+        const uint32_t c = packAlbedo(srgbToLinear(hex), 1.0f);
+        const uint32_t base = (uint32_t) mGround.verts.size();
+        // From above (+Y): (x0,z0), (x1,z0), (x1,z1), (x0,z1).
+        for (const float2 xz : { float2{ x0, z0 }, float2{ x1, z0 }, float2{ x1, z1 }, float2{ x0, z1 } }) {
+            mGround.verts.push_back({ xz.x, y, xz.y, c });
+            mGround.normals.push_back(float3{ 0, 1, 0 });
+        }
+        mGround.idx.insert(mGround.idx.end(), { base, base + 1, base + 2, base, base + 2, base + 3 });
+    };
+    float reach = 80.0f;
+    for (const ttp::rt::GalleryPad& p : theme.galleryPads) {
+        reach = std::max(reach, std::max(std::fabs(p.x0), std::fabs(p.x1)));
+        reach = std::max(reach, std::max(std::fabs(p.z0), std::fabs(p.z1)));
+    }
+    reach += 60.0f;
+    quad(-reach, -reach, reach, reach, groundY, theme.galleryGround);
+    for (const ttp::rt::GalleryPad& p : theme.galleryPads) {
+        quad(p.x0, p.z0, p.x1, p.z1, groundY + 0.03f, p.color);
+    }
+    if (!buildMesh(mGround)) return false;
+
+    // The same sun, hemisphere and sky dome a race builds (buildStatic). GLBs
+    // are the lit vglb shader, so a gallery with no lights draws them black.
+    const MatteRig rig = matteRig(tb);
+    mSun = utils::EntityManager::get().create();
+    LightManager::Builder(LightManager::Type::DIRECTIONAL)
+            .color(rig.sunColor)
+            .intensity(rig.sunLux)
+            .direction(-kToSun)
+            .castShadows(false)
+            .build(*mEngine, mSun);
+    mScene->addEntity(mSun);
+    {
+        const float3 sh[4] = { rig.sh0, rig.sh1, { 0, 0, 0 }, { 0, 0, 0 } };
+        mAmbient = IndirectLight::Builder()
+                .irradiance(2, sh)
+                .intensity(rig.hemiLux)
+                .build(*mEngine);
+        mScene->setIndirectLight(mAmbient);
+
+        const auto vsky = mAssets.find("vsky.filamat");
+        if (!mSkyMaterial && vsky != mAssets.end()) {
+            mSkyMaterial = Material::Builder()
+                    .package(vsky->second.data(), vsky->second.size())
+                    .build(*mEngine);
+        }
+        const int R = mLite ? 16 : SKY_DOME_RINGS, S = mLite ? 24 : SKY_DOME_SEGS;
+        mSkyInset = std::cos((float) M_PI / S) * std::cos((float) M_PI / (2 * R));
+        if (mSkyMaterial) {
+            const float3 top = skyLinear(tb.sky[0]), hor = skyLinear(tb.sky[1]),
+                         low = skyLinear(tb.sky[2]);
+            mSkyDome.verts.clear();
+            mSkyDome.idx.clear();
+            for (int r = 0; r <= R; r++) {
+                const float el = ((float) r / R - 0.5f) * (float) M_PI;
+                const float t = std::sin(el), ce = std::cos(el);
+                const float3 c = t >= 0
+                        ? mix(hor, top, std::pow(t, tb.skyCurve))
+                        : mix(hor, low, std::min(1.0f, -t * 3.0f));
+                const uint32_t col = packShown(c, 1.0f);
+                for (int sg = 0; sg <= S; sg++) {
+                    const float az = (float) sg / S * 2.0f * (float) M_PI;
+                    mSkyDome.verts.push_back({ ce * std::cos(az), t, ce * std::sin(az), col });
+                }
+            }
+            for (int r = 0; r < R; r++) {
+                for (int sg = 0; sg < S; sg++) {
+                    const uint32_t q = (uint32_t) (r * (S + 1) + sg), p = q + S + 1;
+                    for (uint32_t ix : { q, p, q + 1, q + 1, p, p + 1 }) {
+                        mSkyDome.idx.push_back((decltype(mSkyDome.idx)::value_type) ix);
+                    }
+                }
+            }
+            buildMesh(mSkyDome, true, sceneInstance(mSkyMaterial));
+        }
+    }
+
+    const auto matte = [&](gltfio::FilamentInstance* inst, int tintSlot) {
+        if (!inst) return;
+        MaterialInstance* const* mis = inst->getMaterialInstances();
+        for (size_t i = 0; i < inst->getMaterialInstanceCount(); i++) {
+            mis[i]->setParameter("metallicFactor", 0.0f);
+            mis[i]->setParameter("roughnessFactor", 1.0f);
+            if (tintSlot < 0 || (size_t) tintSlot >= tb.modelTints.size()) continue;
+            const char* nm = mis[i]->getName();
+            for (const auto& tint : tb.modelTints[(size_t) tintSlot]) {
+                if (tint.name == nm) {
+                    mis[i]->setParameter("baseColorFactor", float4{ srgbUnit(tint.rgb), 1.0f });
+                }
+            }
+        }
+    };
+    auto& tcm = mEngine->getTransformManager();
+    // Wider than the cell (kGallerySetFoot, inside kGallerySetPitch) and the
+    // piece is shrunk. Smaller pieces keep the scale the theme asked for.
+    const auto fitted = [&](gltfio::FilamentAsset* asset, float scale, bool setPiece) {
+        if (!setPiece || !asset) return scale;
+        const filament::Aabb bb = asset->getBoundingBox();
+        const float footprint = std::max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
+        if (!(footprint > 1e-3f)) return scale;
+        return footprint * scale > ttp::rt::kGallerySetFoot
+            ? ttp::rt::kGallerySetFoot / footprint : scale;
+    };
+    const auto sit = [&](gltfio::FilamentAsset* asset, gltfio::FilamentInstance* inst,
+                          float x, float z, float yaw, float scale) {
+        if (!asset || !inst) return;
+        const filament::Aabb bb = asset->getBoundingBox();
+        const float y = groundY - bb.min.y * scale;
+        const mat4f xf = mat4f::translation(float3{ x, y, z })
+                * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                * mat4f::scaling(float3{ scale });
+        tcm.setTransform(tcm.getInstance(inst->getRoot()), xf);
+    };
+    // One asset per slot, one instance per spot. Cars and named items are not
+    // slot files: a race fetches those GLBs as car-modelN.glb.
+    const auto placeSlotted = [&](uint32_t channel, size_t nSlots,
+                                   const std::function<std::string(uint32_t)>& file,
+                                   std::vector<gltfio::FilamentAsset*>& assets,
+                                   std::vector<std::vector<gltfio::FilamentInstance*>>& instances,
+                                   bool tint, bool fit) {
+        std::vector<std::vector<const ttp::rt::GallerySpot*>> by(nSlots);
+        for (const ttp::rt::GallerySpot& s : theme.gallerySpots) {
+            if (s.channel == channel && s.slot < nSlots) by[s.slot].push_back(&s);
+        }
+        assets.assign(nSlots, nullptr);
+        instances.assign(nSlots, {});
+        for (uint32_t slot = 0; slot < nSlots; slot++) {
+            if (by[slot].empty()) continue;
+            const std::string name = file(slot);
+            assets[slot] = loadInstancedProp(name.c_str(), by[slot].size(), instances[slot]);
+            if (!assets[slot]) continue;
+            for (auto* inst : instances[slot]) matte(inst, tint ? (int) slot : -1);
+            size_t k = 0;
+            for (const ttp::rt::GallerySpot* s : by[slot]) {
+                if (k >= instances[slot].size()) break;
+                sit(assets[slot], instances[slot][k], s->x, s->z, s->yaw,
+                    fitted(assets[slot], s->scale, fit));
+                k++;
+            }
+        }
+    };
+    placeSlotted(ttp::rt::GAL_CH_SCENERY, theme.scenery.models.size(),
+            [](uint32_t slot) { return "scenery" + std::to_string(slot) + ".glb"; },
+            mSceneryAssets, mSceneryInstances, true, false);
+    placeSlotted(ttp::rt::GAL_CH_PROP, theme.props.models.size(),
+            [](uint32_t slot) { return "prop" + std::to_string(slot) + ".glb"; },
+            mPropAssets, mPropInstances, false, false);
+    placeSlotted(ttp::rt::GAL_CH_SET, theme.set.models.size(),
+            [](uint32_t slot) { return "set" + std::to_string(slot) + ".glb"; },
+            mSetAssets, mSetInstances, false, true);
+    const auto placeLoose = [&](uint32_t channel, const std::vector<std::string>& names) {
+        for (const ttp::rt::GallerySpot& s : theme.gallerySpots) {
+            if (s.channel != channel || s.slot >= names.size()) continue;
+            std::vector<gltfio::FilamentInstance*> insts;
+            const std::string file = names[s.slot] + ".glb";
+            gltfio::FilamentAsset* asset = loadInstancedProp(file.c_str(), 1, insts);
+            if (!asset || insts.empty()) {
+                dropAsset(asset);
+                continue;
+            }
+            mGalleryAssets.push_back(asset);
+            matte(insts[0], -1);
+            float scale = s.scale;
+            // The race draws the kit box at kBoxHeight, not the raw GLB.
+            if (names[s.slot] == "item-box") {
+                const filament::Aabb bb = asset->getBoundingBox();
+                const float h = bb.max.y - bb.min.y;
+                if (h > 1e-3f) scale *= kBoxHeight / h;
+            }
+            sit(asset, insts[0], s.x, s.z, s.yaw, scale);
+        }
+    };
+    placeLoose(ttp::rt::GAL_CH_CAR, theme.galleryCars);
+    placeLoose(ttp::rt::GAL_CH_NAMED, theme.galleryNamed);
+
+    buildLandmarks(tb);
+    buildClutter(tb);
+    return true;
+}
+
 bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
         const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
     PhaseLog phases{ mEngine };
@@ -2834,6 +3033,20 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                      rig.sh0, rig.sh1, rig.hemiLux * exposure, mCamera != nullptr };
     }
     const float groundY = tb.groundY;
+
+    // Flat pads instead of a race. Set on every build so a later race clears it.
+    mGallery = theme.gallery;
+    mGallerySpots = theme.gallery ? theme.gallerySpots : std::vector<ttp::rt::GallerySpot>{};
+    if (mGallery) {
+        if (!buildGalleryWorld(tb, theme)) return false;
+        pumpTextures();
+        if (!mDressSheets) applyDressSheets();
+        mDressMergeDirty = true;
+        mTrack = std::make_unique<TrackBin>(std::move(tb));
+        phases.mark("gallery");
+        phases.print("ttp build phases:");
+        return true;
+    }
 
     if (!buildRoadMesh(tb)) return false;
     // The deck's fixed furniture becomes stamps on the road we just built, and
@@ -3122,7 +3335,7 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     if (mBoxAsset) {
         const filament::Aabb bb = mBoxAsset->getBoundingBox();
         const float h = bb.max.y - bb.min.y;
-        if (h > 1e-3f) mBoxScale = 0.3f / h;
+        if (h > 1e-3f) mBoxScale = kBoxHeight / h;
     }
     // The collect fade runs on a BLEND clone of the same GLB (Display.js patches
     // it with ghostGlb, as the monster's ghost bodies are): the kit material is
@@ -3648,8 +3861,8 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const uint32_t c = packShown(srgbToLinear(hex), shade);
             const uint32_t base = (uint32_t) m.verts.size();
             for (const float3& v : prim.v) {
-                m.verts.push_back({ (v.x + lx) * 1.12f, (v.y + ly) * 1.12f,
-                                    (v.z + lz) * 1.12f, c });
+                m.verts.push_back({ (v.x + lx) * kRocketMesh, (v.y + ly) * kRocketMesh,
+                                    (v.z + lz) * kRocketMesh, c });
             }
             for (const uint32_t i : prim.i) m.idx.push_back(base + i);
         };
@@ -3691,8 +3904,8 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
                 const Prim flame = applyPre(primCone(FR, FH, 14),
                         mat4f::rotation((float) M_PI, float3{ 1, 0, 0 }));
                 for (const float3& v : flame.v) {
-                    fm.verts.push_back({ v.x * 1.12f, (v.y + FY0 - FH / 2) * 1.12f,
-                                         v.z * 1.12f, fc });
+                    fm.verts.push_back({ v.x * kRocketMesh, (v.y + FY0 - FH / 2) * kRocketMesh,
+                                         v.z * kRocketMesh, fc });
                 }
                 for (const uint32_t i : flame.i) fm.idx.push_back(i);
                 if (!buildMesh(fm, true, mBlendMaterial->getDefaultInstance())) break;

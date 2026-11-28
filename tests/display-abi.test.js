@@ -274,18 +274,19 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   assert.deepEqual([...new Set(catalogue)].filter((m) => !stagedSet.includes(m)), [],
     'a track places a set piece the asset gallery never shows');
 
-  const inv = JSON.parse(M.cwrap('ttp_showcase_inventory_json', 'string', [])());
-  assert.deepEqual(inv.scenery, staged, 'the legend lists what the build stages');
-  assert.deepEqual(inv.props, stagedProps, 'the legend lists the staged props too');
-  assert.deepEqual(inv.set, stagedSet, 'the legend lists the set row too');
-  // 9 since the snowman and the wind-up train were retired as procedural kinds
-  // (the snow and playroom biomes plant built models for both now), the
-  // windmill for Crag's real-size windpump, and the playroom's five giants for
-  // toys at their real size. The literal is the tripwire: a kind added and not
-  // staged, or retired and left behind, has to come past this line.
-  assert.equal(inv.landmarks.length, 9, 'every hero landmark kind is staged');
-  assert.ok(inv.clutter.includes('dominoes') && inv.fliers.includes('hot-air balloon'),
-    'the legend spans kinds no single biome carries');
+  assert.equal(typeof M._ttp_display_gallery_mask, 'function',
+    'the gallery filter is not exported');
+  const inv = JSON.parse(M.cwrap('ttp_showcase_inventory_json', 'string', ['number'])(127));
+  assert.deepEqual(inv.categories,
+    ['cars', 'items', 'scenery', 'props', 'landmarks', 'clutter', 'set'],
+    'the gallery names its categories in bit order');
+  assert.deepEqual((inv.pads || []).map((p) => p.name),
+    ['kit', 'grass', 'sunset', 'beach', 'canyon', 'snow', 'playroom'],
+    'the gallery lists the kit pad and then each biome');
+  assert.ok(inv.bounds && inv.bounds.x1 > inv.bounds.x0, 'the gallery reports an opening pad');
+  const row = inv.pads[inv.pads.length - 1].x1 - inv.pads[0].x0;
+  assert.ok(inv.bounds.x1 - inv.bounds.x0 < row,
+    'the opening frame is one pad, not the whole row');
 });
 
 // ---- a decoration is cheap on the box ---------------------------------------

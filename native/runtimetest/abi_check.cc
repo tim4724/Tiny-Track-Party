@@ -1645,13 +1645,14 @@ void themeThroughAbi() {
   check(showModels != ttp_theme_scenery_models("playroom"),
         "…and does not collapse to the picked biome's own list");
   check(showModels == ttp_theme_showcase_models(), "it is stable across calls");
-  const std::string inventory = ttp_showcase_inventory_json();
-  check(inventory.rfind("{\"clutter\":", 0) == 0, "the legend is canonical JSON");
-  // A kind no SINGLE biome carries: the union is the point of the inventory.
-  // (It was the wind-up train until the playroom's train became a kit model.)
-  check(inventory.find("\"lighthouse\"") != std::string::npos
-                && inventory.find("\"log cabin\"") != std::string::npos,
-        "…and names the kinds no single biome carries");
+  const std::string inventory = ttp_showcase_inventory_json(0x7f);
+  check(inventory.rfind("{\"bounds\":", 0) == 0, "the gallery inventory is canonical JSON");
+  check(inventory.find("[\"cars\",\"items\",\"scenery\",\"props\",\"landmarks\",\"clutter\",\"set\"]")
+                != std::string::npos,
+        "…and names the categories in bit order");
+  check(inventory.find("\"name\":\"kit\"") != std::string::npos
+                && inventory.find("\"name\":\"playroom\"") != std::string::npos,
+        "…and lists the kit pad and the last biome");
 }
 
 // ---------------------------------------------------------------------------
