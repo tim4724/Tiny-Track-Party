@@ -781,7 +781,22 @@ first-to-last-command span, and the GL backend thread was stretching it. The
 GL-era cost model and its refuted-lever list DO NOT TRANSFER to this backend;
 re-price before citing either.
 
-**Two traps already sprung, one fix shipped:**
+**Traps already sprung:**
+
+- **The driver's fence queries are not thread-safe, and the symptom is an fdsan
+  abort somewhere else.** It backs a submitted fence with a sync fd that the
+  query seeing the signal destroys, so two threads querying one fence (Filament
+  does, legally: the frame thread's `FrameSkipper` and `FEngine::loop`'s
+  `updateFences`) both close it. fdsan then names whoever closes the reused
+  number next: libvulkan's `QueuePresentKHR`, HWUI's `eglSwapBuffers`, the ICD's
+  `PVRSRVFenceDestroyI`. It is the DRIVER's bug, reproduced in a standalone
+  program with no Filament, and it is per fence: two threads polling two fences
+  never double-close. The pinned Filament serializes each fence's queries on
+  the proprietary PowerVR driver before DDK 25.2, the first release seen with
+  a lock of its own, so do not add a lock of our own. The tombstone always
+  blames a bystander. What names the culprit is a GOT hook on every loaded
+  library's `close()` that aborts on EBADF: it fired within seconds of launch
+  before the fix, where the fdsan abort itself was rare.
 
 - **The Vulkan driver caps 2D images at 4096 where GL reports 8192**, on the
   same GPU. The skid layer asked for 8192 and `Texture::Builder::build`'s
